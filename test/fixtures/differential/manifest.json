@@ -1,0 +1,16 @@
+{
+  "projectEntries": 68,
+  "oracleProjects": 25,
+  "pairs": 1050,
+  "plugins": 42,
+  "decidedByScope": {
+    "user": 1029,
+    "project": 19,
+    "local": 2,
+    "default": 0
+  },
+  "probeProjects": [
+    "/Users/testuser/probe-local-disable",
+    "/Users/testuser/probe-local-enable"
+  ]
+}

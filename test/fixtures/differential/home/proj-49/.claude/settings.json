@@ -1,0 +1,8 @@
+{
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "figma@claude-plugins-official": false,
+    "airtable@claude-plugins-official": false,
+    "notion@claude-plugins-official": false
+  }
+}

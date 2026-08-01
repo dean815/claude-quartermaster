@@ -4,6 +4,7 @@
 |---|---|---|
 | `plugin-details/` | yes | `cost-plugins.test.ts` — real `claude plugin details` output, captured verbatim |
 | `transcripts/synthetic.jsonl` | yes | `cost-transcript.test.ts` — hand-built, pins the arithmetic |
+| `differential/` | yes | the differential gate, replayed in CI — project *and* server names are synthetic, see its own README |
 | `local-snapshot/` | **no** | nothing, currently — see below |
 
 ## The local snapshot is deliberately not committed
