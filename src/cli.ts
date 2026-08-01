@@ -149,6 +149,33 @@ function buildContext(opts: Options): AuditContext {
   return { ws, measurements, pluginCosts };
 }
 
+/**
+ * Plugins whose cost could not be determined -- either the lookup failed or the output
+ * did not parse.
+ *
+ * Reported rather than dropped. A silent skip is how DEA-109 hid: the parser returned
+ * NaN for every plugin costing a thousand tokens or more, `costWithoutUse` filtered
+ * them out on `Number.isFinite`, and the report simply came back smaller with no
+ * indication that the two most expensive entries were missing.
+ */
+function unpricedPlugins(ctx: AuditContext): string[] {
+  return [...ctx.pluginCosts.entries()]
+    .filter(([, c]) => !c || !Number.isFinite(c.alwaysOnTokens))
+    .map(([id]) => id)
+    .sort();
+}
+
+function printUnpriced(ids: readonly string[]): void {
+  if (!ids.length) return;
+  console.log(
+    `${DIM}${ids.length} plugin${ids.length === 1 ? '' : 's'} could not be priced ` +
+      `— cost findings exclude ${ids.length === 1 ? 'it' : 'them'}:${RESET}`,
+  );
+  for (const id of ids.slice(0, 8)) console.log(`  ${id}`);
+  if (ids.length > 8) console.log(`  ${DIM}…and ${ids.length - 8} more${RESET}`);
+  console.log();
+}
+
 function printFindings(findings: Finding[], ctx: AuditContext): void {
   const live = ctx.ws.projects.filter((p) => p.alive).length;
   console.log(
@@ -349,6 +376,7 @@ Read-only. Nothing here writes to any Claude Code config.
           sessions: ctx.measurements.length,
           unreadable: problems,
           unchecked: delegated.unchecked,
+          unpriced: unpricedPlugins(ctx),
           ...(drift ? { drift } : {}),
           findings,
         },
@@ -369,6 +397,7 @@ Read-only. Nothing here writes to any Claude Code config.
   }
 
   printFindings(findings, ctx);
+  printUnpriced(unpricedPlugins(ctx));
   printUnchecked(delegated, opts.full);
   if (problems.length) {
     console.log(`${DIM}${problems.length} file(s) could not be parsed:${RESET}`);

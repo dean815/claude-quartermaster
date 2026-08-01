@@ -1,11 +1,13 @@
 # Claude Quartermaster
 
-Local web GUI for auditing and editing which Claude Code extensions (plugins, MCP
-servers) are enabled per project, with baseline token cost per extension.
+Read-only CLI that audits which Claude Code extensions (plugins, MCP servers, skills)
+load in which projects, and what they cost. `qm audit`, `qm cost`, `qm baseline` /
+`--drift`. The two-view GUI is Phase 1b and writes are Phase 2 — neither is built, so
+nothing here writes to any Claude Code config.
 
 ## Architecture
 
-Four config surfaces decide whether an extension is active. They do not share a
+Seven config surfaces decide whether an extension is active. They do not share a
 mechanism:
 
 | Surface | Location | Controls |

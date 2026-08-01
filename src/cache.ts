@@ -11,7 +11,14 @@ import { join, dirname } from 'node:path';
 
 import type { PluginCost } from './cost/plugins.ts';
 
-const CACHE_VERSION = 1;
+/**
+ * Bump whenever a parser change alters what gets stored, not just when the file
+ * shape changes. v1 cached `null` for every plugin costing a thousand tokens or more,
+ * because the parser produced NaN for comma-formatted numbers (DEA-109); fixing the
+ * parser alone would have left those wrong values in place on any machine that had
+ * already run an audit.
+ */
+const CACHE_VERSION = 2;
 
 interface CacheFile {
   version: number;

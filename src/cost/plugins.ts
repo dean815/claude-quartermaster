@@ -37,12 +37,29 @@ export interface PluginCost {
   mcpUncounted: boolean;
 }
 
-/** `~2.7k` -> 2700, `~715` -> 715, `~0` -> 0. */
+/**
+ * Integer part: either comma-grouped in threes, or plain digits. Written strictly so
+ * a malformed string like `1,2,3,4` fails rather than being coerced into a number
+ * nobody intended.
+ */
+const INT = String.raw`\d{1,3}(?:,\d{3})*|\d+`;
+
+/** Matches the CLI's forms: `~715`, `~2.7k`, `~2,349`, `~1,234.5k`, `~0`. */
+const TOKEN_COUNT = new RegExp(String.raw`^~?(${INT})(\.\d+)?\s*([km])?$`, 'i');
+
+/**
+ * `~2.7k` -> 2700, `~2,349` -> 2349, `~715` -> 715, `~0` -> 0.
+ *
+ * The comma case is not cosmetic: the CLI switches to thousands separators at exactly
+ * the point a plugin becomes worth reporting, so a pattern without it silently drops
+ * the most expensive entries and keeps the cheap ones.
+ */
 export function parseTokenCount(raw: string): number {
-  const m = /^~?([\d.]+)\s*([km])?$/i.exec(raw.trim());
+  const m = TOKEN_COUNT.exec(raw.trim());
   if (!m) return Number.NaN;
-  const n = Number(m[1]);
-  const suffix = m[2]?.toLowerCase();
+  const n = Number(m[1]!.replaceAll(',', '') + (m[2] ?? ''));
+  if (!Number.isFinite(n)) return Number.NaN;
+  const suffix = m[3]?.toLowerCase();
   if (suffix === 'k') return Math.round(n * 1_000);
   if (suffix === 'm') return Math.round(n * 1_000_000);
   return n;
@@ -51,7 +68,11 @@ export function parseTokenCount(raw: string): number {
 const INVENTORY_LINE = /^\s{2}(Skills|Agents|Hooks|MCP servers|LSP servers)\s+\((\d+)\)\s*(.*)$/;
 const ALWAYS_ON_LINE = /^\s*Always-on:\s*(\S+)\s*tok/;
 const SOURCE_LINE = /^\s*Source:\s*(.+)$/;
-const COMPONENT_ROW = /^\s{2}(\S.*?)\s{2,}(~?[\d.]+[km]?)\s+(~?[\d.]+[km]?)\s*$/i;
+// Component rows use the `k` suffix rather than separators today, but they carry the
+// same numbers and would fail the same way if that changed -- a non-matching row is
+// dropped whole, not just mis-parsed, so the tolerance is worth having here too.
+const NUM = String.raw`~?(?:${INT})(?:\.\d+)?[km]?`;
+const COMPONENT_ROW = new RegExp(String.raw`^\s{2}(\S.*?)\s{2,}(${NUM})\s+(${NUM})\s*$`, 'i');
 
 export function parsePluginDetails(id: string, text: string): PluginCost {
   const lines = text.split('\n');

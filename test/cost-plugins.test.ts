@@ -23,9 +23,26 @@ describe('parseTokenCount', () => {
     assert.equal(parseTokenCount('238'), 238);
   });
 
+  /**
+   * Regression for DEA-109. The CLI prints `~2,349 tok` for anything at or above a
+   * thousand, and the original pattern had no comma in its character class, so those
+   * parsed as NaN and `costWithoutUse` skipped them silently -- dropping the two most
+   * expensive plugins from the one report whose job is ranking by cost.
+   *
+   * Every case the suite had was either under 1,000 or already suffixed, which is
+   * exactly why the gap survived.
+   */
+  test('reads thousands separators', () => {
+    assert.equal(parseTokenCount('~2,349'), 2349);
+    assert.equal(parseTokenCount('~1,000'), 1000);
+    assert.equal(parseTokenCount('12,345'), 12345);
+    assert.equal(parseTokenCount('~1,234.5k'), 1234500);
+  });
+
   test('rejects what it cannot read rather than guessing', () => {
     assert.ok(Number.isNaN(parseTokenCount('lots')));
     assert.ok(Number.isNaN(parseTokenCount('')));
+    assert.ok(Number.isNaN(parseTokenCount('1,2,3,4')));
   });
 });
 
@@ -93,6 +110,29 @@ describe('a third-party plugin absent from the catalog', () => {
   test('hooks are counted but cost no model context', () => {
     assert.equal(p.counts['Hooks'], 7);
     assert.equal(p.components.length, 0);
+  });
+});
+
+/** The plugin whose cost the parser used to drop entirely. */
+describe('a plugin costing over a thousand tokens', () => {
+  const p = load('plugin-dev');
+
+  test('reads the comma-formatted headline', () => {
+    assert.equal(p.alwaysOnTokens, 2349);
+  });
+
+  test('is a finite number, so cost detectors do not skip it', () => {
+    assert.ok(Number.isFinite(p.alwaysOnTokens));
+  });
+
+  test('its components still parse', () => {
+    assert.equal(p.counts['Skills'], 8);
+    assert.equal(p.counts['Agents'], 3);
+    assert.equal(p.components.length, 11);
+    for (const c of p.components) {
+      assert.ok(Number.isFinite(c.alwaysOn), `${c.name} always-on`);
+      assert.ok(Number.isFinite(c.onInvoke), `${c.name} on-invoke`);
+    }
   });
 });
 

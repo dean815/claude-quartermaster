@@ -1,0 +1,30 @@
+plugin-dev
+  Plugin development toolkit with skills for creating agents, commands, hooks, MCP integrations, and comprehensive plugin structure guidance
+  Source: plugin-dev@claude-plugins-official
+
+Component inventory
+  Skills (8)  agent-development, command-development, create-plugin, hook-development, mcp-integration, plugin-settings, plugin-structure, skill-development
+  Agents (3)  agent-creator, skill-reviewer, plugin-validator
+  Hooks (0)
+  MCP servers (0)
+  LSP servers (0)
+
+Projected token cost
+  Always-on:   ~2,349 tok   added to every session
+
+Per-component (rounded)
+  component            always-on  on-invoke
+  command-development       ~180      ~7.2k
+  skill-development         ~110      ~8.7k
+  plugin-settings           ~150      ~4.5k
+  plugin-structure          ~160      ~5.1k
+  hook-development          ~190      ~6.1k
+  mcp-integration           ~160      ~4.7k
+  agent-development         ~130      ~4.2k
+  agent-creator             ~410      ~2.4k
+  skill-reviewer            ~400      ~1.9k
+  plugin-validator          ~410      ~2.1k
+  create-plugin              ~40      ~6.1k
+
+  On-invoke cost is paid each time a skill or agent fires.
+  Token counts are estimates and may differ from actual usage.
