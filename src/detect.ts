@@ -8,7 +8,7 @@
  */
 import type { Workspace, ProjectRecord } from './surfaces/types.ts';
 import type { TranscriptMeasurement } from './cost/transcript.ts';
-import type { PluginCost } from './cost/plugins.ts';
+import type { PluginCostIndex } from './cost/plugins.ts';
 import type { PluginInventory } from './inventory.ts';
 import { resolvePlugin, allPluginIds } from './resolve.ts';
 import { pluginUsage, isDemonstrablyUnused } from './usage.ts';
@@ -37,7 +37,16 @@ export interface Finding {
 export interface AuditContext {
   ws: Workspace;
   measurements: TranscriptMeasurement[];
-  pluginCosts: Map<string, PluginCost | null>;
+  /** Priced on demand -- a detector that never asks for a price never pays for one. */
+  pluginCosts: PluginCostIndex;
+  /**
+   * The single project this run is about, or null/absent for the whole workspace.
+   *
+   * A detector whose answer is workspace-wide by construction has nothing to say in a
+   * scoped run -- the report drops such findings -- so it can decline to compute one.
+   * Only the detectors whose work is expensive bother to look.
+   */
+  scope?: string | null;
   /** Keyed by plugin id. Empty when nothing on disk could be read. */
   inventories: Map<string, PluginInventory>;
 }
@@ -240,18 +249,29 @@ export function invertedDefaults(ctx: AuditContext): Finding[] {
  *
  * Only fires for plugins with no hooks, because `pluginUsage.usageCount` counts hook
  * firings -- see `usage.ts`. For a hook-providing plugin, zero means nothing.
+ *
+ * The order of the tests is load-bearing rather than stylistic. A price is a
+ * subprocess; enablement is already in memory. Asking the cheap question first is what
+ * keeps an audit from pricing plugins it is about to discard -- the same set either
+ * way, just without paying for the ones that could never have qualified.
  */
 export function costWithoutUse(ctx: AuditContext): Finding[] {
+  // Workspace-wide by construction: it ranks plugins against every live project, so a
+  // scoped run drops the finding on the floor. Computing it anyway would spend ~0.6s
+  // per plugin on an answer the report never prints.
+  if (ctx.scope) return [];
+
   const unused: Array<{ id: string; tokens: number; components: string; projects: number }> = [];
   const live = ctx.ws.projects.filter((p) => p.alive);
 
-  for (const [id, cost] of ctx.pluginCosts) {
-    if (!cost || !Number.isFinite(cost.alwaysOnTokens) || cost.alwaysOnTokens <= 0) continue;
-
+  for (const id of allPluginIds(ctx.ws)) {
     // A disabled plugin costs nothing, so "unused and expensive" does not apply to it.
     // Without this the report lists globally-disabled plugins as if they were a bill.
     const enabledIn = live.filter((p) => resolvePlugin(ctx.ws, p, id).value).length;
     if (enabledIn === 0) continue;
+
+    const cost = ctx.pluginCosts.get(id);
+    if (!cost || !Number.isFinite(cost.alwaysOnTokens) || cost.alwaysOnTokens <= 0) continue;
 
     const hooks = cost.counts['Hooks'] ?? null;
     const reading = pluginUsage(ctx.ws, id, hooks);

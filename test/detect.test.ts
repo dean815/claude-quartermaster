@@ -27,7 +27,7 @@ import { measureProject } from '../src/cost/transcript.ts';
 import { readInventories } from '../src/inventory.ts';
 import type { ProjectRecord, SettingsFile, Workspace, ClaudeJson } from '../src/surfaces/types.ts';
 import type { TranscriptMeasurement, ServerCost } from '../src/cost/transcript.ts';
-import type { PluginCost } from '../src/cost/plugins.ts';
+import type { PluginCost, PluginCostIndex } from '../src/cost/plugins.ts';
 
 const settings = (path: string, body: Partial<SettingsFile> = {}): SettingsFile => ({
   path,
@@ -109,6 +109,32 @@ const cost = (id: string, tokens: number, counts: Record<string, number> = {}): 
   mcpServers: [],
   mcpUncounted: false,
 });
+
+/**
+ * A cost index that records every id asked about.
+ *
+ * Real pricing is a `claude plugin details` spawn per miss, so which ids a detector
+ * asks about is the behaviour under test, not an implementation detail: the assertion
+ * "this never got priced" is the only one that catches a detector paying for an answer
+ * it discards.
+ */
+function recording(costs: Map<string, PluginCost | null>): PluginCostIndex & { asked: string[] } {
+  const resolved = new Map<string, PluginCost | null>();
+  const asked: string[] = [];
+  return {
+    asked,
+    get(id: string) {
+      asked.push(id);
+      const c = costs.get(id) ?? null;
+      resolved.set(id, c);
+      return c;
+    },
+    entries: () => resolved.entries(),
+    get size() {
+      return resolved.size;
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 
@@ -213,6 +239,50 @@ describe('cost-without-use', () => {
     const used = { ...ws, claudeJson: claudeJson({ pluginUsage: { 'a@m': { usageCount: 7 } } }) };
     const f = costWithoutUse(ctx(used, { pluginCosts: new Map([['a@m', cost('a@m', 500)]]) }));
     assert.deepEqual(f, []);
+  });
+
+  /**
+   * Enablement is already in memory; a price is a subprocess. Asking for one before
+   * checking the free question is how a scoped audit ended up pricing all 42 plugins.
+   */
+  test('never asks the price of a plugin that is off everywhere', () => {
+    const off = {
+      ...ws,
+      userSettings: settings('/home/.claude/settings.json', { enabledPlugins: { 'a@m': false } }),
+    };
+    const costs = recording(new Map([['a@m', cost('a@m', 500)]]));
+    assert.deepEqual(costWithoutUse(ctx(off, { pluginCosts: costs })), []);
+    assert.deepEqual(costs.asked, []);
+  });
+
+  /**
+   * The finding ranks plugins across every live project, so a run scoped to one
+   * project drops it. Pricing for it would buy an answer the report never prints.
+   */
+  test('a scoped run reports nothing and prices nothing', () => {
+    const costs = recording(new Map([['a@m', cost('a@m', 500, { Skills: 2 })]]));
+    assert.deepEqual(costWithoutUse(ctx(ws, { pluginCosts: costs, scope: '/p' })), []);
+    assert.deepEqual(costs.asked, []);
+  });
+
+  /** The same set either way -- the reordering only changes what gets paid for. */
+  test('an unscoped run still fires, and prices only the enabled plugin', () => {
+    const twoPlugins = {
+      ...ws,
+      userSettings: settings('/home/.claude/settings.json', {
+        enabledPlugins: { 'a@m': true, 'b@m': false },
+      }),
+    };
+    const costs = recording(
+      new Map([
+        ['a@m', cost('a@m', 500, { Skills: 2 })],
+        ['b@m', cost('b@m', 900, { Skills: 3 })],
+      ]),
+    );
+    const f = costWithoutUse(ctx(twoPlugins, { pluginCosts: costs }));
+    assert.equal(f.length, 1);
+    assert.match(f[0]!.title, /1 enabled plugin costs ~500 tok/);
+    assert.deepEqual(costs.asked, ['a@m']);
   });
 });
 
