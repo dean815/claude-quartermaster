@@ -4,7 +4,7 @@
  */
 import { homedir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 
 import { loadWorkspace, problems } from './surfaces/read.ts';
@@ -74,7 +74,31 @@ function parseArgs(argv: string[]): { command: string; opts: Options } {
   };
 }
 
-/** Fetch per-plugin cost, cached by version so repeat runs are instant. */
+/**
+ * Map each installed build's `installPath` to its `gitCommitSha`. `plugin list --json`
+ * omits the sha, but `installed_plugins.json` carries it, and installPath is the
+ * unambiguous join key -- a build is one directory. Absent for builds installed before
+ * shas were recorded; a missing/malformed file just yields no shas, which degrades to
+ * version-only keys rather than failing the run.
+ */
+function readInstalledShas(): Map<string, string> {
+  const byPath = new Map<string, string>();
+  try {
+    const raw = JSON.parse(
+      readFileSync(join(homedir(), '.claude', 'plugins', 'installed_plugins.json'), 'utf8'),
+    ) as { plugins?: Record<string, Array<{ installPath?: string; gitCommitSha?: string }>> };
+    for (const records of Object.values(raw.plugins ?? {})) {
+      for (const r of records ?? []) {
+        if (r.installPath && r.gitCommitSha) byPath.set(r.installPath, r.gitCommitSha);
+      }
+    }
+  } catch {
+    // No file, or malformed -- fall back to version-only keys.
+  }
+  return byPath;
+}
+
+/** Fetch per-plugin cost, cached by build so repeat runs are instant. */
 function collectPluginCosts(ids: string[], quiet: boolean): Map<string, PluginCost | null> {
   const cache = new PluginCostCache();
   const out = new Map<string, PluginCost | null>();
@@ -96,11 +120,13 @@ function collectPluginCosts(ids: string[], quiet: boolean): Map<string, PluginCo
   // `plugin details` resolves the manifest name, which can differ in case from the
   // lowercased marketplace id -- see pluginLookupName.
   const paths = new Map(installed.map((p) => [p.id, p.installPath ?? null]));
+  const shas = readInstalledShas();
   let fetched = 0;
 
   for (const id of ids) {
     const version = versions.get(id) ?? null;
-    const hit = cache.get(id, version);
+    const sha = shas.get(paths.get(id) ?? '') ?? null;
+    const hit = cache.get(id, version, sha);
     if (hit) {
       out.set(id, hit);
       continue;
@@ -112,7 +138,7 @@ function collectPluginCosts(ids: string[], quiet: boolean): Map<string, PluginCo
         timeout: 30_000,
       });
       const parsed = parsePluginDetails(id, text);
-      cache.set(id, version, parsed);
+      cache.set(id, version, sha, parsed);
       out.set(id, parsed);
       fetched++;
       if (!quiet && fetched % 10 === 0) process.stderr.write(`  priced ${fetched} plugins...\n`);

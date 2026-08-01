@@ -2,8 +2,9 @@
  * On-disk cache for `claude plugin details` lookups.
  *
  * Each lookup is a ~0.6s process spawn, and 42 installed plugins make that a 25s wait
- * on every run. Cost is a property of a plugin version, so it is cached under
- * `<id>@<version>` and only re-fetched when a plugin updates.
+ * on every run. Cost is a property of a specific plugin *build*, not just its version
+ * string -- two builds can share a version and differ in components (DEA-128) -- so it
+ * is cached under `<id>@<version>@<sha>` and only re-fetched when the build moves.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -16,9 +17,11 @@ import type { PluginCost } from './cost/plugins.ts';
  * shape changes. v1 cached `null` for every plugin costing a thousand tokens or more,
  * because the parser produced NaN for comma-formatted numbers (DEA-109); fixing the
  * parser alone would have left those wrong values in place on any machine that had
- * already run an audit.
+ * already run an audit. v2 keyed on `<id>@<version>`, which collides when two builds
+ * share a version string (DEA-128), so a stale entry survived `claude plugin update`;
+ * v3 adds the sha to the key, and any v2 cache must be discarded, not migrated.
  */
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 interface CacheFile {
   version: number;
@@ -47,16 +50,16 @@ export class PluginCostCache {
     }
   }
 
-  private key(id: string, version: string | null): string {
-    return `${id}@${version ?? 'unknown'}`;
+  private key(id: string, version: string | null, sha: string | null): string {
+    return `${id}@${version ?? 'unknown'}@${sha ?? 'unknown'}`;
   }
 
-  get(id: string, version: string | null): PluginCost | undefined {
-    return this.entries[this.key(id, version)];
+  get(id: string, version: string | null, sha: string | null): PluginCost | undefined {
+    return this.entries[this.key(id, version, sha)];
   }
 
-  set(id: string, version: string | null, cost: PluginCost): void {
-    this.entries[this.key(id, version)] = cost;
+  set(id: string, version: string | null, sha: string | null, cost: PluginCost): void {
+    this.entries[this.key(id, version, sha)] = cost;
     this.dirty = true;
   }
 
