@@ -72,6 +72,7 @@ function ctx(ws: Partial<Workspace>, pluginCosts = new Map<string, PluginCost | 
     },
     measurements: [],
     pluginCosts,
+    inventories: new Map(),
   };
 }
 

@@ -24,6 +24,7 @@ import {
 } from '../src/detect.ts';
 import { loadWorkspace } from '../src/surfaces/read.ts';
 import { measureProject } from '../src/cost/transcript.ts';
+import { readInventories } from '../src/inventory.ts';
 import type { ProjectRecord, SettingsFile, Workspace, ClaudeJson } from '../src/surfaces/types.ts';
 import type { TranscriptMeasurement, ServerCost } from '../src/cost/transcript.ts';
 import type { PluginCost } from '../src/cost/plugins.ts';
@@ -68,6 +69,7 @@ function ctx(body: Partial<Workspace> = {}, extra: Partial<AuditContext> = {}): 
     },
     measurements: [],
     pluginCosts: new Map(),
+    inventories: new Map(),
     ...extra,
   };
 }
@@ -402,7 +404,16 @@ describe('detectors agree with the live workspace', () => {
   const measurements = ws.projects
     .filter((p) => p.alive)
     .flatMap((p) => measureProject(homedir(), p.path));
-  const live: AuditContext = { ws, measurements, pluginCosts: new Map() };
+  // Real inventories rather than an empty map: this block exists to run the detectors
+  // against what is actually on this machine, and an empty map would make
+  // `inventory-mismatch` silently uncomparable everywhere -- present in the suite,
+  // exercising nothing.
+  const live: AuditContext = {
+    ws,
+    measurements,
+    pluginCosts: new Map(),
+    inventories: readInventories(homedir()),
+  };
 
   const settingsFiles = [
     ws.userSettings,
