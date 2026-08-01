@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "airtable@claude-plugins-official": false
+  }
+}

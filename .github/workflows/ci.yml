@@ -41,6 +41,18 @@ jobs:
       - name: Test
         run: npm test
 
+      # `npm test` already includes this file, so the step is not about coverage -- it
+      # is about the runner. The differential suite is the resolver's only external
+      # check, and it needs `claude` plus registered projects, neither of which exists
+      # here; for months it skipped as one unit and CI reported green regardless.
+      # Running it alone, with HOME pointed somewhere empty, reproduces exactly the
+      # conditions that used to hide it and names the gate in the job log.
+      - name: Differential gate (replay, no CLI)
+        run: |
+          mkdir -p "$RUNNER_TEMP/empty-home"
+          HOME="$RUNNER_TEMP/empty-home" \
+            node --experimental-strip-types --test test/differential.test.ts
+
       - name: Build
         run: npm run build
 

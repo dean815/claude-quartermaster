@@ -11,3 +11,11 @@ planning/
 # `node --experimental-strip-types scripts/make-fixtures.ts` -- it is not committed
 # because project directory names are identifying even after paths are anonymised.
 test/fixtures/local-snapshot/
+
+# A local settings file is normally the last thing you want committed, and a global
+# gitignore excluding `**/.claude/settings.local.json` is common enough that this repo
+# was built on a machine with one. In the differential fixture those files are the
+# fixture -- they carry the local-override half of the precedence chain, and eight
+# project directories contain nothing else, so being silently skipped would delete the
+# projects outright and quietly shrink the gate.
+!test/fixtures/differential/**/settings.local.json

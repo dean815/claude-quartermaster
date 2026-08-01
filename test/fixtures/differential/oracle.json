@@ -1,0 +1,4252 @@
+{
+  "/Users/testuser": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-01": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-02": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-03": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-04": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-05": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-06": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-07": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-11": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-43": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-44": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-45": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-47": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-48": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-49": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-50": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-52": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-53": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-55": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-56": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-57": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-61": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/proj-62": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/probe-local-disable": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ],
+  "/Users/testuser/probe-local-enable": [
+    {
+      "id": "airtable@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "andrej-karpathy-skills@karpathy-skills",
+      "enabled": true
+    },
+    {
+      "id": "chrome-devtools-mcp@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-code-setup@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "claude-md-management@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-review@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "code-simplifier@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "coderabbit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "commit-commands@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "context7@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "explanatory-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "feature-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "frontend-design@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "github@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "hookify@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "humanizer@agent-toolkit",
+      "enabled": true
+    },
+    {
+      "id": "imessage@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "learning-output-style@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "linear@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "mcp-server-dev@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "message-timestamps@zoharbabin-claude-tools",
+      "enabled": true
+    },
+    {
+      "id": "minutes@minutes",
+      "enabled": true
+    },
+    {
+      "id": "notion@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playground@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "plugin-dev@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "pr-review-toolkit@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "proficiently@proficiently",
+      "enabled": true
+    },
+    {
+      "id": "project-artifact@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "project-optimizer@claude-project-optimizer",
+      "enabled": true
+    },
+    {
+      "id": "pyright-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "ralph-loop@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "remember@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "skill-creator@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "supabase@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "superpowers@claude-plugins-official",
+      "enabled": true
+    },
+    {
+      "id": "typescript-lsp@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "vercel@claude-plugins-official",
+      "enabled": false
+    },
+    {
+      "id": "warp@claude-code-warp",
+      "enabled": true
+    },
+    {
+      "id": "writing-clearly-and-concisely@agent-toolkit",
+      "enabled": false
+    },
+    {
+      "id": "zapier@claude-plugins-official",
+      "enabled": false
+    }
+  ]
+}

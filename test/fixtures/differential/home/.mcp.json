@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "srv-24": {
+      "type": "http"
+    }
+  }
+}
