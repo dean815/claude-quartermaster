@@ -9,6 +9,7 @@
 import type { Workspace, ProjectRecord } from './surfaces/types.ts';
 import type { TranscriptMeasurement } from './cost/transcript.ts';
 import type { PluginCost } from './cost/plugins.ts';
+import type { PluginInventory } from './inventory.ts';
 import { resolvePlugin, allPluginIds } from './resolve.ts';
 import { pluginUsage, isDemonstrablyUnused } from './usage.ts';
 
@@ -37,6 +38,8 @@ export interface AuditContext {
   ws: Workspace;
   measurements: TranscriptMeasurement[];
   pluginCosts: Map<string, PluginCost | null>;
+  /** Keyed by plugin id. Empty when nothing on disk could be read. */
+  inventories: Map<string, PluginInventory>;
 }
 
 const SEVERITY_ORDER: Record<Severity, number> = { high: 0, medium: 1, low: 2, info: 3 };
@@ -429,6 +432,108 @@ export function oversizedMemory(ctx: AuditContext): Finding[] {
     }));
 }
 
+/**
+ * A source enumerating components that are not installed.
+ *
+ * This is a fact, not a judgement: the source names a component, and no file of that
+ * name exists anywhere under the plugin's `installPath`. Whether the source or the
+ * install is the stale one is not decided here -- only that they describe different
+ * things, which means any count derived from the source is a count of something else.
+ *
+ * Deliberately one-directional; `inventory.ts` explains why the reverse is not
+ * measurable. And a plugin no source covers is never folded into the agreeing set --
+ * `not compared` and `agrees` are the two answers most easily confused, and collapsing
+ * them turns nine unexamined plugins into nine clean ones.
+ */
+export function inventoryMismatch(ctx: AuditContext): Finding[] {
+  const out: Finding[] = [];
+  let agree = 0;
+  let disagree = 0;
+  let uncomparable = 0;
+
+  for (const inv of [...ctx.inventories.values()].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (!inv.installed || !inv.enumerated.length) {
+      uncomparable++;
+      continue;
+    }
+
+    const installed = new Set(inv.installed);
+    let mismatched = false;
+
+    for (const src of inv.enumerated) {
+      const missing = src.names.filter((n) => !installed.has(n));
+      if (!missing.length) continue;
+      mismatched = true;
+
+      // Same version string either side of a republish is the mechanism that hides
+      // this: nothing about the version number says the builds differ, so only the
+      // sha does.
+      const sameVersion = Boolean(src.version && inv.version && src.version === inv.version);
+      const shasDiffer = Boolean(src.sha && inv.sha && src.sha !== inv.sha);
+
+      out.push({
+        detector: 'inventory-mismatch',
+        key: `inventory-mismatch ${inv.id} ${src.source}`,
+        severity: 'low',
+        title:
+          `${src.source} lists ${missing.length} component${missing.length === 1 ? '' : 's'} ` +
+          `for ${inv.id} that ${missing.length === 1 ? 'is' : 'are'} not installed`,
+        detail:
+          `It enumerates ${src.names.length} component${src.names.length === 1 ? '' : 's'}; ` +
+          `${src.names.length - missing.length} of those exist under the install path. ` +
+          (shasDiffer && sameVersion
+            ? 'Both builds call themselves the same version, so nothing but the commit ' +
+              'sha distinguishes them and no update prompt fires. '
+            : '') +
+          'Any token figure taken from this source is a figure for a build that is not ' +
+          'the one loading.',
+        evidence: [
+          `not installed: ${missing.slice(0, 8).join(', ')}` +
+            (missing.length > 8 ? `, …and ${missing.length - 8} more` : ''),
+          `installed components found: ${inv.installed.length}`,
+          `installed build: ${inv.version ?? 'unknown version'} ${inv.sha ? `(${inv.sha.slice(0, 8)})` : '(no sha recorded)'}`,
+          `source describes: ${src.version ?? 'unknown version'} ${src.sha ? `(${src.sha.slice(0, 8)})` : '(no sha recorded)'}` +
+            (src.fetchedAt ? `, fetched ${src.fetchedAt.slice(0, 10)}` : ''),
+          inv.installPath ?? 'install path unknown',
+        ],
+        fix: `claude plugin update ${inv.id.split('@')[0]} — then re-check, or treat \`claude plugin details\` as the only current source.`,
+      });
+    }
+
+    if (mismatched) disagree++;
+    else agree++;
+  }
+
+  // Silence when every plugin could be compared: the mismatch findings then already say
+  // everything, and a coverage note nobody needs is noise. When some could not be, the
+  // report has to say so or it reads as full coverage it does not have.
+  if (uncomparable > 0) {
+    const total = agree + disagree + uncomparable;
+    out.push({
+      detector: 'inventory-mismatch',
+      key: 'inventory-mismatch coverage',
+      severity: 'info',
+      title: `${uncomparable} of ${total} installed plugins could not be checked against any enumerating source`,
+      detail:
+        'No source enumerates these, so nothing about them was verified. That is not the ' +
+        'same as agreeing, and they are excluded from both counts above.',
+      evidence: [
+        `agree: ${agree}`,
+        `disagree: ${disagree}`,
+        `could not compare: ${uncomparable}`,
+        ...[...ctx.inventories.values()]
+          .filter((i) => !i.installed || !i.enumerated.length)
+          .map((i) => i.id)
+          .sort()
+          .slice(0, 8)
+          .map((id) => `  ${id}`),
+      ],
+    });
+  }
+
+  return out;
+}
+
 export const DETECTORS = [
   duplicateAccessPaths,
   costWithoutUse,
@@ -440,6 +545,7 @@ export const DETECTORS = [
   oversizedMemory,
   restatedEntries,
   importsDoNotDefer,
+  inventoryMismatch,
 ] as const;
 
 export function runAll(ctx: AuditContext): Finding[] {

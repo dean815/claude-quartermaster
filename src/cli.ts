@@ -12,6 +12,7 @@ import { measureProject } from './cost/transcript.ts';
 import { profileFrom } from './cost/summary.ts';
 import { parsePluginDetails, pluginLookupName, type PluginCost } from './cost/plugins.ts';
 import { PluginCostCache } from './cache.ts';
+import { readInventories } from './inventory.ts';
 import { runAll, rank, type AuditContext, type Finding } from './detect.ts';
 import { allPluginIds } from './resolve.ts';
 import { collect, groupByDetector, type DelegationReport } from './delegate/types.ts';
@@ -175,7 +176,9 @@ function buildContext(opts: Options): AuditContext {
     ? collectPluginCosts(allPluginIds(ws), opts.json)
     : new Map<string, PluginCost | null>();
 
-  return { ws, measurements, pluginCosts };
+  // Independent of --no-plugin-cost: this reads files, not the CLI, so the flag that
+  // skips ~25s of subprocesses has no reason to skip it.
+  return { ws, measurements, pluginCosts, inventories: readInventories(home) };
 }
 
 /**
