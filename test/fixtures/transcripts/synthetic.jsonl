@@ -1,0 +1,10 @@
+{"type":"user","message":{"role":"user","content":"hello"}}
+{"type":"attachment","attachment":{"type":"deferred_tools_delta","addedNames":["mcp__6f1f8065-e9be-4252-b99d-84ff19549f0d__list_issues","mcp__6f1f8065-e9be-4252-b99d-84ff19549f0d__get_issue","mcp__raindrop__find_bookmarks","WebFetch"],"addedLines":["mcp__6f1f8065-e9be-4252-b99d-84ff19549f0d__list_issues","mcp__6f1f8065-e9be-4252-b99d-84ff19549f0d__get_issue","mcp__raindrop__find_bookmarks","WebFetch"],"removedNames":[],"readdedNames":[],"needsAuthMcpServers":["plugin:marketing:ahrefs","linear-server"],"pendingMcpServers":["logic-pro"]}}
+{"type":"attachment","attachment":{"type":"skill_listing","content":"- alpha: does a thing","skillCount":1,"names":["alpha"],"isInitial":true}}
+{"type":"assistant","message":{"role":"assistant","content":"hi"}}
+{"type":"attachment","attachment":{"type":"deferred_tools_delta","addedNames":["mcp__6f1f8065-e9be-4252-b99d-84ff19549f0d__list_issues","mcp__plugin_playwright_playwright__browser_click"],"addedLines":["mcp__6f1f8065-e9be-4252-b99d-84ff19549f0d__list_issues","mcp__plugin_playwright_playwright__browser_click"],"removedNames":[],"readdedNames":[],"needsAuthMcpServers":["linear-server"],"pendingMcpServers":[]}}
+{"type":"attachment","attachment":{"type":"skill_listing","content":"- alpha: does a thing\n- beta: does another","skillCount":2,"names":["alpha","beta"],"isInitial":false}}
+{"type":"attachment","attachment":{"type":"agent_listing_delta","addedTypes":["Explore","Plan"],"addedLines":["- Explore: reads","- Plan: designs"],"removedTypes":[],"isInitial":true}}
+{"type":"attachment","attachment":{"type":"mcp_instructions_delta","addedNames":["raindrop"],"addedBlocks":["## raindrop\nBookmarks."],"removedNames":[]}}
+{"type":"attachment","attachment":{"type":"hook_success","content":"=== REMEMBER ==="}}
+{"type":"attachment","attachment":{"type":"hook_success","content":"ok"}}

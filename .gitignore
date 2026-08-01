@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.log
+.env*
+!.env.example
+.DS_Store
+.remember/
+planning/
+
+# Redacted snapshot of a real workspace. Regenerate locally with
+# `node --experimental-strip-types scripts/make-fixtures.ts` -- it is not committed
+# because project directory names are identifying even after paths are anonymised.
+test/fixtures/local-snapshot/

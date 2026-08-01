@@ -1,0 +1,13 @@
+warp 2.2.0
+  Warp terminal integration for Claude Code - native notifications, and more to come
+  Source: warp@claude-code-warp
+
+Component inventory
+  Skills (0)
+  Agents (0)
+  Hooks (7)  SessionStart, Stop, Notification, PermissionRequest, UserPromptSubmit, PostToolUse, StopFailure  (harness-only — no model context cost)
+  MCP servers (0)
+  LSP servers (0)
+
+Projected token cost
+  Always-on:   ~0 tok   added to every session

@@ -1,0 +1,33 @@
+superpowers 6.1.1
+  Core skills library for Claude Code: TDD, debugging, collaboration patterns, and proven techniques
+  Source: superpowers@claude-plugins-official
+
+Component inventory
+  Skills (14)  brainstorming, dispatching-parallel-agents, executing-plans, finishing-a-development-branch, receiving-code-review, requesting-code-review, subagent-driven-development, systematic-debugging, test-driven-development, using-git-worktrees, using-superpowers, verification-before-completion, writing-plans, writing-skills
+  Agents (0)
+  Hooks (1)  SessionStart  (harness-only — no model context cost)
+  MCP servers (0)
+  LSP servers (0)
+
+Projected token cost
+  Always-on:   ~715 tok   added to every session
+
+Per-component (rounded)
+  component                       always-on  on-invoke
+  using-git-worktrees                   ~70      ~2.7k
+  test-driven-development               ~30      ~3.6k
+  systematic-debugging                  ~40      ~3.6k
+  using-superpowers                     ~50      ~1.1k
+  dispatching-parallel-agents           ~40      ~2.4k
+  executing-plans                       ~40       ~910
+  finishing-a-development-branch        ~70      ~2.4k
+  brainstorming                         ~70      ~3.8k
+  writing-plans                         ~30      ~2.6k
+  requesting-code-review                ~40       ~990
+  receiving-code-review                 ~80      ~2.3k
+  writing-skills                        ~40      ~9.8k
+  verification-before-completion        ~80      ~1.4k
+  subagent-driven-development           ~40        ~8k
+
+  On-invoke cost is paid each time a skill or agent fires.
+  Token counts are estimates and may differ from actual usage.
