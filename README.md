@@ -2,6 +2,8 @@
 
 *Maintains the inventory. Issues the kit. Knows what's missing.*
 
+[![CI](https://github.com/dean815/claude-quartermaster/actions/workflows/ci.yml/badge.svg)](https://github.com/dean815/claude-quartermaster/actions/workflows/ci.yml)
+
 A tool for making **deliberate, defensible decisions** about how your Claude Code
 workspace is configured — which plugins, MCP servers, and skills load in which
 projects, and why.
