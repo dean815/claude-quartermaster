@@ -10,7 +10,7 @@ import { resolve, join, dirname } from 'node:path';
 import { loadWorkspace, problems } from './surfaces/read.ts';
 import { measureProject } from './cost/transcript.ts';
 import { profileFrom } from './cost/summary.ts';
-import { parsePluginDetails, type PluginCost } from './cost/plugins.ts';
+import { parsePluginDetails, pluginLookupName, type PluginCost } from './cost/plugins.ts';
 import { PluginCostCache } from './cache.ts';
 import { runAll, rank, type AuditContext, type Finding } from './detect.ts';
 import { allPluginIds } from './resolve.ts';
@@ -79,7 +79,7 @@ function collectPluginCosts(ids: string[], quiet: boolean): Map<string, PluginCo
   const cache = new PluginCostCache();
   const out = new Map<string, PluginCost | null>();
 
-  let installed: Array<{ id: string; version: string | null }> = [];
+  let installed: Array<{ id: string; version: string | null; installPath?: string }> = [];
   try {
     installed = JSON.parse(
       execFileSync('claude', ['plugin', 'list', '--json'], {
@@ -93,6 +93,9 @@ function collectPluginCosts(ids: string[], quiet: boolean): Map<string, PluginCo
   }
 
   const versions = new Map(installed.map((p) => [p.id, p.version ?? null]));
+  // `plugin details` resolves the manifest name, which can differ in case from the
+  // lowercased marketplace id -- see pluginLookupName.
+  const paths = new Map(installed.map((p) => [p.id, p.installPath ?? null]));
   let fetched = 0;
 
   for (const id of ids) {
@@ -103,7 +106,7 @@ function collectPluginCosts(ids: string[], quiet: boolean): Map<string, PluginCo
       continue;
     }
     try {
-      const text = execFileSync('claude', ['plugin', 'details', id.split('@')[0]!], {
+      const text = execFileSync('claude', ['plugin', 'details', pluginLookupName(id, paths.get(id))], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
         timeout: 30_000,

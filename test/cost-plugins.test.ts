@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { parsePluginDetails, parseTokenCount } from '../src/cost/plugins.ts';
+import { parsePluginDetails, parseTokenCount, pluginLookupName } from '../src/cost/plugins.ts';
 
 const FIXTURES = join(import.meta.dirname, 'fixtures', 'plugin-details');
 const load = (name: string) =>
@@ -153,5 +153,47 @@ describe('a plugin with agents', () => {
     for (const c of p.components) {
       assert.ok(!/On-invoke cost|estimates/i.test(c.name), `stray row: ${c.name}`);
     }
+  });
+});
+
+/**
+ * Regression for DEA-122.
+ *
+ * `claude plugin details` resolves a plugin's *manifest* name, which is case-sensitive.
+ * The marketplace id is lowercased, so deriving the lookup name from the id fails
+ * whenever the two differ — `notion@claude-plugins-official` could not be priced
+ * because the manifest calls it `Notion`.
+ *
+ * Surveyed across 42 installed plugins: 39 match, 1 differs in case, 2 ship no
+ * manifest at all. So the manifest is authoritative where it exists and the id prefix
+ * is the fallback — neither alone covers the set.
+ */
+describe('plugin lookup name', () => {
+  const at = (name: string) => join(import.meta.dirname, 'fixtures', 'plugin-manifests', name);
+
+  test('prefers the manifest name when it differs in case from the id', () => {
+    assert.equal(pluginLookupName('notion@claude-plugins-official', at('cased')), 'Notion');
+  });
+
+  test('falls back to the id prefix when the plugin ships no manifest', () => {
+    assert.equal(pluginLookupName('humanizer@agent-toolkit', at('nomanifest')), 'humanizer');
+  });
+
+  test('falls back when the manifest does not parse', () => {
+    assert.equal(pluginLookupName('broken@m', at('malformed')), 'broken');
+  });
+
+  test('falls back when the manifest omits a name', () => {
+    assert.equal(pluginLookupName('anon@m', at('nameless')), 'anon');
+  });
+
+  test('falls back when no install path is known at all', () => {
+    assert.equal(pluginLookupName('solo@m', null), 'solo');
+  });
+
+  test('ignores a non-string name rather than passing it to a shell argument', () => {
+    // Manifest contents are third-party input; a number or object here must not
+    // become the argv entry.
+    assert.equal(pluginLookupName('weird@m', at('nameless')), 'weird');
   });
 });

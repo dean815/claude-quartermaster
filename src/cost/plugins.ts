@@ -15,6 +15,8 @@
  * 34,593 chars across 39 servers. `transcript.ts` covers what this cannot.
  */
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 export interface ComponentCost {
   name: string;
@@ -144,10 +146,44 @@ export function parsePluginDetails(id: string, text: string): PluginCost {
   };
 }
 
+/**
+ * The name `claude plugin details` will actually resolve.
+ *
+ * It matches the plugin's *manifest* name, which is case-sensitive, while the
+ * marketplace id is lowercased. Deriving the lookup name from the id therefore fails
+ * whenever the two differ: `notion@claude-plugins-official` ships a manifest calling
+ * itself `Notion`, so `plugin details notion` reports the plugin as not found and its
+ * cost silently vanished from the audit.
+ *
+ * Surveyed across 42 installed plugins: 39 match, 1 differs in case, 2 ship no
+ * manifest. Neither source covers the set alone, so the manifest wins where it exists
+ * and the id prefix is the fallback.
+ */
+export function pluginLookupName(id: string, installPath: string | null | undefined): string {
+  const fallback = id.split('@')[0]!;
+  if (!installPath) return fallback;
+
+  try {
+    const manifest = JSON.parse(
+      readFileSync(join(installPath, '.claude-plugin', 'plugin.json'), 'utf8'),
+    ) as { name?: unknown };
+    // Manifest contents are third-party input and this value becomes an argv entry.
+    // Anything that is not a plain non-empty string is not worth trusting.
+    return typeof manifest.name === 'string' && manifest.name.trim()
+      ? manifest.name
+      : fallback;
+  } catch {
+    // Missing or malformed manifest -- plenty of plugins ship without one.
+    return fallback;
+  }
+}
+
 export interface PluginCostOptions {
   /** Seconds before a single lookup is abandoned. */
   timeoutMs?: number;
   cwd?: string;
+  /** Where the plugin is installed, so its manifest name can be read. */
+  installPath?: string | null;
 }
 
 const cache = new Map<string, PluginCost | null>();
@@ -159,8 +195,7 @@ const cache = new Map<string, PluginCost | null>();
 export function pluginCost(id: string, opts: PluginCostOptions = {}): PluginCost | null {
   if (cache.has(id)) return cache.get(id) ?? null;
 
-  // `plugin details` takes a bare name, not the `name@marketplace` id.
-  const name = id.split('@')[0]!;
+  const name = pluginLookupName(id, opts.installPath);
   let out: string;
   try {
     out = execFileSync('claude', ['plugin', 'details', name], {
