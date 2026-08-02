@@ -16,7 +16,7 @@ import {
   type PluginCost,
   type PluginCostIndex,
 } from './cost/plugins.ts';
-import { PluginCostCache } from './cache.ts';
+import { PluginCostCache, buildIdsByPath } from './cache.ts';
 import { readInventories } from './inventory.ts';
 import { runAll, rank, type AuditContext, type Finding } from './detect.ts';
 import { collect, groupByDetector, type DelegationReport } from './delegate/types.ts';
@@ -80,27 +80,22 @@ function parseArgs(argv: string[]): { command: string; opts: Options } {
 }
 
 /**
- * Map each installed build's `installPath` to its `gitCommitSha`. `plugin list --json`
- * omits the sha, but `installed_plugins.json` carries it, and installPath is the
- * unambiguous join key -- a build is one directory. Absent for builds installed before
- * shas were recorded; a missing/malformed file just yields no shas, which degrades to
+ * Map each installed build's `installPath` to its cache-key build identifier.
+ * `plugin list --json` omits it, but `installed_plugins.json` carries it, and installPath
+ * is the unambiguous join key -- a build is one directory. See `buildIdsByPath` for how
+ * the identifier is chosen. A missing/malformed file yields no identifiers, degrading to
  * version-only keys rather than failing the run.
  */
 function readInstalledShas(): Map<string, string> {
-  const byPath = new Map<string, string>();
   try {
     const raw = JSON.parse(
       readFileSync(join(homedir(), '.claude', 'plugins', 'installed_plugins.json'), 'utf8'),
-    ) as { plugins?: Record<string, Array<{ installPath?: string; gitCommitSha?: string }>> };
-    for (const records of Object.values(raw.plugins ?? {})) {
-      for (const r of records ?? []) {
-        if (r.installPath && r.gitCommitSha) byPath.set(r.installPath, r.gitCommitSha);
-      }
-    }
+    );
+    return buildIdsByPath(raw);
   } catch {
     // No file, or malformed -- fall back to version-only keys.
+    return new Map<string, string>();
   }
-  return byPath;
 }
 
 interface InstalledPlugin {
