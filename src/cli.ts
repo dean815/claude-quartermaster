@@ -10,11 +10,15 @@ import { resolve, join, dirname } from 'node:path';
 import { loadWorkspace, problems } from './surfaces/read.ts';
 import { measureProject } from './cost/transcript.ts';
 import { profileFrom } from './cost/summary.ts';
-import { parsePluginDetails, pluginLookupName, type PluginCost } from './cost/plugins.ts';
+import {
+  parsePluginDetails,
+  pluginLookupName,
+  type PluginCost,
+  type PluginCostIndex,
+} from './cost/plugins.ts';
 import { PluginCostCache, buildIdsByPath } from './cache.ts';
 import { readInventories } from './inventory.ts';
 import { runAll, rank, type AuditContext, type Finding } from './detect.ts';
-import { allPluginIds } from './resolve.ts';
 import { collect, groupByDetector, type DelegationReport } from './delegate/types.ts';
 import {
   projectOptimizerAdapter,
@@ -94,57 +98,118 @@ function readInstalledShas(): Map<string, string> {
   }
 }
 
-/** Fetch per-plugin cost, cached by build so repeat runs are instant. */
-function collectPluginCosts(ids: string[], quiet: boolean): Map<string, PluginCost | null> {
-  const cache = new PluginCostCache();
-  const out = new Map<string, PluginCost | null>();
+interface InstalledPlugin {
+  id: string;
+  version: string | null;
+  installPath?: string;
+}
 
-  let installed: Array<{ id: string; version: string | null; installPath?: string }> = [];
-  try {
-    installed = JSON.parse(
-      execFileSync('claude', ['plugin', 'list', '--json'], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        timeout: 60_000,
-      }),
-    );
-  } catch {
-    return out; // No CLI, no component cost. Detectors that need it stay quiet.
+/**
+ * Per-plugin cost, fetched the first time something reads it.
+ *
+ * Every miss is a ~0.6s `claude plugin details` spawn and 42 are installed, so pricing
+ * the workspace up front made every command wait ~19s whenever the on-disk cache was
+ * cold -- which recurs on each `CACHE_VERSION` bump, not just on a new machine. Two
+ * commands never read a price at all, and a run scoped to one project needs only the
+ * plugins resolving active there.
+ *
+ * Laziness rather than a per-command flag: the policy then lives at the call site that
+ * reads the number, so a new consumer gets the right behaviour without anyone
+ * remembering to extend a switch in `buildContext`.
+ */
+class LazyPluginCosts implements PluginCostIndex {
+  private readonly resolved = new Map<string, PluginCost | null>();
+  private readonly cache = new PluginCostCache();
+  private readonly quiet: boolean;
+  /** Null until the first read; the `plugin list` spawn is deferred with the rest. */
+  private installed: Map<string, InstalledPlugin> | null = null;
+  /** So a missing CLI costs one failed spawn, not one per plugin asked about. */
+  private listAttempted = false;
+  private shas: Map<string, string> = new Map();
+  private fetched = 0;
+
+  constructor(quiet: boolean) {
+    this.quiet = quiet;
   }
 
-  const versions = new Map(installed.map((p) => [p.id, p.version ?? null]));
-  // `plugin details` resolves the manifest name, which can differ in case from the
-  // lowercased marketplace id -- see pluginLookupName.
-  const paths = new Map(installed.map((p) => [p.id, p.installPath ?? null]));
-  const shas = readInstalledShas();
-  let fetched = 0;
+  get(id: string): PluginCost | null | undefined {
+    if (this.resolved.has(id)) return this.resolved.get(id);
 
-  for (const id of ids) {
-    const version = versions.get(id) ?? null;
-    const sha = shas.get(paths.get(id) ?? '') ?? null;
-    const hit = cache.get(id, version, sha);
+    const installed = this.list();
+    // No CLI, no component cost. Recording nothing keeps "could not be priced" meaning
+    // "this build was asked about and did not answer", rather than "no CLI here".
+    if (!installed) return undefined;
+
+    const entry = installed.get(id);
+    const version = entry?.version ?? null;
+    const sha = this.shas.get(entry?.installPath ?? '') ?? null;
+
+    const hit = this.cache.get(id, version, sha);
     if (hit) {
-      out.set(id, hit);
-      continue;
+      this.resolved.set(id, hit);
+      return hit;
     }
+
+    let parsed: PluginCost | null = null;
     try {
-      const text = execFileSync('claude', ['plugin', 'details', pluginLookupName(id, paths.get(id))], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        timeout: 30_000,
-      });
-      const parsed = parsePluginDetails(id, text);
-      cache.set(id, version, sha, parsed);
-      out.set(id, parsed);
-      fetched++;
-      if (!quiet && fetched % 10 === 0) process.stderr.write(`  priced ${fetched} plugins...\n`);
+      const text = execFileSync(
+        'claude',
+        ['plugin', 'details', pluginLookupName(id, entry?.installPath)],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30_000 },
+      );
+      parsed = parsePluginDetails(id, text);
+      this.cache.set(id, version, sha, parsed);
+      this.fetched++;
+      if (!this.quiet && this.fetched % 10 === 0) {
+        process.stderr.write(`  priced ${this.fetched} plugins...\n`);
+      }
     } catch {
-      out.set(id, null);
+      parsed = null;
     }
+    this.resolved.set(id, parsed);
+    return parsed;
   }
 
-  cache.flush();
-  return out;
+  entries(): Iterable<[string, PluginCost | null]> {
+    return this.resolved.entries();
+  }
+
+  get size(): number {
+    return this.resolved.size;
+  }
+
+  /** Persist what this run priced. Safe to call when nothing was. */
+  flush(): void {
+    this.cache.flush();
+  }
+
+  private list(): Map<string, InstalledPlugin> | null {
+    if (this.listAttempted) return this.installed;
+    this.listAttempted = true;
+    try {
+      const raw: InstalledPlugin[] = JSON.parse(
+        execFileSync('claude', ['plugin', 'list', '--json'], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 60_000,
+        }),
+      );
+      // `plugin details` resolves the manifest name, which can differ in case from the
+      // lowercased marketplace id -- see pluginLookupName.
+      this.installed = new Map(raw.map((p) => [p.id, p]));
+      this.shas = readInstalledShas();
+      return this.installed;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** The run's index, held so whatever it priced reaches the on-disk cache on exit. */
+let priced: LazyPluginCosts | null = null;
+
+function flushPrices(): void {
+  priced?.flush();
 }
 
 function buildContext(opts: Options): AuditContext {
@@ -167,13 +232,14 @@ function buildContext(opts: Options): AuditContext {
   const measurements: TranscriptMeasurement[] = [];
   for (const p of targets) measurements.push(...measureProject(home, p.path));
 
-  const pluginCosts = opts.withPluginCost
-    ? collectPluginCosts(allPluginIds(ws), opts.json)
-    : new Map<string, PluginCost | null>();
+  // Nothing is priced here. The index spawns per plugin on first read, so a command
+  // that reads no prices pays nothing and a scoped run pays only for its own project.
+  priced = opts.withPluginCost ? new LazyPluginCosts(opts.json) : null;
+  const pluginCosts: PluginCostIndex = priced ?? new Map<string, PluginCost | null>();
 
   // Independent of --no-plugin-cost: this reads files, not the CLI, so the flag that
   // skips ~25s of subprocesses has no reason to skip it.
-  return { ws, measurements, pluginCosts, inventories: readInventories(home) };
+  return { ws, measurements, pluginCosts, scope: target, inventories: readInventories(home) };
 }
 
 /**
@@ -452,4 +518,10 @@ function printUnchecked(report: DelegationReport, ranFull: boolean): void {
   console.log();
 }
 
-await main();
+try {
+  await main();
+} finally {
+  // Every exit path, including the early returns: a price paid on this run must not be
+  // paid again on the next one.
+  flushPrices();
+}

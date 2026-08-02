@@ -40,6 +40,27 @@ export interface PluginCost {
 }
 
 /**
+ * The read side of per-plugin cost.
+ *
+ * Deliberately narrower than `Map`. `get` is the only way to ask for a price, which
+ * leaves an implementation free to defer the ~0.6s `claude plugin details` spawn until
+ * something actually asks -- pricing every installed plugin up front taxed even the
+ * commands that read none of them. `entries` and `size` describe what a run *has*
+ * priced, not what it could price, so reading them costs nothing and the report can
+ * state what was actually looked up.
+ *
+ * A plain `Map` satisfies this, which is what `--no-plugin-cost` and the tests pass.
+ */
+export interface PluginCostIndex {
+  /** `null` when the lookup failed; `undefined` when nothing can price this id. */
+  get(id: string): PluginCost | null | undefined;
+  /** Only what has been priced so far. Iterating prices nothing. */
+  entries(): Iterable<[string, PluginCost | null]>;
+  /** How many prices this run has resolved. */
+  readonly size: number;
+}
+
+/**
  * Integer part: either comma-grouped in threes, or plain digits. Written strictly so
  * a malformed string like `1,2,3,4` fails rather than being coerced into a number
  * nobody intended.

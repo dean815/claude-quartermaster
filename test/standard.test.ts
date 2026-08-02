@@ -7,6 +7,9 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   decisionsRecorded,
@@ -18,7 +21,7 @@ import {
 } from '../src/standard.ts';
 import type { AuditContext, Finding } from '../src/detect.ts';
 import type { ProjectRecord, SettingsFile, Workspace, ClaudeJson } from '../src/surfaces/types.ts';
-import type { PluginCost } from '../src/cost/plugins.ts';
+import type { PluginCost, PluginCostIndex } from '../src/cost/plugins.ts';
 
 const settings = (path: string, body: Partial<SettingsFile> = {}): SettingsFile => ({
   path,
@@ -60,7 +63,29 @@ const cost = (id: string, tokens: number): PluginCost => ({
   mcpUncounted: false,
 });
 
-function ctx(ws: Partial<Workspace>, pluginCosts = new Map<string, PluginCost | null>()): AuditContext {
+/** Records which ids were priced, so a test can assert what a check paid for. */
+function recording(costs: Map<string, PluginCost | null>): PluginCostIndex & { asked: string[] } {
+  const resolved = new Map<string, PluginCost | null>();
+  const asked: string[] = [];
+  return {
+    asked,
+    get(id: string) {
+      asked.push(id);
+      const c = costs.get(id) ?? null;
+      resolved.set(id, c);
+      return c;
+    },
+    entries: () => resolved.entries(),
+    get size() {
+      return resolved.size;
+    },
+  };
+}
+
+function ctx(
+  ws: Partial<Workspace>,
+  pluginCosts: PluginCostIndex = new Map<string, PluginCost | null>(),
+): AuditContext {
   return {
     ws: {
       home: '/home',
@@ -124,6 +149,35 @@ describe('decisions-recorded — the brand-new project moment', () => {
     const p = project('/fresh');
     const r = decisionsRecorded.check(ctx({ userSettings: user, projects: [p] }), p);
     assert.match(r.evidence[1]!, /not priced/);
+  });
+
+  /**
+   * The same moment against a directory that really exists, empty, on disk.
+   *
+   * This is the case the whole expectation was written for, and the one most easily
+   * broken by anything that skips pricing: a brand-new directory is absent from
+   * `~/.claude.json`, has no settings file, and inherits everything -- so the cost of
+   * what it inherits is the only quantitative thing the finding can say. It also runs
+   * the full STANDARD, which means `localSettingsIgnored` gets a real path to stat
+   * rather than a string that exists nowhere.
+   */
+  test('fires for a directory that was just created, and prices only what it inherits', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'qm-brand-new-'));
+    try {
+      const p = project(dir, { registered: false });
+      const priced = recording(costs);
+      const report = checkProject(ctx({ userSettings: user, projects: [p] }, priced), p);
+
+      const f = report.findings.find((x) => x.detector === 'no-decisions-recorded');
+      assert.ok(f, 'a brand-new directory has recorded no decisions');
+      assert.equal(f.project, dir);
+      assert.match(f.evidence[1]!, /~500 tok/);
+      // `c@m` is off, so nothing asks what it costs -- the priced set is the active
+      // set for this one project, not the workspace's plugin list.
+      assert.deepEqual([...priced.asked].sort(), ['a@m', 'b@m']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
