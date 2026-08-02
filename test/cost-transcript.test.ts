@@ -5,10 +5,9 @@
  * invariants against real sessions on this machine, because the fixture can only
  * contain shapes I already knew about.
  */
-import { test, describe, before } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 import {
@@ -113,21 +112,19 @@ describe('synthetic transcript', () => {
  * are far messier than anything I would think to write into a fixture.
  */
 describe('live transcripts', () => {
-  const projectsDir = join(homedir(), '.claude', 'projects');
-  const available = existsSync(projectsDir);
-  let sessions: TranscriptMeasurement[] = [];
+  // Guard on the thing actually measured: this working directory's own sessions.
+  // measureProject returns [] both when the machine has no ~/.claude/projects and
+  // when it exists but holds nothing for this path -- a fresh clone, worktree, or CI
+  // checkout. Guarding on the directory's mere existence skipped only the last case
+  // and turned the other two into failures.
+  const sessions = measureProject(homedir(), process.cwd()).slice(0, 5);
+  const skip = sessions.length === 0 && `no recorded sessions for ${process.cwd()}`;
 
-  before(() => {
-    if (!available) return;
-    // This repo's own sessions -- guaranteed to exist and to be rich.
-    sessions = measureProject(homedir(), process.cwd()).slice(0, 5);
-  });
-
-  test('found real sessions to check', { skip: !available && 'no transcripts' }, () => {
+  test('found real sessions to check', { skip }, () => {
     assert.ok(sessions.length > 0, 'no sessions measured for this project');
   });
 
-  test('attribution partitions exactly on real data', { skip: !available && 'no transcripts' }, () => {
+  test('attribution partitions exactly on real data', { skip }, () => {
     for (const m of sessions) {
       const deferred = block(m, 'deferred_tools');
       if (!deferred) continue;
@@ -144,7 +141,7 @@ describe('live transcripts', () => {
     }
   });
 
-  test('measurement is deterministic', { skip: !available && 'no transcripts' }, () => {
+  test('measurement is deterministic', { skip }, () => {
     const first = sessions[0];
     if (!first) return;
     const again = measureTranscript(first.path);
@@ -152,7 +149,7 @@ describe('live transcripts', () => {
     assert.deepEqual(again.servers, first.servers);
   });
 
-  test('every namespace classifies', { skip: !available && 'no transcripts' }, () => {
+  test('every namespace classifies', { skip }, () => {
     for (const m of sessions) {
       for (const s of m.servers) {
         assert.ok(
