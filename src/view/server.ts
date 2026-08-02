@@ -22,10 +22,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { gzipSync } from 'node:zlib';
 
+import { categorise, readMatrix } from '../category.ts';
 import type { PluginCostIndex } from '../cost/plugins.ts';
 import type { AuditContext } from '../detect.ts';
 import type { McpValue, PluginValue, SkillValue } from '../model.ts';
 import { viewFrom, type ExtensionCost, type ExtensionRow, type ViewProject } from './model.ts';
+import { PAGE } from './page.ts';
 
 // ---------------------------------------------------------------------------
 // The contract
@@ -54,6 +56,19 @@ export interface StructureResponse {
   plugins: StructureRow<PluginValue>[];
   mcpServers: StructureRow<McpValue>[];
   skills: StructureRow<SkillValue>[];
+  /**
+   * Bucket per plugin id, for the ids `project-optimizer`'s matrix names.
+   *
+   * A parallel map rather than a field on the row, because the fact is not a property of
+   * the resolved configuration: it comes from a document outside this repo and is absent
+   * on a machine that does not have it. On the row, that absence would have to be spelled
+   * as a `null` on all 42 of them, which reads as "asked and unknown" -- the distinction
+   * `cost` is dropped rather than nulled to preserve.
+   *
+   * `null` means no matrix was read, and the category filter does not exist. An id absent
+   * from a non-null map is uncategorised. Never a guess: see `category.ts`.
+   */
+  categories: Record<string, string> | null;
 }
 
 /** `GET /api/cost?plugin=<id>`. One row's price, paid for at the moment it is asked. */
@@ -198,10 +213,15 @@ const UNPRICED: PluginCostIndex = {
   size: 0,
 };
 
-function structureOf(ctx: AuditContext): StructureResponse {
+function structureOf(ctx: AuditContext, matrixPath: string | undefined): StructureResponse {
   const view = viewFrom({ ...ctx, pluginCosts: UNPRICED });
   const rows = <V>(list: Array<ExtensionRow<V>>): Array<StructureRow<V>> =>
     list.map(({ id, kind, cells }) => ({ id, kind, cells }));
+
+  // Read once, with the workspace. The matrix is a snapshot for the same reason the
+  // workspace is: a page that re-read one and not the other would show two moments at
+  // once and say it was showing one.
+  const matrix = readMatrix(matrixPath);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -209,6 +229,7 @@ function structureOf(ctx: AuditContext): StructureResponse {
     plugins: rows(view.plugins),
     mcpServers: rows(view.mcpServers),
     skills: rows(view.skills),
+    categories: matrix ? categorise(view.plugins.map((p) => p.id), matrix) : null,
   };
 }
 
@@ -233,43 +254,12 @@ function costOf(ctx: AuditContext, id: string): ExtensionCost | null {
 }
 
 /**
- * Enough of a page to prove the wiring, and no more.
- *
- * Slice 3 replaces this wholesale. What it has to show today is that a browser reaches
- * the server, parses the structure, and gets a price back on a separate request -- the
- * one property the split exists for.
- */
-const PLACEHOLDER = `<!doctype html>
-<meta charset="utf-8">
-<title>quartermaster</title>
-<pre id="out">loading…</pre>
-<script>
-(async () => {
-  const out = document.getElementById('out');
-  const view = await (await fetch('/api/view')).json();
-  const lines = [
-    'generated ' + view.generatedAt,
-    view.projects.length + ' projects',
-    view.plugins.length + ' plugins',
-    view.mcpServers.length + ' mcp servers',
-    view.skills.length + ' skills',
-  ];
-  out.textContent = lines.join('\\n');
-  const first = view.plugins[0];
-  if (!first) return;
-  out.textContent += '\\npricing ' + first.id + '…';
-  const priced = await (await fetch('/api/cost?plugin=' + encodeURIComponent(first.id))).json();
-  out.textContent += ' ' + JSON.stringify(priced.cost);
-})();
-</script>
-`;
-
-/**
  * The page gets a policy the JSON responses do not need: it is the only response a
  * browser executes. `default-src 'none'` is what keeps a page rendering the user's whole
  * workspace from talking to anything but this server -- the no-egress property, enforced
- * by the browser rather than promised in a comment. Inline script and style stay allowed
- * so slice 3 can ship the grid as one file.
+ * by the browser rather than promised in a comment. Inline script and style are allowed
+ * because the grid ships as one file; `img-src data:` is what the provenance icons in
+ * `page.ts` are drawn with, rather than a second request for a sprite.
  */
 const CSP =
   "default-src 'none'; script-src 'self' 'unsafe-inline'; " +
@@ -329,16 +319,27 @@ function route(req: IncomingMessage, res: ServerResponse, state: State): void {
   }
 }
 
+/** What the category filter had to work with. Reported, never inferred from an empty UI. */
+export interface CategoryCoverage {
+  /** False when no matrix could be read at all -- the filter is then absent, not empty. */
+  found: boolean;
+  matched: number;
+  total: number;
+}
+
 export interface RunningServer {
   /** The URL to open. Always loopback, always with the port that was actually bound. */
   url: string;
   port: number;
+  categories: CategoryCoverage;
   close(): Promise<void>;
 }
 
 export interface ServeOptions {
   /** Pass 0 for an ephemeral port -- what the tests use. */
   port?: number;
+  /** Overrides `category.ts`'s default location for `plugin-matrix.md`. */
+  categoryMatrixPath?: string;
 }
 
 /**
@@ -351,12 +352,17 @@ export interface ServeOptions {
  * not ask for and leave the old one to whatever is holding it.
  */
 export function startServer(ctx: AuditContext, opts: ServeOptions = {}): Promise<RunningServer> {
-  const structure = structureOf(ctx);
+  const structure = structureOf(ctx, opts.categoryMatrixPath);
   const state: State = {
     ctx,
     structure: payload(JSON_TYPE, JSON.stringify(structure)),
-    index: payload(HTML_TYPE, PLACEHOLDER, { 'Content-Security-Policy': CSP }),
+    index: payload(HTML_TYPE, PAGE, { 'Content-Security-Policy': CSP }),
     pluginIds: new Set(structure.plugins.map((p) => p.id)),
+  };
+  const categories: CategoryCoverage = {
+    found: structure.categories !== null,
+    matched: Object.keys(structure.categories ?? {}).length,
+    total: structure.plugins.length,
   };
 
   const server = createServer((req, res) => {
@@ -394,6 +400,7 @@ export function startServer(ctx: AuditContext, opts: ServeOptions = {}): Promise
       resolve({
         url: `http://${HOST}:${port}`,
         port,
+        categories,
         close: () =>
           new Promise<void>((done) => {
             // Keep-alive connections would otherwise hold the process open past Ctrl-C.

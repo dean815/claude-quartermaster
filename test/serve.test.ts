@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
 import { networkInterfaces, type NetworkInterfaceInfo } from 'node:os';
+import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 import type { PluginCost, PluginCostIndex } from '../src/cost/plugins.ts';
@@ -150,9 +151,18 @@ const ctx: AuditContext = {
 
 let server: RunningServer;
 
+/**
+ * The category matrix lives outside this repo, so the suite names its own copy. Left to
+ * the default it would read whatever `plugin-matrix.md` this machine happens to have, and
+ * a payload assertion would then pass or fail on a file no reviewer of this change can
+ * see. `category.test.ts` is where the real document is exercised.
+ */
+const MATRIX = join(import.meta.dirname, 'fixtures', 'plugin-matrix.md');
+const NO_MATRIX = join(import.meta.dirname, 'fixtures', 'no-such-matrix.md');
+
 before(async () => {
   // Port 0: the OS picks a free one, so the suite never fights a running `qm serve`.
-  server = await startServer(ctx, { port: 0 });
+  server = await startServer(ctx, { port: 0, categoryMatrixPath: MATRIX });
 });
 
 after(async () => {
@@ -277,6 +287,72 @@ describe('structure arrives without paying for a price', () => {
       assert.equal(row.cells.length, view.projects.length, row.id);
       for (const cell of row.cells) assert.ok(columns.has(cell.project), `${row.id} -> ${cell.project}`);
     }
+  });
+});
+
+/**
+ * The one field slice 3 adds to the contract.
+ *
+ * Parallel to the rows rather than on them, so the row-shape assertion above still reads
+ * `['cells','id','kind']` -- and so "no matrix on this machine" is one `null` rather than
+ * 42 nulls that would each look like "asked and unknown".
+ */
+describe('plugin categories ride alongside the rows', () => {
+  test('the matrix names the plugins it names, and no others', async () => {
+    const view = JSON.parse((await request(server.port, '/api/view')).body);
+    assert.equal(view.categories['github@claude-plugins-official'], 'Git-conditional');
+    assert.equal(view.categories['code-review@claude-plugins-official'], 'Universal');
+    assert.equal(view.categories['figma@claude-plugins-official'], 'Domain-conditional');
+    // Present in the fixture workspace, absent from the fixture matrix: uncategorised is
+    // spelled by absence, never by a bucket nobody wrote.
+    assert.equal('coderabbit@claude-plugins-official' in view.categories, false);
+    assert.equal('minutes@minutes' in view.categories, false);
+  });
+
+  test('every categorised id is a plugin row that exists', async () => {
+    const view = JSON.parse((await request(server.port, '/api/view')).body);
+    const ids = new Set(view.plugins.map((p: { id: string }) => p.id));
+    for (const id of Object.keys(view.categories)) assert.ok(ids.has(id), id);
+    assert.ok(Object.keys(view.categories).length > 0, 'the fixture matched nothing');
+  });
+
+  test('and the server reports the coverage rather than leaving it to be inferred', () => {
+    assert.equal(server.categories.found, true);
+    assert.equal(server.categories.total, 42);
+    assert.ok(server.categories.matched > 0 && server.categories.matched < 42);
+  });
+
+  test('no matrix is null, not an empty map', async () => {
+    const bare = await startServer(ctx, { port: 0, categoryMatrixPath: NO_MATRIX });
+    try {
+      const view = JSON.parse((await request(bare.port, '/api/view')).body);
+      // `{}` would render as a filter with no options; `null` is what hides it.
+      assert.equal(view.categories, null);
+      assert.deepEqual(bare.categories, { found: false, matched: 0, total: 42 });
+    } finally {
+      await bare.close();
+    }
+  });
+});
+
+describe('the page is the grid, not the placeholder', () => {
+  test('/ serves a document with the mount points the script writes into', async () => {
+    const res = await request(server.port, '/');
+    assert.equal(res.status, 200);
+    assert.match(res.headers['content-type'] ?? '', /^text\/html/);
+    for (const id of ['view-ext', 'view-proj', 'detail', 'stat']) {
+      assert.ok(res.body.includes(`id="${id}"`), `no #${id} in the served page`);
+    }
+    assert.ok(res.body.includes('/api/view'), 'the page never reads the structure');
+    assert.ok(res.body.includes('/api/cost?plugin='), 'the page never asks for a price');
+  });
+
+  test('and it is one file, so the policy on it is the whole story', async () => {
+    const body = (await request(server.port, '/')).body;
+    assert.ok(!/<link\b/.test(body), '<link> would fetch outside the policy');
+    const urls = (body.match(/https?:\/\/[^\s"')]+/g) ?? [])
+      .filter((u) => u !== 'http://www.w3.org/2000/svg');
+    assert.deepEqual(urls, []);
   });
 });
 
