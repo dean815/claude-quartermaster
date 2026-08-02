@@ -32,6 +32,7 @@ import {
   compareToBaseline,
   readBaseline,
 } from './standard.ts';
+import { startServer, DEFAULT_PORT } from './view/server.ts';
 import type { TranscriptMeasurement } from './cost/transcript.ts';
 
 const BOLD = '[1m';
@@ -58,14 +59,32 @@ interface Options {
   github: boolean;
   drift: boolean;
   project: string | null;
+  port: number;
+}
+
+/** A port the OS will accept. Anything else is a typo worth stopping for. */
+function parsePort(raw: string | null): number {
+  if (raw === null) return DEFAULT_PORT;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 65_535) {
+    console.error(`qm: --port expects a number between 1 and 65535, got ${JSON.stringify(raw)}`);
+    process.exit(2);
+  }
+  return n;
 }
 
 function parseArgs(argv: string[]): { command: string; opts: Options } {
-  const idx = argv.indexOf('--project');
   // Guard the -1 case: `idx + 1` would be 0 and drop the command itself, so every
-  // invocation without --project silently fell back to `audit`.
-  const valueIdx = idx === -1 ? -1 : idx + 1;
-  const positional = argv.filter((a, i) => !a.startsWith('-') && i !== valueIdx);
+  // invocation without a value flag silently fell back to `audit`.
+  const valueIdxOf = (flag: string) => {
+    const idx = argv.indexOf(flag);
+    return idx === -1 ? -1 : idx + 1;
+  };
+  const projectIdx = valueIdxOf('--project');
+  const portIdx = valueIdxOf('--port');
+  const positional = argv.filter(
+    (a, i) => !a.startsWith('-') && i !== projectIdx && i !== portIdx,
+  );
   return {
     command: positional[0] ?? 'audit',
     opts: {
@@ -74,7 +93,8 @@ function parseArgs(argv: string[]): { command: string; opts: Options } {
       full: argv.includes('--full'),
       github: !argv.includes('--no-github'),
       drift: argv.includes('--drift'),
-      project: idx !== -1 ? (argv[idx + 1] ?? null) : null,
+      project: projectIdx === -1 ? null : (argv[projectIdx] ?? null),
+      port: parsePort(portIdx === -1 ? null : (argv[portIdx] ?? null)),
     },
   };
 }
@@ -385,6 +405,36 @@ function printDrift(
   );
 }
 
+/**
+ * A foreground server, and no daemon behind it.
+ *
+ * Ctrl-C is handled rather than left to the default so the run returns through `main`
+ * and the `finally` below reaches `flushPrices`. Without it, every price the grid paid
+ * ~0.6s for would be discarded on exit and paid again on the next start.
+ */
+async function serve(ctx: AuditContext, port: number): Promise<void> {
+  let server;
+  try {
+    server = await startServer(ctx, { port });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+      console.error(`qm: port ${port} is already in use. Free it, or pass --port <n>.`);
+      process.exit(1);
+    }
+    throw err;
+  }
+
+  console.log(`\n${BOLD}quartermaster${RESET} ${DIM}· read-only · loopback only${RESET}`);
+  console.log(`  ${server.url}`);
+  console.log(`\n${DIM}Ctrl-C to stop.${RESET}`);
+
+  await new Promise<void>((resolve) => {
+    process.once('SIGINT', () => {
+      void server.close().then(resolve);
+    });
+  });
+}
+
 async function main(): Promise<void> {
   const { command, opts } = parseArgs(process.argv.slice(2));
 
@@ -395,6 +445,7 @@ ${BOLD}qm${RESET} -- audit which Claude Code extensions load where, and what the
   qm audit    [--json] [--full] [--project <path>] [--drift] [--no-plugin-cost]
   qm cost     [--json] [--project <path>]
   qm baseline [--full]        record today's findings, so --drift can diff against them
+  qm serve    [--port <n>]    serve the grid on 127.0.0.1 until Ctrl-C
 
   --full    also scan git hygiene and project layout via project-optimizer
   --no-github  skip GitHub checks in --full (for offline use or no gh CLI)
@@ -405,6 +456,11 @@ Read-only. Nothing here writes to any Claude Code config.
   }
 
   const ctx = buildContext(opts);
+
+  if (command === 'serve') {
+    await serve(ctx, opts.port);
+    return;
+  }
 
   if (command === 'cost') {
     if (opts.json) {
