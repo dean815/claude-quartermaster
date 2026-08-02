@@ -23,6 +23,7 @@ function project(path: string, body: Partial<ProjectRecord> = {}): ProjectRecord
   return {
     path,
     alive: true,
+    registered: true,
     settings: null,
     localSettings: null,
     mcpJson: null,
