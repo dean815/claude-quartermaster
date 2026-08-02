@@ -42,6 +42,10 @@ export interface FixtureManifest {
   /** Counted by *winning* scope, which is what mutation sensitivity follows. */
   decidedByScope: Record<'user' | 'project' | 'local' | 'default', number>;
   probeProjects: string[];
+  /** Live projects the oracle was not asked about, because it answers about plugins. */
+  skillProbeProjects: string[];
+  /** The skill ids the constructed half laid down -- input, not resolver output. */
+  skillIds: string[];
 }
 
 /**

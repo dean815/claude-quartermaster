@@ -27,6 +27,8 @@ import {
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { SkillValue } from '../src/model.ts';
+
 // The generator measures the fixture it just wrote, so the manifest and the gate can
 // never disagree about how much coverage there is. Importing the fixture's own loader
 // rather than restating the path-rebasing rule keeps one copy of that rule.
@@ -61,9 +63,13 @@ const MCP_TYPES = new Set(['stdio', 'http', 'sse']);
 const readJson = (p: string): any => JSON.parse(readFileSync(p, 'utf8'));
 const readJsonIf = (p: string): any => (existsSync(p) ? readJson(p) : null);
 
-function writeJson(fullPath: string, data: unknown): void {
+function writeText(fullPath: string, text: string): void {
   mkdirSync(join(fullPath, '..'), { recursive: true });
-  writeFileSync(fullPath, JSON.stringify(data, null, 2) + '\n');
+  writeFileSync(fullPath, text);
+}
+
+function writeJson(fullPath: string, data: unknown): void {
+  writeText(fullPath, JSON.stringify(data, null, 2) + '\n');
 }
 
 const write = (relPath: string, data: unknown): void => writeJson(join(OUT, relPath), data);
@@ -106,6 +112,9 @@ interface Captured {
   oracleCwd: string | null;
   /** True when the *config* was constructed rather than found. See section 4. */
   synthetic: boolean;
+  /** Constructed `skillOverrides` for each project-level scope. See section 4b. */
+  skillSettings: Record<string, SkillValue> | null;
+  skillLocalSettings: Record<string, SkillValue> | null;
 }
 
 const captured: Captured[] = realPaths.map((real) => {
@@ -121,6 +130,8 @@ const captured: Captured[] = realPaths.map((real) => {
     entry: claudeJson.projects[real] ?? {},
     oracleCwd: alive ? real : null,
     synthetic: false,
+    skillSettings: null,
+    skillLocalSettings: null,
   };
 });
 
@@ -236,10 +247,82 @@ const probes: Captured[] = probeSpecs.map((spec) => {
     entry: {},
     oracleCwd: cwd,
     synthetic: true,
+    skillSettings: null,
+    skillLocalSettings: null,
   };
 });
 
-const allProjects = [...captured, ...probes];
+// ---------------------------------------------------------------------------
+// 4b. The skill probe.
+//
+// Skills are the one four-valued surface, and the redaction allowlist drops every
+// captured `skillOverrides`: a skill id names what someone works on as surely as a
+// directory name does, and `~/.claude/skills/` is not copied for the same reason. So the
+// skills half is constructed outright, and it rides in *after* redaction rather than
+// through it -- widening the allowlist must never become the way a skill reaches the
+// fixture.
+//
+// It differs from the plugin probes above in the one way that matters. Those construct an
+// input and then let the real CLI say what it resolves to. Nothing first-party reports a
+// resolved `skillOverrides` -- `claude plugin list --json` answers about plugins -- so
+// this project is not asked at all, and its expectation comes from `resolveSkill`. That
+// makes the skill half a check that the served payload is the model, and not a check that
+// the model is right. See README, "Provenance"; the precedence claim stays in
+// `resolve.test.ts`, where it is asserted against the algebra rather than against a CLI.
+
+const SKILL_PROBE_NAME = 'probe-skill-chain';
+
+/** User scope -- and, since `~` is a project, its project scope too, deduped to `user`. */
+const SKILL_USER: Record<string, SkillValue> = {
+  'skill-01': 'name-only',
+  'skill-02': 'off',
+  'skill-03': 'name-only',
+};
+
+/** The probe's `settings.json`. */
+const SKILL_PROJECT: Record<string, SkillValue> = {
+  'skill-01': 'user-invocable-only', // differs from the user scope -> overridden
+  'skill-02': 'off',                 // matches it                  -> restated
+  'skill-03': 'off',                 // outranked below: a three-link chain
+  'skill-04': 'off',                 // ... and put back below, at the default
+};
+
+/** The probe's `settings.local.json` -- the surface Phase 2 writes to. */
+const SKILL_LOCAL: Record<string, SkillValue> = {
+  'skill-03': 'user-invocable-only', // three links, local wins  -> overridden
+  'skill-04': 'on',                  // the value it would inherit anyway -> restated
+  'skill-05': 'off',                 // local alone              -> overridden
+};
+
+/**
+ * Installed, and scoped by nothing.
+ *
+ * Every id above is a row because a settings file names it, which is the circularity
+ * DEA-134 removed from `allSkillIds`: derive the axis from `skillOverrides` and a skill
+ * becomes visible only once it has been scoped, when scoping is what the grid is for.
+ * This one is a row because it is on disk, so the fixture exercises that source too.
+ */
+const SKILL_ON_DISK = 'skill-06';
+
+const skillProbe: Captured = {
+  fake: `${FAKE_HOME}/${SKILL_PROBE_NAME}`,
+  rel: SKILL_PROBE_NAME,
+  alive: true,
+  settings: null,
+  localSettings: null,
+  mcpJson: null,
+  entry: {},
+  oracleCwd: null, // Nothing first-party answers about skills -- see above.
+  synthetic: true,
+  skillSettings: SKILL_PROJECT,
+  skillLocalSettings: SKILL_LOCAL,
+};
+
+/** Constructed overrides ride in after redaction, never through it. */
+const skillBlock = (o: Record<string, SkillValue> | null): Record<string, unknown> =>
+  o ? { skillOverrides: o } : {};
+
+const allProjects = [...captured, ...probes, skillProbe];
 
 // ---------------------------------------------------------------------------
 // 5. Emit the home tree. README.md is prose and survives a regeneration.
@@ -249,7 +332,14 @@ rmSync(join(OUT, 'home'), { recursive: true, force: true });
 // The user-scope file. When `~` is a registered project this same file is also its
 // project-scope file -- one path serving two scopes, which is the collision the
 // resolver dedups. The fixture reproduces it by construction, not by a special case.
-write('home/.claude/settings.json', pickSettings(userSettings));
+write('home/.claude/settings.json', { ...pickSettings(userSettings), ...skillBlock(SKILL_USER) });
+
+// `~/.claude/skills/` is never copied -- a personal skill's directory name is as
+// identifying as a project's. This one is written, and names nothing on this machine.
+writeText(
+  join(OUT, 'home', '.claude', 'skills', SKILL_ON_DISK, 'SKILL.md'),
+  `---\nname: ${SKILL_ON_DISK}\ndescription: Constructed fixture skill. Installed, scoped by nothing.\n---\n`,
+);
 
 write('home/.claude.json', {
   numStartups: claudeJson.numStartups,
@@ -261,8 +351,15 @@ for (const c of allProjects) {
   if (!c.alive) continue; // A missing directory is what makes a dead entry dead.
   const files: Array<[string, any]> = [];
   // For `~` the project settings file is the user settings file already written above.
-  if (c.rel && c.settings) files.push(['.claude/settings.json', pickSettings(c.settings)]);
-  if (c.localSettings) files.push(['.claude/settings.local.json', pickSettings(c.localSettings)]);
+  if (c.rel && (c.settings || c.skillSettings)) {
+    files.push(['.claude/settings.json', { ...pickSettings(c.settings), ...skillBlock(c.skillSettings) }]);
+  }
+  if (c.localSettings || c.skillLocalSettings) {
+    files.push([
+      '.claude/settings.local.json',
+      { ...pickSettings(c.localSettings), ...skillBlock(c.skillLocalSettings) },
+    ]);
+  }
   if (c.mcpJson) files.push(['.mcp.json', { mcpServers: pickServers(c.mcpJson.mcpServers) }]);
 
   for (const [name, data] of files) write(join('home', c.rel, name), data);
@@ -354,6 +451,28 @@ const manifest = {
   decidedByScope,
   /** Constructed input, observed expectation. See README, "Provenance". */
   probeProjects: probes.map((p) => p.fake),
+  /**
+   * Constructed input, resolver-checked expectation -- the third kind, and the one no
+   * oracle can answer for. Live projects the oracle was not asked about, so the gate can
+   * state which of its columns anchor 3 covers instead of assuming all of them.
+   */
+  skillProbeProjects: [skillProbe.fake],
+  /**
+   * The skill ids the constructed half lays down, sorted as `allSkillIds` sorts.
+   *
+   * Written from the *input* -- the three override blocks and the one skill on disk -- so the
+   * gate compares what was laid down against what was served. Deriving it by calling
+   * `allSkillIds` here would put the same function on both sides of the comparison, which
+   * is the DEA-133 defect: it would agree with itself whatever that function did.
+   */
+  skillIds: [
+    ...new Set([
+      ...Object.keys(SKILL_USER),
+      ...Object.keys(SKILL_PROJECT),
+      ...Object.keys(SKILL_LOCAL),
+      SKILL_ON_DISK,
+    ]),
+  ].sort((a, b) => a.localeCompare(b)),
 };
 write('manifest.json', manifest);
 
@@ -369,5 +488,6 @@ console.table({
   unreadableProjects: unreadable,
   pluginProjectPairs: pairs,
   serverNamesRenamed: fakeServer.size,
+  constructedSkills: manifest.skillIds.length,
   ...decidedByScope,
 });

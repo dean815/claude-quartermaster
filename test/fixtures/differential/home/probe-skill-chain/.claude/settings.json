@@ -1,0 +1,8 @@
+{
+  "skillOverrides": {
+    "skill-01": "user-invocable-only",
+    "skill-02": "off",
+    "skill-03": "off",
+    "skill-04": "off"
+  }
+}

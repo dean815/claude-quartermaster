@@ -30,7 +30,7 @@
  * ## Negative controls
  *
  * A gate that cannot fail is not a gate: the differential suite skipped in its entirety
- * for months while CI stayed green (DEA-127). So five mutations ship with it, applied to
+ * for months while CI stayed green (DEA-127). So six mutations ship with it, applied to
  * the parsed payload rather than to any source file, each asserted to make the gate fail
  * and to name what diverged. If one of them ever stops failing, that is a hole in the
  * gate to report -- not a mutation to delete.
@@ -47,7 +47,7 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 import type { AuditContext } from '../src/detect.ts';
-import type { Cell } from '../src/model.ts';
+import { SKILL_VALUES, type Cell } from '../src/model.ts';
 import { allMcpServerNames, allPluginIds, resolveMcpServer, resolvePlugin, resolveSkill } from '../src/resolve.ts';
 import { allSkillIds, buildSkillCatalog } from '../src/skills.ts';
 import type { ProjectRecord, Workspace } from '../src/surfaces/types.ts';
@@ -72,22 +72,58 @@ const MANIFEST = readManifest();
  * fixture moves these, and moving them is an edit someone has to make on purpose.
  */
 const MCP_ROWS = 39;
-const CHAIN_LINKS = 1635;
+const CHAIN_LINKS = 1768;
 
 /**
- * Zero, and asserted rather than tolerated.
+ * The skill axis -- four-valued, and so the one axis `Cell<V>` was shaped for.
  *
- * The fixture's redaction allowlist keeps `enabledPlugins` and the four MCP list keys and
- * drops everything else, so no `skillOverrides` survives it and no `~/.claude/skills/`
- * was ever copied. `buildSkillCatalog` therefore names nothing and the skill axis is
- * empty here -- which means anchors 1 and 2 cover plugins and MCP servers only, and a
- * regression in how a four-valued skill cell is projected would not be caught by this
- * file. `view.test.ts` covers that axis on synthetic workspaces.
+ * Pinned exact here, and checked id-for-id against `manifest.skillIds` below: the
+ * manifest lists what the generator *wrote into* the fixture, so the two halves of that
+ * comparison move independently. A count read back through `allSkillIds` would be the
+ * DEA-133 defect one level removed -- the same function on both sides of an equals sign,
+ * agreeing with itself whatever it does.
  *
- * Pinned at 0 so the day the fixture grows a skill, this fails and someone has to come
- * back and take the coverage that just became available.
+ * What this covers, stated narrowly. `resolveSkill` is the expectation for every skill
+ * cell, so anchor 1 says the bytes a browser is handed *are* the model: it catches a
+ * transposition, a dropped link, a mangled `source`, a lossy round-trip, a misaligned
+ * index -- now over a payload that actually carries all four values and all three
+ * origins. It says nothing about whether `resolveSkill`'s precedence is right. Nothing
+ * here can: no first-party command reports a resolved `skillOverrides`, so anchor 3 has
+ * no skill half and cannot be given one, and deriving what we believe the answer should
+ * be is the one thing this fixture exists not to do. That claim belongs to
+ * `resolve.test.ts`, asserted against the algebra, and is not restated here.
  */
-const SKILL_ROWS = 0;
+const SKILL_ROWS = 6;
+
+/**
+ * Every served skill cell, tallied by value and origin. Exact, never a floor.
+ *
+ * This says what the fixture's skill half *contains* -- not that the resolver is right
+ * about it, which is the previous note's point. Its job is that a fixture quietly losing
+ * its overrides, the way a widened redaction rule or a dropped probe directory would lose
+ * them, degrades to 156 inherited `on` cells and fails here rather than passing as a grid
+ * that compares a column of defaults against itself.
+ */
+const SKILL_CENSUS: Record<string, number> = {
+  'name-only/inherited': 50,
+  'off/inherited': 25,
+  'off/overridden': 1,
+  'off/restated': 1,
+  'on/inherited': 76,
+  'on/restated': 1,
+  'user-invocable-only/overridden': 2,
+};
+
+/**
+ * Columns, and which anchor reaches them.
+ *
+ * Anchor 3 covers the projects the oracle answered for. The skill probe is a live project
+ * it was not asked about -- `claude plugin list --json` reports plugins, and the probe
+ * exists for the surface nothing first-party reports -- so it is a column anchors 1 and 2
+ * check and anchor 3 does not. Written as the sum rather than as 26 so that relationship
+ * is the assertion, and a project appearing in neither set fails.
+ */
+const COLUMNS = MANIFEST.oracleProjects + MANIFEST.skillProbeProjects.length;
 
 // ---------------------------------------------------------------------------
 // The five display forms
@@ -462,22 +498,71 @@ describe('the served grid is the resolved model', () => {
   test('and it compared the whole grid, not a corner of it', () => {
     const report = runGate(served, ctx);
 
-    assert.equal(report.columns, MANIFEST.oracleProjects, 'every live fixture project should be a column');
+    assert.equal(report.columns, COLUMNS, 'every live fixture project should be a column');
     assert.equal(served.plugins.length, MANIFEST.plugins);
     assert.equal(served.mcpServers.length, MCP_ROWS);
     assert.equal(served.skills.length, SKILL_ROWS);
 
+    // Input against output: the ids the generator laid down, against the rows served.
+    // A skill that loses its row is otherwise invisible -- the resolver would enumerate
+    // the same shortened list the payload carries, and every pair left would still agree.
+    assert.deepEqual(served.skills.map((r) => r.id), MANIFEST.skillIds);
+
     assert.equal(
       report.pairs.plugin,
-      MANIFEST.pairs,
-      'the plugin half of the grid is exactly the oracle\'s coverage, so these are the same number',
+      MANIFEST.plugins * COLUMNS,
+      `the oracle answers for ${MANIFEST.pairs} of these; the rest are the skill probe's column`,
     );
-    assert.equal(report.pairs.mcp, MCP_ROWS * MANIFEST.oracleProjects);
-    assert.equal(report.pairs.skill, SKILL_ROWS * MANIFEST.oracleProjects);
+    assert.equal(report.pairs.mcp, MCP_ROWS * COLUMNS);
+    assert.equal(report.pairs.skill, SKILL_ROWS * COLUMNS);
     assert.equal(
       report.links,
       CHAIN_LINKS,
       'chain links compared changed -- if the fixture was regenerated, re-pin CHAIN_LINKS',
+    );
+  });
+
+  /**
+   * The four-valued axis, exercised over the wire rather than only in a unit test.
+   *
+   * The whole argument for `Cell<V>` carrying `value` and `origin` apart -- rather than
+   * the A-F enum it replaced -- is that A-F cannot express a four-valued setting. Until
+   * DEA-138 that argument was checked on hand-built workspaces in `view.test.ts` and on
+   * nothing that had crossed a socket, so the axis the model was designed for was the one
+   * axis no end-to-end gate touched.
+   *
+   * `SKILL_VALUES` is imported rather than restated, unlike `DISPLAY_FORMS`. The forms are
+   * a rendering rule this file exists to hold a second opinion about; the values are the
+   * domain itself, and importing them means a fifth value added upstream fails here until
+   * the fixture carries one. A restated list would let it in silently.
+   */
+  test('the skill axis carries all four values and all three origins', () => {
+    const cells = served.skills.flatMap((r) => r.cells);
+
+    const census: Record<string, number> = {};
+    for (const c of cells) {
+      const key = `${c.value}/${c.origin}`;
+      census[key] = (census[key] ?? 0) + 1;
+    }
+    assert.deepEqual(census, SKILL_CENSUS);
+
+    assert.deepEqual(
+      [...new Set(cells.map((c) => c.value))].sort(),
+      [...SKILL_VALUES].sort(),
+      'a skill value the fixture never puts on the wire',
+    );
+    assert.deepEqual(
+      [...new Set(cells.map((c) => c.origin))].sort(),
+      ['inherited', 'overridden', 'restated'],
+    );
+
+    // Local scope, on the skill axis, for the reason `probe-local-*` exist on the plugin
+    // one: it is the surface Phase 2 writes to, and nothing captured decides a pair there.
+    const local = cells.filter((c) => c.chain.at(-1)?.scope === 'local');
+    assert.ok(local.length > 0, 'no skill cell is decided by a settings.local.json');
+    assert.ok(
+      cells.some((c) => c.chain.length === 3),
+      'no skill cell has user, project and local all setting it',
     );
   });
 
@@ -603,6 +688,27 @@ const MUTATIONS: Mutation[] = [
       link.source = link.source === DISPLAY_FORMS[0] ? DISPLAY_FORMS[2] : DISPLAY_FORMS[0];
     },
     names: /chain\[\d+\]\.source served=/,
+  },
+  {
+    /**
+     * The mutation the plugin axis cannot express.
+     *
+     * `name-only` and `user-invocable-only` are both "not on" and both leave `origin`
+     * untouched, so the A-F enum this repo dropped would render the two identically and
+     * a boolean cell has no way to differ from itself like this at all. It is therefore
+     * the mutation that shows the four-valued axis is compared on its value rather than
+     * on its truthiness -- which is what `Cell<V>` was shaped to make possible.
+     *
+     * Diverges on exactly one pair out of 2,262. That it is caught at all is the claim;
+     * the logged count is how anyone would notice it stopping.
+     */
+    name: 'change one skill cell from name-only to user-invocable-only',
+    apply: (view) => {
+      const cell = view.skills.flatMap((r) => r.cells).find((c) => c.value === 'name-only');
+      if (!cell) throw new Error('no served skill cell resolves to name-only');
+      cell.value = 'user-invocable-only';
+    },
+    names: /^skill .*: value served="user-invocable-only" resolver="name-only"$/,
   },
 ];
 

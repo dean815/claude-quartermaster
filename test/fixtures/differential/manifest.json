@@ -1,5 +1,5 @@
 {
-  "projectEntries": 68,
+  "projectEntries": 69,
   "oracleProjects": 25,
   "pairs": 1050,
   "plugins": 42,
@@ -12,5 +12,16 @@
   "probeProjects": [
     "/Users/testuser/probe-local-disable",
     "/Users/testuser/probe-local-enable"
+  ],
+  "skillProbeProjects": [
+    "/Users/testuser/probe-skill-chain"
+  ],
+  "skillIds": [
+    "skill-01",
+    "skill-02",
+    "skill-03",
+    "skill-04",
+    "skill-05",
+    "skill-06"
   ]
 }
