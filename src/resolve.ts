@@ -13,6 +13,7 @@ import {
   type SkillValue,
 } from './model.ts';
 import type { ProjectRecord, SettingsFile, Workspace } from './surfaces/types.ts';
+import type { PluginInventory } from './inventory.ts';
 
 /**
  * The settings files that can decide a key for one project, ascending by precedence.
@@ -125,25 +126,26 @@ export function resolveMcpServer(
   return resolveCell(links, false);
 }
 
-/** Every plugin id mentioned by any settings file in the workspace. */
-export function allPluginIds(ws: Workspace): string[] {
-  const ids = new Set<string>();
+/**
+ * Every plugin id the workspace can express an opinion about.
+ *
+ * Settings mentions alone are not enough. A plugin installed and never toggled appears
+ * in no `enabledPlugins` block, so it would be no row in the grid even though
+ * `installed_plugins.json` knows the build is on disk and shares this exact
+ * `name@marketplace` id space. It resolves to `false`/`inherited`, which is the true
+ * answer and the one worth showing.
+ *
+ * Widening this changes no detector output: an unmentioned id has no project-scope link,
+ * so it is never `restated`, never `overridden`, and never enabled anywhere -- each of
+ * the three consumers drops it on its own first test.
+ */
+export function allPluginIds(
+  ws: Workspace,
+  inventories: ReadonlyMap<string, PluginInventory>,
+): string[] {
+  const ids = new Set<string>(inventories.keys());
   const collect = (f: SettingsFile | null) => {
     if (f?.enabledPlugins) for (const id of Object.keys(f.enabledPlugins)) ids.add(id);
-  };
-  collect(ws.userSettings);
-  for (const p of ws.projects) {
-    collect(p.settings);
-    collect(p.localSettings);
-  }
-  return [...ids].sort();
-}
-
-/** Every skill id any settings file expresses an opinion about. */
-export function allSkillIds(ws: Workspace): string[] {
-  const ids = new Set<string>();
-  const collect = (f: SettingsFile | null) => {
-    if (f?.skillOverrides) for (const id of Object.keys(f.skillOverrides)) ids.add(id);
   };
   collect(ws.userSettings);
   for (const p of ws.projects) {

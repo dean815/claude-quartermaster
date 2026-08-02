@@ -68,7 +68,9 @@ export const decisionsRecorded: Expectation = {
   title: 'The project has made at least one explicit extension decision',
   check(ctx, project) {
     const hasSettings = Boolean(project.settings || project.localSettings);
-    const enabled = allPluginIds(ctx.ws).filter((id) => resolvePlugin(ctx.ws, project, id).value);
+    const enabled = allPluginIds(ctx.ws, ctx.inventories).filter(
+      (id) => resolvePlugin(ctx.ws, project, id).value,
+    );
 
     if (hasSettings) {
       return met(this.id, [`${enabled.length} plugins active`, 'project settings present']);

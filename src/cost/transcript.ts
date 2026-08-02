@@ -48,6 +48,12 @@ export interface BaselineBlock {
 
 export interface TranscriptMeasurement {
   path: string;
+  /**
+   * The project this session ran in, when it was read through `measureProject`. Null
+   * when a transcript was measured by path alone, because the directory slug is a
+   * lossy encoding of the path and guessing one back would invent a project.
+   */
+  project: string | null;
   sessionId: string;
   modifiedAt: number;
   blocks: BaselineBlock[];
@@ -56,6 +62,15 @@ export interface TranscriptMeasurement {
   needsAuth: string[];
   /** Servers still connecting when the block was written. */
   pending: string[];
+  /**
+   * The skill ids this session actually loaded.
+   *
+   * `null` means no listing carried a `names` array -- either none appeared, or the
+   * one that did recorded only a count. That is "could not tell", and it must not
+   * read as "this session loaded no skills": ten of the listings on the machine this
+   * was built against carry `skillCount` and nothing else.
+   */
+  skills: string[] | null;
   totalChars: number;
 }
 
@@ -107,7 +122,10 @@ function sumLengths(xs: readonly string[]): number {
  * `deferred_tools_delta` records, and the cost is their union. Names are de-duplicated
  * because a re-added tool is not paid for twice.
  */
-export function measureTranscript(path: string): TranscriptMeasurement {
+export function measureTranscript(
+  path: string,
+  project: string | null = null,
+): TranscriptMeasurement {
   const toolNames = new Set<string>();
   const needsAuth = new Set<string>();
   const pending = new Set<string>();
@@ -116,6 +134,7 @@ export function measureTranscript(path: string): TranscriptMeasurement {
   let mcpInstructionCount = 0;
   let skillChars = 0;
   let skillCount = 0;
+  let skillNames: string[] | null = null;
   let agentChars = 0;
   let agentCount = 0;
   let hookChars = 0;
@@ -149,6 +168,10 @@ export function measureTranscript(path: string): TranscriptMeasurement {
         // Not a delta -- each record is a full listing, so the largest wins.
         skillChars = Math.max(skillChars, (a.content ?? '').length);
         skillCount = Math.max(skillCount, a.skillCount ?? (a.names ?? []).length);
+        const names: string[] | null = Array.isArray(a.names)
+          ? (a.names as unknown[]).filter((n): n is string => typeof n === 'string')
+          : null;
+        if (names && (!skillNames || names.length > skillNames.length)) skillNames = names;
         break;
       }
       case 'agent_listing_delta': {
@@ -201,12 +224,14 @@ export function measureTranscript(path: string): TranscriptMeasurement {
 
   return {
     path,
+    project,
     sessionId: path.split('/').at(-1)!.replace(/\.jsonl$/, ''),
     modifiedAt: statSync(path).mtimeMs,
     blocks,
     servers,
     needsAuth: [...needsAuth].sort(),
     pending: [...pending].sort(),
+    skills: skillNames,
     totalChars: blocks.reduce((n, b) => n + b.chars, 0),
   };
 }
@@ -220,7 +245,7 @@ export function measureProject(home: string, projectPath: string): TranscriptMea
   for (const f of readdirSync(dir)) {
     if (!f.endsWith('.jsonl')) continue;
     try {
-      out.push(measureTranscript(join(dir, f)));
+      out.push(measureTranscript(join(dir, f), projectPath));
     } catch {
       // An unreadable transcript is not worth failing an audit over.
     }

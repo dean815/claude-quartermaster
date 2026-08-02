@@ -77,6 +77,14 @@ export interface RuleFile {
   lines: number;
 }
 
+/** A skill installed for the user, one directory under `~/.claude/skills/`. */
+export interface PersonalSkill {
+  /** Directory name. This is the id a `skillOverrides` key would use. */
+  id: string;
+  /** Absolute path of its `SKILL.md`. */
+  path: string;
+}
+
 /** `~/.claude/projects/<slug>/memory/MEMORY.md`, loaded at the start of every session. */
 export interface MemoryIndex {
   path: string;
@@ -111,6 +119,8 @@ export interface Workspace {
   home: string;
   userSettings: SettingsFile | null;
   userRules: RuleFile[];
+  /** Skills installed under `~/.claude/skills/`, whether or not anything scopes them. */
+  personalSkills: PersonalSkill[];
   claudeJson: ClaudeJson;
   projects: ProjectRecord[];
 }
