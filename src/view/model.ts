@@ -30,11 +30,11 @@ import type { Cell, McpValue, Origin, PluginValue, Scope, SkillValue } from '../
 import {
   allMcpServerNames,
   allPluginIds,
-  allSkillIds,
   resolveMcpServer,
   resolvePlugin,
   resolveSkill,
 } from '../resolve.ts';
+import { allSkillIds, buildSkillCatalog } from '../skills.ts';
 import { memorySlug } from '../surfaces/read.ts';
 import type { ProjectRecord, Workspace } from '../surfaces/types.ts';
 
@@ -332,11 +332,16 @@ export function viewFrom(ctx: AuditContext): GridView {
       };
     });
 
+  // Both axes enumerate what is *installed*, not what some settings file happens to
+  // mention (DEA-134). Deriving rows from `skillOverrides` made the grid circular: a
+  // skill appeared only once it had been scoped, and scoping is what the grid is for.
+  const skillCatalog = buildSkillCatalog(ws, ctx.measurements, ctx.inventories);
+
   return {
     projects: columns.map((c) => c.project),
     plugins: rowsFor<PluginValue>(
       'plugin',
-      allPluginIds(ws),
+      allPluginIds(ws, ctx.inventories),
       columns,
       (record, id) => resolvePlugin(ws, record, id),
       (id) => pluginCostOf(ctx, id),
@@ -350,7 +355,7 @@ export function viewFrom(ctx: AuditContext): GridView {
     ),
     skills: rowsFor<SkillValue>(
       'skill',
-      allSkillIds(ws),
+      allSkillIds(skillCatalog),
       columns,
       (record, id) => resolveSkill(ws, record, id),
       noCost,
