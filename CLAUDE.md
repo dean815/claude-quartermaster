@@ -2,8 +2,9 @@
 
 Read-only CLI that audits which Claude Code extensions (plugins, MCP servers, skills)
 load in which projects, and what they cost. `qm audit`, `qm cost`, `qm baseline` /
-`--drift`. The two-view GUI is Phase 1b and writes are Phase 2 — neither is built, so
-nothing here writes to any Claude Code config.
+`--drift`, and `qm serve` for the two-view grid on loopback. Phase 1b is built; writes
+are Phase 2 and are **not**, so nothing here writes to any Claude Code config. The
+grid's add/remove controls render disabled for that reason.
 
 ## Architecture
 
