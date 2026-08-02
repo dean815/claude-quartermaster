@@ -42,5 +42,10 @@
     "project-optimizer@claude-project-optimizer": true,
     "feature-dev@claude-plugins-official": true,
     "project-artifact@claude-plugins-official": true
+  },
+  "skillOverrides": {
+    "skill-01": "name-only",
+    "skill-02": "off",
+    "skill-03": "name-only"
   }
 }
