@@ -5,11 +5,11 @@
  * invariants against real sessions on this machine, because the fixture can only
  * contain shapes I already knew about.
  */
-import { test, describe, before } from 'node:test';
+import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { existsSync, readdirSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 
 import {
   measureTranscript,
@@ -19,6 +19,7 @@ import {
   unauthenticatedButListed,
   type TranscriptMeasurement,
 } from '../src/cost/transcript.ts';
+import { memorySlug } from '../src/surfaces/read.ts';
 
 const FIXTURE = join(import.meta.dirname, 'fixtures', 'transcripts', 'synthetic.jsonl');
 
@@ -113,21 +114,40 @@ describe('synthetic transcript', () => {
  * are far messier than anything I would think to write into a fixture.
  */
 describe('live transcripts', () => {
-  const projectsDir = join(homedir(), '.claude', 'projects');
-  const available = existsSync(projectsDir);
-  let sessions: TranscriptMeasurement[] = [];
+  /**
+   * The guard asks the machine; the assertion asks the code. They must not be the same
+   * question.
+   *
+   * Guarding on `sessions.length === 0` -- the obvious fix for the worktree failure --
+   * makes the skip condition the exact negation of the assertion below it. The test then
+   * runs only where it is guaranteed to pass and skips wherever it could fail, which is
+   * a test that cannot fail for any input. That matters here specifically: `measureProject`
+   * swallows per-file read errors in a bare `catch`, so a regression in `memorySlug` or
+   * in the reader returns `[]` with the files still sitting on disk. Under the derived
+   * guard that regression skips silently and the three invariant tests below iterate an
+   * empty array and pass -- the suite goes green for exactly the failure this block exists
+   * to catch.
+   *
+   * So the skip counts transcript files on disk, which is a fact about this machine and
+   * this checkout path, and nothing else. A worktree, fresh clone or CI runner has none
+   * and skips cleanly; anywhere the files exist, the assertion is free to fail.
+   */
+  const transcriptDir = join(homedir(), '.claude', 'projects', memorySlug(process.cwd()));
+  const recorded = existsSync(transcriptDir)
+    ? readdirSync(transcriptDir).filter((f) => f.endsWith('.jsonl'))
+    : [];
+  const skip = recorded.length === 0 && `no transcript files under ${transcriptDir}`;
 
-  before(() => {
-    if (!available) return;
-    // This repo's own sessions -- guaranteed to exist and to be rich.
-    sessions = measureProject(homedir(), process.cwd()).slice(0, 5);
+  const sessions = measureProject(homedir(), process.cwd()).slice(0, 5);
+
+  test('found real sessions to check', { skip }, () => {
+    assert.ok(
+      sessions.length > 0,
+      `${recorded.length} transcript files on disk, but measureProject measured none`,
+    );
   });
 
-  test('found real sessions to check', { skip: !available && 'no transcripts' }, () => {
-    assert.ok(sessions.length > 0, 'no sessions measured for this project');
-  });
-
-  test('attribution partitions exactly on real data', { skip: !available && 'no transcripts' }, () => {
+  test('attribution partitions exactly on real data', { skip }, () => {
     for (const m of sessions) {
       const deferred = block(m, 'deferred_tools');
       if (!deferred) continue;
@@ -144,7 +164,7 @@ describe('live transcripts', () => {
     }
   });
 
-  test('measurement is deterministic', { skip: !available && 'no transcripts' }, () => {
+  test('measurement is deterministic', { skip }, () => {
     const first = sessions[0];
     if (!first) return;
     const again = measureTranscript(first.path);
@@ -152,7 +172,7 @@ describe('live transcripts', () => {
     assert.deepEqual(again.servers, first.servers);
   });
 
-  test('every namespace classifies', { skip: !available && 'no transcripts' }, () => {
+  test('every namespace classifies', { skip }, () => {
     for (const m of sessions) {
       for (const s of m.servers) {
         assert.ok(
@@ -161,5 +181,56 @@ describe('live transcripts', () => {
         );
       }
     }
+  });
+});
+
+/**
+ * The property the block above can only check where history happens to exist.
+ *
+ * "Transcript files on disk are found by `measureProject`" is the whole contract between
+ * `memorySlug` and the reader, and on a machine with no sessions for this path -- CI, a
+ * worktree, a fresh clone -- the live block skips and asserts nothing about it. Built
+ * here instead, so the contract is checked everywhere rather than only where the last
+ * few weeks of work happened to leave data.
+ *
+ * This is also what stops the guard above from drifting back into a tautology. A guard
+ * derived from `sessions.length` would make the live block vacuous, and *this* block is
+ * what would still go red.
+ */
+describe('the slug-to-directory contract', () => {
+  const home = mkdtempSync(join(tmpdir(), 'qm-transcript-'));
+
+  /**
+   * Written out in full rather than built with `memorySlug`.
+   *
+   * Calling `memorySlug` to lay the directory down and then reading it back through
+   * `measureProject` -- which calls `memorySlug` itself -- is the same tautology the
+   * guard above was rewritten to avoid: both sides move together, so the test agrees
+   * with itself whatever the function does. Measured: swapping the separator to `_`
+   * leaves that version of this test green. The literal is the independent half. It is
+   * Claude Code's on-disk layout, not this repo's invention, so pinning it is pinning a
+   * fact rather than restating an implementation.
+   */
+  const PROJECT_PATH = '/Users/testuser/some-project';
+  const RECORDED_SLUG = '-Users-testuser-some-project';
+
+  after(() => rmSync(home, { recursive: true, force: true }));
+
+  test('memorySlug produces the layout Claude Code actually writes', () => {
+    assert.equal(memorySlug(PROJECT_PATH), RECORDED_SLUG);
+  });
+
+  test('a transcript filed under that slug is measured', () => {
+    const dir = join(home, '.claude', 'projects', RECORDED_SLUG);
+    mkdirSync(dir, { recursive: true });
+    copyFileSync(FIXTURE, join(dir, 'session.jsonl'));
+
+    const found = measureProject(home, PROJECT_PATH);
+    assert.equal(found.length, 1, 'a .jsonl under the recorded slug should be measured');
+    assert.ok(found[0]!.totalChars > 0);
+  });
+
+  test('and a path with no directory measures nothing, rather than throwing', () => {
+    assert.deepEqual(measureProject(home, '/Users/testuser/never-opened'), []);
   });
 });
