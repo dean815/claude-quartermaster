@@ -426,7 +426,19 @@ async function serve(ctx: AuditContext, port: number): Promise<void> {
 
   console.log(`\n${BOLD}quartermaster${RESET} ${DIM}· read-only · loopback only${RESET}`);
   console.log(`  ${server.url}`);
-  console.log(`\n${DIM}Ctrl-C to stop.${RESET}`);
+
+  // An absent filter must be reported rather than shown as an empty one: a category
+  // dropdown offering nothing reads as "no plugin is categorised" instead of "the rubric
+  // was not there to consult".
+  const cat = server.categories;
+  console.log(
+    `\n${DIM}${
+      cat.found
+        ? `plugin categories: ${cat.matched}/${cat.total} named by project-optimizer's plugin-matrix.md`
+        : 'plugin categories: plugin-matrix.md not found — the category filter is hidden'
+    }${RESET}`,
+  );
+  console.log(`${DIM}Ctrl-C to stop.${RESET}`);
 
   await new Promise<void>((resolve) => {
     process.once('SIGINT', () => {
