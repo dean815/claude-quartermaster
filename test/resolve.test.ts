@@ -14,6 +14,16 @@ import assert from 'node:assert/strict';
 
 import { resolvePlugin, resolveSkill, resolveMcpServer, allPluginIds } from '../src/resolve.ts';
 import type { SettingsFile, ProjectRecord, Workspace, ClaudeJson } from '../src/surfaces/types.ts';
+import type { PluginInventory } from '../src/inventory.ts';
+
+const inventory = (id: string): PluginInventory => ({
+  id,
+  installPath: `/plugins/${id}`,
+  version: '1',
+  sha: null,
+  installed: [],
+  enumerated: [],
+});
 
 function settings(path: string, body: Partial<SettingsFile> = {}): SettingsFile {
   return { path, rest: {}, ...body };
@@ -47,7 +57,14 @@ function claudeJson(body: Partial<ClaudeJson> = {}): ClaudeJson {
 }
 
 function workspace(userSettings: SettingsFile | null, projects: ProjectRecord[]): Workspace {
-  return { home: '/home', userSettings, userRules: [], claudeJson: claudeJson(), projects };
+  return {
+    home: '/home',
+    userSettings,
+    userRules: [],
+    personalSkills: [],
+    claudeJson: claudeJson(),
+    projects,
+  };
 }
 
 describe('local scope (not covered by the live oracle)', () => {
@@ -193,6 +210,27 @@ describe('enumeration', () => {
       settings: settings('/p/.claude/settings.json', { enabledPlugins: { a: false } }),
       localSettings: settings('/p/.claude/settings.local.json', { enabledPlugins: { c: true } }),
     });
-    assert.deepEqual(allPluginIds(workspace(user, [p])), ['a', 'b', 'c']);
+    assert.deepEqual(allPluginIds(workspace(user, [p]), new Map()), ['a', 'b', 'c']);
+  });
+
+  /**
+   * The defect this mirrors on the skill axis: a plugin no settings file mentions was
+   * no row at all, so an installed-but-never-toggled plugin was invisible to the grid
+   * that exists to show you what you have.
+   */
+  test('an installed plugin no settings file mentions is still a row', () => {
+    const p = project('/p');
+    const inventories = new Map([['ghost@m', inventory('ghost@m')]]);
+    assert.deepEqual(allPluginIds(workspace(null, [p]), inventories), ['ghost@m']);
+
+    const cell = resolvePlugin(workspace(null, [p]), p, 'ghost@m');
+    assert.equal(cell.value, false);
+    assert.equal(cell.origin, 'inherited');
+  });
+
+  test('an id in both settings and the install tree appears once', () => {
+    const user = settings('/home/.claude/settings.json', { enabledPlugins: { 'a@m': true } });
+    const inventories = new Map([['a@m', inventory('a@m')]]);
+    assert.deepEqual(allPluginIds(workspace(user, []), inventories), ['a@m']);
   });
 });

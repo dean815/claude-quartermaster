@@ -149,7 +149,7 @@ function serviceOf(namespace: string): string {
  */
 export function restatedEntries(ctx: AuditContext): Finding[] {
   const out: Finding[] = [];
-  const ids = allPluginIds(ctx.ws);
+  const ids = allPluginIds(ctx.ws, ctx.inventories);
 
   for (const project of ctx.ws.projects) {
     if (!project.alive) continue;
@@ -222,7 +222,7 @@ export function invertedDefaults(ctx: AuditContext): Finding[] {
   if (configured.length < MIN_SAMPLES) return [];
 
   const out: Finding[] = [];
-  for (const id of allPluginIds(ctx.ws)) {
+  for (const id of allPluginIds(ctx.ws, ctx.inventories)) {
     const cells = configured.map((p) => resolvePlugin(ctx.ws, p, id));
     const overrides = cells.filter((c) => c.origin === 'overridden');
     if (overrides.length / configured.length < 0.6) continue;
@@ -264,7 +264,7 @@ export function costWithoutUse(ctx: AuditContext): Finding[] {
   const unused: Array<{ id: string; tokens: number; components: string; projects: number }> = [];
   const live = ctx.ws.projects.filter((p) => p.alive);
 
-  for (const id of allPluginIds(ctx.ws)) {
+  for (const id of allPluginIds(ctx.ws, ctx.inventories)) {
     // A disabled plugin costs nothing, so "unused and expensive" does not apply to it.
     // Without this the report lists globally-disabled plugins as if they were a bill.
     const enabledIn = live.filter((p) => resolvePlugin(ctx.ws, p, id).value).length;

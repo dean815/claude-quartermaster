@@ -19,6 +19,7 @@ import type {
   MemoryIndex,
   ProjectEntry,
   McpServerSpec,
+  PersonalSkill,
 } from './types.ts';
 import type { SkillValue } from '../model.ts';
 
@@ -133,6 +134,40 @@ export function readRulesDir(dir: string): RuleFile[] {
   }
 }
 
+/**
+ * Skills installed for the user, one directory each.
+ *
+ * `statSync` rather than the dirent's own `isDirectory()`, and the difference is nine
+ * skills. Cyrus installs its set as symlinks into `~/.agents/skills/`; a dirent reports
+ * those as symlinks and not directories, so trusting it drops them and reports 79 where
+ * 88 load. `statSync` follows the link, which is what Claude Code does when it reads
+ * the directory.
+ *
+ * A directory without a `SKILL.md` is not a skill -- `context-audit-workspace` is a
+ * scratch directory that lives among them.
+ */
+export function readPersonalSkills(home: string): PersonalSkill[] {
+  const dir = join(home, '.claude', 'skills');
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return [];
+  }
+
+  const out: PersonalSkill[] = [];
+  for (const id of names) {
+    const path = join(dir, id, 'SKILL.md');
+    try {
+      if (!statSync(join(dir, id)).isDirectory() || !existsSync(path)) continue;
+    } catch {
+      continue; // A broken symlink names nothing that loads.
+    }
+    out.push({ id, path });
+  }
+  return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
 /** Auto-memory lives under a slug of the project's absolute path. */
 export function memorySlug(projectPath: string): string {
   return projectPath.replaceAll('/', '-');
@@ -197,6 +232,7 @@ export function loadWorkspace(opts: LoadOptions = {}): Workspace {
     opts.userSettingsPath ?? join(home, '.claude', 'settings.json'),
   );
   const userRules = readRulesDir(join(home, '.claude', 'rules'));
+  const personalSkills = readPersonalSkills(home);
 
   const projects: ProjectRecord[] = [];
   for (const [recordedPath, entry] of Object.entries(claudeJson.projects)) {
@@ -250,7 +286,7 @@ export function loadWorkspace(opts: LoadOptions = {}): Workspace {
     });
   }
 
-  return { home, userSettings, userRules, claudeJson, projects };
+  return { home, userSettings, userRules, personalSkills, claudeJson, projects };
 }
 
 function deadProject(path: string, entry: ProjectEntry): ProjectRecord {

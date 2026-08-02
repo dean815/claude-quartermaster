@@ -91,6 +91,7 @@ function ctx(
       home: '/home',
       userSettings: null,
       userRules: [],
+      personalSkills: [],
       claudeJson: claudeJson(),
       projects: [],
       ...ws,

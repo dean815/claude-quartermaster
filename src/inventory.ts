@@ -28,6 +28,15 @@ export interface SourceEnumeration {
   /** The file it came from, named so a reader can go and check it. */
   source: string;
   names: string[];
+  /**
+   * The subset the source lists under `skills`.
+   *
+   * `names` flattens the three component kinds because the mismatch check does not
+   * care which is which. Enumerating the skill axis does care, and the catalog is the
+   * only source that records the kind at all -- an install tree holds a `SKILL.md`
+   * for a real skill and for a plugin's own repo tooling alike.
+   */
+  skillNames: string[];
   /** The build the source describes. Differs from the installed sha when stale. */
   sha: string | null;
   version: string | null;
@@ -148,12 +157,16 @@ export function catalogEnumerations(raw: unknown, source: string): Map<string, S
     if (!e || typeof e !== 'object') continue;
 
     const names: string[] = [];
+    const skillNames: string[] = [];
     for (const kind of ['skills', 'commands', 'agents'] as const) {
       const list = e.components?.[kind];
       if (!Array.isArray(list)) continue;
       for (const item of list) {
         const name = typeof item === 'string' ? item : (item as { name?: unknown })?.name;
-        if (typeof name === 'string' && name) names.push(name);
+        if (typeof name === 'string' && name) {
+          names.push(name);
+          if (kind === 'skills') skillNames.push(name);
+        }
       }
     }
     if (!names.length) continue;
@@ -161,6 +174,7 @@ export function catalogEnumerations(raw: unknown, source: string): Map<string, S
     out.set(id, {
       source,
       names,
+      skillNames,
       sha: typeof e.sha === 'string' ? e.sha : null,
       version: typeof e.version === 'string' ? e.version : null,
       fetchedAt,

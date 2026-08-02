@@ -12,12 +12,14 @@ function session(
   const chars = servers.reduce((n, s) => n + s.chars, 0);
   return {
     path: `/p/${id}.jsonl`,
+    project: null,
     sessionId: id,
     modifiedAt: 0,
     blocks: [{ kind: 'deferred_tools', chars, items: servers.reduce((n, s) => n + s.tools, 0) }],
     servers: servers.map((s) => ({ uuidOverhead: 0, ...s })),
     needsAuth,
     pending: [],
+    skills: null,
     totalChars: chars,
   };
 }

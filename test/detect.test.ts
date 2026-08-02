@@ -64,6 +64,7 @@ function ctx(body: Partial<Workspace> = {}, extra: Partial<AuditContext> = {}): 
       home: '/home',
       userSettings: null,
       userRules: [],
+      personalSkills: [],
       claudeJson: claudeJson(),
       projects: [],
       ...body,
@@ -85,12 +86,14 @@ const server = (s: Partial<ServerCost> & { server: string }): ServerCost => ({
 
 const measurement = (servers: ServerCost[]): TranscriptMeasurement => ({
   path: '/p/s.jsonl',
+  project: null,
   sessionId: 's',
   modifiedAt: 0,
   blocks: [{ kind: 'deferred_tools', chars: 0, items: 0 }],
   servers,
   needsAuth: [],
   pending: [],
+  skills: null,
   totalChars: 0,
 });
 
