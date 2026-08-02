@@ -38,6 +38,7 @@ const settings = (path: string, body: Partial<SettingsFile> = {}): SettingsFile 
 const project = (path: string, body: Partial<ProjectRecord> = {}): ProjectRecord => ({
   path,
   alive: true,
+  registered: true,
   settings: null,
   localSettings: null,
   mcpJson: null,

@@ -6,13 +6,13 @@
   "author": "Dean Hicks",
   "type": "module",
   "bin": {
-    "qm": "./dist/cli.js"
+    "qm": "./dist/src/cli.js"
   },
   "engines": {
     "node": ">=22.6"
   },
   "files": [
-    "dist"
+    "dist/src"
   ],
   "scripts": {
     "test": "node --experimental-strip-types --test 'test/**/*.test.ts'",

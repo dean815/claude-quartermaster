@@ -59,4 +59,4 @@ jobs:
       # The CLI is the deliverable, and nothing in the suite imports it -- a broken
       # import or a top-level throw would ship green without this.
       - name: CLI smoke test
-        run: node dist/cli.js help
+        run: node dist/src/cli.js help
