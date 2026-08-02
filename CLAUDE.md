@@ -57,6 +57,29 @@ plugin whose `Hooks` count is **0**; an absent Hooks key means "couldn't tell", 
 property. Across 469 sessions the MCP tool-name block ran 192 → 34,369 chars
 (median 1,050). Always carry the sample count.
 
+**A gate that cannot fail is not a gate.** Before trusting a green check, break the code
+underneath it and confirm the suite goes red. Ship the mutation as a test, asserting both
+*that* it fails and that the message names the right divergence — a gate failing for
+another reason is not the gate working. Three caught so far, none visible by reading the
+test:
+
+- The differential suite skipped as a whole unit for weeks while CI stayed green (DEA-127).
+- A guard derived from its own assertion — `skip = sessions.length === 0` against
+  `assert(sessions.length > 0)` — runs only where it must pass and skips wherever it could
+  fail (DEA-133). `measureProject` swallows read errors, so the regression it was there to
+  catch turned the suite green.
+- Reading a value back through the function that wrote it is that same defect one level
+  removed. Laying a fixture down at `memorySlug(p)` and reading it via `measureProject`,
+  which calls `memorySlug` itself, agrees with itself whatever the function does —
+  measured: swapping the separator left it green. Pin the other half as a **literal**, and
+  prefer a literal that is someone else's fact (Claude Code's on-disk layout) over one
+  restating our own implementation.
+
+Corollary for briefs: judge the stated acceptance criterion separately from the work, and
+ask whether an implementation could satisfy it exactly and leave the problem in place.
+DEA-128 passed its own gate — "add the sha to the cache key" — while the sha resolved for
+only 18 of 42 plugins (DEA-131).
+
 ## Gotchas
 
 - **`~` is registered as a project, and it breaks things in two different layers.**
