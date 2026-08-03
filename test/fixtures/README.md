@@ -4,6 +4,8 @@
 |---|---|---|
 | `plugin-details/` | yes | `cost-plugins.test.ts` — real `claude plugin details` output, captured verbatim |
 | `transcripts/synthetic.jsonl` | yes | `cost-transcript.test.ts` — hand-built, pins the arithmetic |
+| `transcripts/hidden-connector.jsonl` | yes | `detect.test.ts` — a connector `/mcp` hid publishes no tool names, so the transcript holds one namespace where config names two. Its names are chosen to *collapse* (`claude.ai Robinhood` and `robinhood-trading` are both `robinhood`), so only the hiding keeps the finding away |
+| `transcripts/duplicate-launch-urls.jsonl` | yes | `detect.test.ts` — two namespaces at one URL, and two whose names collapse but whose URLs disagree |
 | `differential/` | yes | the differential gate, replayed in CI — project *and* server names are synthetic, see its own README |
 | `local-snapshot/` | **no** | nothing, currently — see below |
 
