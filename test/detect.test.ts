@@ -6,6 +6,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   duplicateAccessPaths,
@@ -21,9 +22,10 @@ import {
   runAll,
   rank,
   type AuditContext,
+  type Finding,
 } from '../src/detect.ts';
 import { loadWorkspace } from '../src/surfaces/read.ts';
-import { measureProject } from '../src/cost/transcript.ts';
+import { measureProject, measureTranscript } from '../src/cost/transcript.ts';
 import { readInventories } from '../src/inventory.ts';
 import type { ProjectRecord, SettingsFile, Workspace, ClaudeJson } from '../src/surfaces/types.ts';
 import type { TranscriptMeasurement, ServerCost } from '../src/cost/transcript.ts';
@@ -584,6 +586,257 @@ describe('missing hook inventory is treated conservatively', () => {
       mcpUncounted: false,
     };
     assert.deepEqual(costWithoutUse(ctx(ws, { pluginCosts: new Map([['a@m', noHookKey]]) })), []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// duplicate-access-paths: the gate, and the mutations it is measured by (DEA-142)
+// ---------------------------------------------------------------------------
+
+const TRANSCRIPTS = join(import.meta.dirname, 'fixtures', 'transcripts');
+
+/**
+ * Two recorded sessions, and the configuration that produced them.
+ *
+ * Measured through `measureTranscript` rather than hand-built `ServerCost`s, because
+ * the property under test is *what reached the transcript*. A hand-built measurement
+ * would let the test decide that, which is the same defect as reading a value back
+ * through the function that wrote it.
+ *
+ * The config deliberately names more than the sessions do: `claude.ai Robinhood` is in
+ * `claudeAiMcpEverConnected` and `robinhood-trading` has a launch spec, so a detector
+ * reading config pairs them. `/mcp` hid the connector, it published no tool name, and
+ * the session records one namespace. The two names collapse to `robinhood` under
+ * `serviceOf`, so nothing but the hiding keeps that finding away.
+ */
+function scenario() {
+  return {
+    ws: {
+      claudeJson: claudeJson({
+        mcpServers: {
+          'robinhood-trading': { type: 'http', url: 'https://agent.robinhood.test/mcp/trading' },
+          'linear-server': { type: 'http', url: 'https://mcp.linear.test/mcp' },
+          n8n: { type: 'http', url: 'https://self-hosted.n8n.test/mcp-server/http' },
+        },
+        claudeAiMcpEverConnected: ['claude.ai Robinhood'],
+      }),
+      // The project half of the URL source. `linear` repeats the user server's endpoint
+      // exactly; `n8n-mcp` collapses onto `n8n` by name while pointing somewhere else.
+      projects: [
+        project('/p', {
+          mcpJson: {
+            path: '/p/.mcp.json',
+            mcpServers: {
+              linear: { type: 'http', url: 'https://mcp.linear.test/mcp' },
+              'n8n-mcp': { type: 'http', url: 'https://cloud.n8n.test/mcp' },
+            },
+          },
+        }),
+      ],
+    } satisfies Partial<Workspace>,
+    measurements: [
+      measureTranscript(join(TRANSCRIPTS, 'hidden-connector.jsonl')),
+      measureTranscript(join(TRANSCRIPTS, 'duplicate-launch-urls.jsonl')),
+    ],
+  };
+}
+
+type Scenario = ReturnType<typeof scenario>;
+
+const findingsOf = (s: Scenario): Finding[] =>
+  duplicateAccessPaths(ctx(s.ws, { measurements: s.measurements }));
+
+/** The namespace lines only — the URL-disagreement line is evidence, not a namespace. */
+function namespacesOf(f: Finding): string[] {
+  return f.evidence.filter((e) => / — \d+ tools,/.test(e)).map((e) => e.split(' — ')[0]!);
+}
+
+const describeFinding = (f: Finding): string =>
+  `${f.key} | ${f.basis} | ${[...namespacesOf(f)].sort().join(', ')}`;
+
+/**
+ * What that workspace's findings are, written out.
+ *
+ * A literal, and the whole gate: key, basis, and the namespaces the finding is about.
+ * Every mutation below is measured against this rather than against a second run of
+ * the detector, which would agree with itself whatever the detector does.
+ *
+ * `robinhood` is absent, and that absence is the point of the first fixture.
+ */
+const EXPECTED_FINDINGS = [
+  'duplicate-access-paths figma | name | plugin_design_figma, plugin_product-management_figma',
+  'duplicate-access-paths linear | url | linear, linear-server',
+  'duplicate-access-paths n8n | name | n8n, n8n-mcp',
+];
+
+/** Every finding the expectation and the detector disagree about, named. */
+function diff(actual: readonly Finding[]): string[] {
+  const out: string[] = [];
+  const got = new Map(actual.map((f) => [f.key!, describeFinding(f)]));
+  const want = new Map(EXPECTED_FINDINGS.map((line) => [line.split(' | ')[0]!, line]));
+
+  for (const [key, line] of want) {
+    const seen = got.get(key);
+    if (!seen) {
+      out.push(`missing finding ${key}`);
+      continue;
+    }
+    if (seen === line) continue;
+    const [, wantBasis, wantNs] = line.split(' | ');
+    const [, gotBasis, gotNs] = seen.split(' | ');
+    out.push(
+      wantBasis !== gotBasis
+        ? `basis changed for ${key}: ${wantBasis} -> ${gotBasis}`
+        : `namespaces changed for ${key}: ${wantNs} -> ${gotNs}`,
+    );
+  }
+  for (const key of got.keys()) if (!want.has(key)) out.push(`extra finding ${key}`);
+  return out;
+}
+
+describe('duplicate-access-paths reports what loaded, and says how it matched', () => {
+  test('the findings are exactly what the sessions support', () => {
+    assert.deepEqual(diff(findingsOf(scenario())), []);
+  });
+
+  /**
+   * The degradation, pinned as a stated property. It has been true by construction
+   * since the detector was written -- a hidden namespace publishes nothing, so there is
+   * no second path to find -- and nothing asserted it, which makes it an accident.
+   */
+  test('a connector /mcp hid produces no finding, though config names both paths', () => {
+    const s = scenario();
+    const found = findingsOf(s).map((f) => f.key);
+    assert.equal(found.includes('duplicate-access-paths robinhood'), false);
+    // …and the config really does name both, so the silence is about the transcript.
+    assert.ok(s.ws.claudeJson.claudeAiMcpEverConnected.includes('claude.ai Robinhood'));
+    assert.ok('robinhood-trading' in s.ws.claudeJson.mcpServers);
+  });
+
+  test('one service vendored by two plugins produces exactly one finding', () => {
+    const figma = findingsOf(scenario()).filter((f) => f.key === 'duplicate-access-paths figma');
+    assert.equal(figma.length, 1);
+    assert.equal(figma[0]!.basis, 'name');
+    assert.match(figma[0]!.detail, /inferred/);
+  });
+
+  test('a shared launch URL is reported as exact, and the URL is shown', () => {
+    const linear = findingsOf(scenario()).find((f) => f.key === 'duplicate-access-paths linear')!;
+    assert.equal(linear.basis, 'url');
+    assert.match(linear.detail, /which is exact/);
+    assert.match(linear.detail, /https:\/\/mcp\.linear\.test\/mcp/);
+  });
+
+  /**
+   * Asymmetric on purpose. A URL match proves one access path; a mismatch proves
+   * nothing, because one service can sit behind two endpoints. So it annotates and
+   * never suppresses.
+   */
+  test('launch URLs that disagree stay inferred and say they disagree', () => {
+    const n8n = findingsOf(scenario()).find((f) => f.key === 'duplicate-access-paths n8n')!;
+    assert.equal(n8n.basis, 'name');
+    assert.ok(n8n.evidence.some((e) => /launch URLs disagree/.test(e)), n8n.evidence.join(' / '));
+  });
+
+  test('the fix borrows the first-party command only where it reaches', () => {
+    const f = findingsOf(scenario());
+    const linear = f.find((x) => x.key === 'duplicate-access-paths linear')!;
+    assert.match(linear.fix!, /^claude mcp remove linear-server/);
+
+    // Nothing in the figma group is a user-scope server, so `claude mcp remove` is not
+    // the command to print at it.
+    const figma = f.find((x) => x.key === 'duplicate-access-paths figma')!;
+    assert.doesNotMatch(figma.fix!, /^claude mcp remove/);
+  });
+});
+
+interface Mutation {
+  name: string;
+  /** The finding set a detector carrying this defect would return. */
+  run: (s: Scenario) => Finding[];
+  /** What the divergence must say, so a gate failing for another reason shows. */
+  names: RegExp;
+}
+
+const MUTATIONS: Mutation[] = [
+  {
+    /**
+     * The redundancy claim, made falsifiable. First-party's `/mcp` compares connectors
+     * against user servers, so a detector that deferred to it entirely would drop every
+     * plugin-vs-plugin pair -- six of the eleven findings on the machine DEA-142 was
+     * measured on, and the reason the detector was kept.
+     */
+    name: 'defer to first-party and stop reporting plugin-vs-plugin pairs',
+    run: (s) => findingsOf(s).filter((f) => !namespacesOf(f).every((n) => n.startsWith('plugin_'))),
+    names: /^missing finding duplicate-access-paths figma$/,
+  },
+  {
+    /**
+     * Reading configuration instead of transcripts, expressed as the input such a
+     * detector would build: `claudeAiMcpEverConnected` names the connector, `mcpServers`
+     * names the user server, and a config-driven pass pairs them without ever asking
+     * whether either published a tool name. Mutating the measurement rather than the
+     * source is the move `mcp.test.ts` makes with "count servers from disabled plugins
+     * too" -- construct the output the broken implementation would produce, and require
+     * the gate to reject it.
+     */
+    name: 'pair the hidden connector from config, as a config-reading detector would',
+    run: (s) => {
+      const session = s.measurements.find((m) =>
+        m.servers.some((x) => x.server === 'robinhood-trading'),
+      )!;
+      session.servers.push(
+        server({ server: 'claude_ai_Robinhood', kind: 'connector', tools: 40, chars: 1600 }),
+      );
+      return findingsOf(s);
+    },
+    names: /^extra finding duplicate-access-paths robinhood$/,
+  },
+  {
+    /**
+     * Confidence inflation, which is the failure `basis` exists to prevent. A detector
+     * that called every match exact would read identically in the report and be wrong
+     * about two findings in three here.
+     */
+    name: 'call every match exact',
+    run: (s) => findingsOf(s).map((f) => ({ ...f, basis: 'url' as const })),
+    names: /^basis changed for duplicate-access-paths (figma|n8n): name -> url$/,
+  },
+  {
+    /**
+     * The other half of the URL source. If `urlIndex` read only `~/.claude.json`, the
+     * `linear` pair would have one URL between them and the exact match would quietly
+     * become an inferred one -- an under-claim, which no report ever complains about.
+     */
+    name: 'read only the user-scope half of the URL source',
+    run: (s) => {
+      s.ws.projects[0]!.mcpJson = null;
+      return findingsOf(s);
+    },
+    names: /^basis changed for duplicate-access-paths linear: url -> name$/,
+  },
+];
+
+describe('the gate fails when the duplicate detector is wrong', () => {
+  for (const mutation of MUTATIONS) {
+    test(mutation.name, () => {
+      const failures = diff(mutation.run(scenario()));
+      assert.ok(
+        failures.length > 0,
+        `mutation "${mutation.name}" did not fail the gate -- that is a hole in the gate, ` +
+          'not a mutation to delete',
+      );
+      assert.ok(
+        failures.some((f) => mutation.names.test(f)),
+        `the gate failed, but for the wrong reason: ${failures.join('; ')}`,
+      );
+      console.log(`    caught "${mutation.name}" (${failures.length}): ${failures[0]}`);
+    });
+  }
+
+  /** The positive control the four above are measured against. */
+  test('and passes when nothing is wrong', () => {
+    assert.deepEqual(diff(findingsOf(scenario())), []);
   });
 });
 

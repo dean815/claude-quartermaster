@@ -66,6 +66,32 @@ The day it fails: it watches one path, so a first-party command that starts
 initialising some *other* file goes unreported, and nothing here says what the
 subprocess put inside.
 
+**First-party hides duplicate access paths now, and the detector still earns its keep
+(DEA-142).** Claude Code v2.1.220's `/mcp` panel matches a claude.ai connector against a
+user server *by URL*, hides the loser, and prints `claude mcp remove <server>`. Prefer
+first-party where it exists — so the question is whether `duplicateAccessPaths` is
+redundant, and it is not. Measured against the same machine: 11 duplicates the panel did
+not hide, **6** of them with no user server or connector in them at all (one service
+vendored by two plugin bundles, which the panel does not compare) and **8** containing a
+plugin-vs-plugin pair. The sharpest is `linear` — 4 namespaces, +1,382 chars, spanning a
+connector, a user server *and* two plugins; a connector-vs-user-server URL check catches
+one edge of that. The two also read different things: the panel reads configuration, this
+reads transcripts, so a connector the panel hid produces **nothing** here — it published
+no tool name, so there is no second path to find. That degradation is now a fixture
+(`test/fixtures/transcripts/hidden-connector.jsonl`) rather than a happy accident, with
+names chosen to collapse so only the hiding keeps the finding away. Where two namespaces
+both carry a launch URL the finding says `basis: url` and is exact; otherwise `name`, and
+it says the match is inferred. Both are printed, because folding the difference into
+`severity` is how a guess starts reading like a measurement. A URL *mismatch* is
+asymmetric and never suppresses — `amplitude` and `amplitude-eu` are one service behind
+two endpoints — so it annotates and stops. The day it fails: the URL index reads
+`~/.claude.json` and project `.mcp.json` and nothing else, so a connector (declared in
+claude.ai) and a plugin's own `.mcp.json` (under its install path, unread) are both
+absent, and all 11 findings today rest on the name match. `serviceOf` strips
+`-trading|-server|-mcp`, which would merge two genuinely different services named apart
+only by that suffix; checked across the 145 live namespaces, both collapses it causes are
+correct, so no such case exists here yet.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32
