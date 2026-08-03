@@ -10,11 +10,13 @@ home/                       the fixture HOME; point loadWorkspace at it
   .claude/settings.json     user scope, and also `~`-the-project's project scope
   .claude/settings.local.json
   .claude/skills/skill-NN/  one constructed personal skill, scoped by nothing
-  .claude.json              project entries, keyed by anonymised path
+  .claude/plugins/*.json    constructed installed_plugins + plugin-catalog-cache
+  .claude.json              project entries and connectors, keyed by anonymised path
   .mcp.json
   proj-NN/…                 captured project directories
   probe-local-*/…           constructed input, observed expectation — see Provenance
   probe-skill-chain/…       constructed input, resolver-checked expectation — ditto
+  probe-mcp-scope/…         the same, on the MCP axis — ditto
 oracle.json                 { <fixture path>: [{ id, enabled }] }
 manifest.json               coverage counts; assert against these, not against prose
 load.ts                     how to point loadWorkspace at all of the above
@@ -41,6 +43,13 @@ Two things will bite a consumer that skips `load.ts` and calls
   `p.alive`, never on `existsSync(p.path)` — `p.alive` already carries the resolved
   answer, and `existsSync` on `/Users/testuser/proj-01` is always false.
 
+A third will bite one that reads the MCP axis: **`buildMcpCatalog` needs inventories.**
+Two of the four sources it reads come from `loadWorkspace` — `~/.claude.json`'s
+`mcpServers` and `claudeAiMcpEverConnected` — and one does not: an enabled plugin's catalog
+entry arrives through `readInventories(FIXTURE_HOME)`. Passing an empty map does not fail.
+It returns a shorter axis that agrees with itself, which is how those rows went unchecked
+until DEA-144.
+
 There are no worktree entries to filter: the generator drops them, because the live
 gate drops them too.
 
@@ -55,11 +64,12 @@ It reads this machine's config, runs the CLI once per live project, and rewrites
 generated files — the fixture's value is that it is a capture, and a hand-tuned one
 drifts from the machine it claims to describe.
 
-The skills half is written from literals in the generator rather than read off a machine,
-so it regenerates byte-identically anywhere, on a machine with no skills at all. That
-makes it the one part a reader might be tempted to edit in place; don't. A fixture the
-generator would not reproduce is a fixture nobody can regenerate, and the literals are
-where the four values and the three-scope chain are chosen.
+The skills and MCP halves are written from literals in the generator rather than read off
+a machine, so they regenerate byte-identically anywhere — on a machine with no skills, no
+connectors and no plugins at all. That makes them the parts a reader might be tempted to
+edit in place; don't. A fixture the generator would not reproduce is a fixture nobody can
+regenerate, and the literals are where the four skill values, the three-scope chain, the
+connector set and the catalogued plugins are chosen.
 
 ## Why this one is committed when `local-snapshot/` is not
 
@@ -91,6 +101,16 @@ directory reaches this tree; the ids here are `skill-NN`, written by the generat
 they are merged into the settings files *after* redaction rather than passed through it.
 Widening the allowlist must never become the way a skill reaches the fixture.
 
+**`claudeAiMcpEverConnected` and `~/.claude/plugins/` go the same way (DEA-144).** A
+connector name is what someone uses, and `installed_plugins.json` carries an absolute
+`installPath` per plugin. So the connectors here are `claude.ai conn-NN` and the catalog is
+three plugins, both written by the generator and both merged in after redaction. Renaming
+the captured connector list through the `srv-NN` map was the alternative, and it is turned
+down for a mechanical reason rather than a privacy one — the two redact equally, but
+`srv-NN` is assigned by sorting the *captured* names, so 32 connectors joining that set
+renumbers every server in the tree and the fixture could then only be extended by
+recapturing the whole machine.
+
 ## What it captures
 
 Counts live in `manifest.json`, written by the same run that writes the tree, so they
@@ -98,7 +118,10 @@ cannot disagree with it. Restating them here would create a second number to upd
 and a first one to forget.
 
 `manifest.json` carries `projectEntries`, `oracleProjects`, `pairs`, `plugins`,
-`probeProjects`, `skillProbeProjects`, `skillIds`, and `decidedByScope`. **`decidedByScope` counts the scope that *won*
+`probeProjects`, `skillProbeProjects`, `skillIds`, `mcpProbeProjects`, `mcpConnectors`,
+`mcpCatalogServers`, and `decidedByScope`. The last three are *input* — what the generator
+laid down — so the gate compares them against what was served rather than against a second
+reading of the axis. **`decidedByScope` counts the scope that *won*
 each pair** — `chain.at(-1)` — which is deliberately stricter than "a file at this
 scope had an opinion". A pair where project scope is overruled by local is not
 protecting project scope from anything, and counting it as though it were is how a
@@ -151,6 +174,35 @@ directions, as `probe-local-*` makes it do for plugins. Plugins and MCP servers 
 two-valued, so before this the axis `Cell<V>` was designed for was the one axis nothing
 end-to-end touched: an A–F enum can express those two and cannot express this one.
 
+**Every source that can name an MCP server.** The axis has four (see `src/mcp.ts`), and
+until DEA-144 this fixture reached two of them. `~/.claude.json` declares six servers and
+`home/.mcp.json` declares one, as before. `claudeAiMcpEverConnected` now names six
+connectors that no other file mentions — `claude.ai conn-01` through `conn-06` — and
+`home/.claude/plugins/plugin-catalog-cache.json` gives `airtable` and
+`chrome-devtools-mcp` a server each. Both of those plugins resolve enabled somewhere;
+`context7` also declares one and is enabled nowhere, so `plugin:context7:context7` is
+deliberately **no row at all**. That absence is the only half an axis that enumerated the
+catalog without consulting `resolvePlugin` would get wrong while looking right.
+
+`chrome-devtools-mcp` carries a server and nothing else, which is the shape
+`if (!names.length) continue` used to drop — 21 catalogued plugins have it. `airtable`
+carries a command as well, so the other half of that guard is exercised too. And
+`chrome-devtools-mcp`'s server name differs from its plugin name, which is the part of
+`plugin:chrome-devtools-mcp:chrome-devtools` a reader cannot check by eye.
+
+The two enabled plugins are enabled differently, which is the point of using two.
+`airtable` is on at user scope and so resolves enabled in 23 columns; `chrome-devtools-mcp`
+is off at user scope and switched on by exactly one file — `probe-local-enable`'s
+`settings.local.json`. Its row therefore exists only because `buildMcpCatalog` asks every
+live project and takes the whole precedence chain.
+
+**A connector and a plugin server that a file decides about.** `probe-mcp-scope` denies
+`claude.ai conn-05` and `plugin:airtable:airtable` and allows `claude.ai conn-06`. Without
+it every row from the two new sources would be columns of `false`/`inherited` — counted,
+never resolved — and `plugin:airtable:airtable` would not be joined against a deny-list
+entry at all, which is the case where a key built from the full `name@marketplace` id
+silently doubles the row instead of matching.
+
 **A skill nobody scoped.** `home/.claude/skills/skill-06/` is on disk and named by no
 settings file. It is a row anyway, which is the property DEA-134 added: deriving the
 axis from `skillOverrides` made the grid circular, since a skill appeared only once
@@ -189,9 +241,12 @@ Which leaves the surface where there is no oracle to let answer.
 
 **Constructed input, resolver-checked expectation** — `probe-skill-chain`, the
 `skillOverrides` blocks, and `home/.claude/skills/skill-06/`, listed in `manifest.json`
-as `skillProbeProjects` and `skillIds`. The configuration was written by the generator,
-as above and for a stronger reason: the allowlist drops every captured `skillOverrides`,
-so a captured one could not reach this tree even where one exists.
+as `skillProbeProjects` and `skillIds`; and, on the MCP axis, `probe-mcp-scope`,
+`claudeAiMcpEverConnected` and `home/.claude/plugins/`, listed as `mcpProbeProjects`,
+`mcpConnectors` and `mcpCatalogServers`. The configuration was written by the generator,
+as above and for a stronger reason: the allowlist drops every captured `skillOverrides`
+and every captured connector, so a captured one could not reach this tree even where one
+exists.
 
 The expectation is what differs, and it differs because no oracle exists to ask.
 `claude plugin list --json` answers about plugins; nothing first-party reports a resolved
@@ -209,7 +264,14 @@ check it, and writing down what the four scopes *ought* to resolve to would be a
 an expectation — the one thing the rule above forbids, and worth less than admitting the
 gap. `resolve.test.ts` owns that claim, against the model's own algebra.
 
-The plugin probe runs — the skill probe has none — are side-effect free, and the
+`probe-mcp-scope` is not asked either, and for a weaker reason than the skill probe's,
+which is worth being exact about. Nothing first-party reports a resolved deny-list, so the
+surface it exists for has no oracle. But it sets no `enabledPlugins`, so `claude plugin
+list --json` *could* have been run in it and would have restated the user scope for all 42
+ids — a column of answers that says nothing, at the cost of one more CLI spawn. It is left
+unasked because there is nothing there to learn, not because nothing could answer.
+
+The plugin probe runs — the skill and MCP probes have none — are side-effect free, and the
 generator checks rather than assumes it: it compares the set of project keys in
 `~/.claude.json` before and after, and refuses to write a fixture if probing registered a
 new entry. It compares the key set rather than hashing the file because every live
@@ -217,6 +279,12 @@ session writes telemetry into it continuously — `pluginUsage` moves within sec
 doing nothing, so a byte comparison would cry wolf on every run.
 
 ### Not represented
+
+The `installed` half of `inventory.ts` is absent on purpose. `installed_plugins.json` here
+records an `installPath` under `/Users/testuser` that exists nowhere, so `componentNames`
+answers `null` — "could not tell" — and the source-versus-disk mismatch check has nothing
+to compare. Pointing it inside `home/` would make this fixture claim to cover a second
+thing; it covers the enumeration and not the install tree.
 
 Nothing else is knowingly absent. The three-link chain where user, project *and* local
 all set the same *plugin* is still covered only by the synthetic workspaces in

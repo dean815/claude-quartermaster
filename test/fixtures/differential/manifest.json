@@ -1,5 +1,5 @@
 {
-  "projectEntries": 69,
+  "projectEntries": 70,
   "oracleProjects": 25,
   "pairs": 1050,
   "plugins": 42,
@@ -23,5 +23,30 @@
     "skill-04",
     "skill-05",
     "skill-06"
+  ],
+  "mcpProbeProjects": [
+    "/Users/testuser/probe-mcp-scope"
+  ],
+  "mcpConnectors": [
+    "claude.ai conn-01",
+    "claude.ai conn-02",
+    "claude.ai conn-03",
+    "claude.ai conn-04",
+    "claude.ai conn-05",
+    "claude.ai conn-06"
+  ],
+  "mcpCatalogServers": [
+    {
+      "key": "plugin:airtable:airtable",
+      "enabledSomewhere": true
+    },
+    {
+      "key": "plugin:chrome-devtools-mcp:chrome-devtools",
+      "enabledSomewhere": true
+    },
+    {
+      "key": "plugin:context7:context7",
+      "enabledSomewhere": false
+    }
   ]
 }

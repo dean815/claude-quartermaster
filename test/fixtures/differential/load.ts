@@ -46,6 +46,16 @@ export interface FixtureManifest {
   skillProbeProjects: string[];
   /** The skill ids the constructed half laid down -- input, not resolver output. */
   skillIds: string[];
+  /** The same, on the MCP axis: a live project carrying only a constructed deny/allow list. */
+  mcpProbeProjects: string[];
+  /** `claudeAiMcpEverConnected` as written -- input, not what the axis made of it. */
+  mcpConnectors: string[];
+  /**
+   * The `plugin:X:Y` keys the constructed catalog declares, with whether the plugin is
+   * switched on anywhere in the fixture. Only the enabled ones are rows: a disabled
+   * plugin's server does not load, so the false half is an expected *absence*.
+   */
+  mcpCatalogServers: Array<{ key: string; enabledSomewhere: boolean }>;
 }
 
 /**

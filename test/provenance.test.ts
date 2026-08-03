@@ -30,7 +30,7 @@
  * ## Negative controls
  *
  * A gate that cannot fail is not a gate: the differential suite skipped in its entirety
- * for months while CI stayed green (DEA-127). So six mutations ship with it, applied to
+ * for months while CI stayed green (DEA-127). So eight mutations ship with it, applied to
  * the parsed payload rather than to any source file, each asserted to make the gate fail
  * and to name what diverged. If one of them ever stops failing, that is a hole in the
  * gate to report -- not a mutation to delete.
@@ -47,14 +47,15 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 import type { AuditContext } from '../src/detect.ts';
+import { readInventories } from '../src/inventory.ts';
 import { SKILL_VALUES, type Cell } from '../src/model.ts';
-import { allMcpServerNames, buildMcpCatalog } from '../src/mcp.ts';
+import { allMcpServerNames, buildMcpCatalog, countByPresence, type McpPresence } from '../src/mcp.ts';
 import { allPluginIds, resolveMcpServer, resolvePlugin, resolveSkill } from '../src/resolve.ts';
 import { allSkillIds, buildSkillCatalog } from '../src/skills.ts';
 import type { ProjectRecord, Workspace } from '../src/surfaces/types.ts';
 import { projectId, type ExtensionKind } from '../src/view/model.ts';
 import { startServer, type RunningServer, type StructureResponse, type StructureRow } from '../src/view/server.ts';
-import { loadFixtureWorkspace, readManifest, readOracle } from './fixtures/differential/load.ts';
+import { FIXTURE_HOME, loadFixtureWorkspace, readManifest, readOracle } from './fixtures/differential/load.ts';
 
 // ---------------------------------------------------------------------------
 // What the fixture is expected to contain
@@ -72,20 +73,39 @@ const MANIFEST = readManifest();
  * become five, which is the DEA-127 failure with different numbers. Regenerating the
  * fixture moves these, and moving them is an edit someone has to make on purpose.
  *
- * **DEA-143 widened the MCP axis and did not move either number, which is a gap and not
- * a reassurance.** The axis now also enumerates `claudeAiMcpEverConnected` and the MCP
- * servers of enabled plugins; on the live workspace those took it from 39 rows to 60.
- * The fixture reaches neither: its redaction allowlist drops the connector key -- a
- * connector name identifies what someone uses as surely as a directory name does, which
- * is why every captured server here is `srv-NN` -- and it ships no `plugin-catalog-cache.json`
- * for the gate to read. So 39 is the deny-list-and-declaration set, unchanged, and this
- * gate says nothing about the two sources DEA-143 added. `test/mcp.test.ts` owns that
- * claim, with the source removals shipped as mutations. Putting them here means teaching
- * the generator to rename connectors through the same map as `srv-NN` and capturing a
- * catalog, which is DEA-138-shaped work on a fixture nobody should hand-edit.
+ * **DEA-143 widened the MCP axis and moved neither number, which was a gap and not a
+ * reassurance.** The axis also enumerates `claudeAiMcpEverConnected` and the servers of
+ * enabled plugins; on the live workspace those took it from 39 rows to 60, and this
+ * fixture reached neither -- its redaction allowlist drops the connector key, and it
+ * shipped no `plugin-catalog-cache.json` at all. So 46 of the 60 rows the tool serves were
+ * checked by nothing outside the code that serves them, and a commit adding 21 rows left
+ * `MCP_ROWS = 39` sitting there looking verified. DEA-144 built both sources into the
+ * fixture -- constructed rather than captured, for the reason the skills half is; see the
+ * generator's section 4c -- and 39 became 47 here.
  */
-const MCP_ROWS = 39;
-const CHAIN_LINKS = 1768;
+const MCP_ROWS = 47;
+const CHAIN_LINKS = 1822;
+
+/**
+ * The axis per `McpPresence`. Exact, never a floor, and split rather than totalled.
+ *
+ * A total is what let DEA-143 hide: one number over four sources reads as an off-by-two
+ * while four separate discrepancies cancel, and here it did not move at all for a commit
+ * that added 21 rows. Each presence is a different set of sources -- `available` is a
+ * launch spec, a project's own declaration, or an enabled plugin's catalog entry;
+ * `ever-connected` is `claudeAiMcpEverConnected` and nothing else; `scoped-only` is a name
+ * no source but a deny-list carries -- so losing one source moves one number, and the two
+ * that did not move say which.
+ *
+ * A literal, compared against `countByPresence`. Deriving it from a second call to
+ * `buildMcpCatalog` would put that function on both sides of an equals sign, agreeing with
+ * itself whatever it does (DEA-133).
+ */
+const MCP_CENSUS: Record<McpPresence, number> = {
+  available: 10,
+  'ever-connected': 6,
+  'scoped-only': 31,
+};
 
 /**
  * The skill axis -- four-valued, and so the one axis `Cell<V>` was shaped for.
@@ -114,15 +134,15 @@ const SKILL_ROWS = 6;
  * This says what the fixture's skill half *contains* -- not that the resolver is right
  * about it, which is the previous note's point. Its job is that a fixture quietly losing
  * its overrides, the way a widened redaction rule or a dropped probe directory would lose
- * them, degrades to 156 inherited `on` cells and fails here rather than passing as a grid
+ * them, degrades to 162 inherited `on` cells and fails here rather than passing as a grid
  * that compares a column of defaults against itself.
  */
 const SKILL_CENSUS: Record<string, number> = {
-  'name-only/inherited': 50,
-  'off/inherited': 25,
+  'name-only/inherited': 52,
+  'off/inherited': 26,
   'off/overridden': 1,
   'off/restated': 1,
-  'on/inherited': 76,
+  'on/inherited': 79,
   'on/restated': 1,
   'user-invocable-only/overridden': 2,
 };
@@ -130,13 +150,14 @@ const SKILL_CENSUS: Record<string, number> = {
 /**
  * Columns, and which anchor reaches them.
  *
- * Anchor 3 covers the projects the oracle answered for. The skill probe is a live project
- * it was not asked about -- `claude plugin list --json` reports plugins, and the probe
- * exists for the surface nothing first-party reports -- so it is a column anchors 1 and 2
- * check and anchor 3 does not. Written as the sum rather than as 26 so that relationship
- * is the assertion, and a project appearing in neither set fails.
+ * Anchor 3 covers the projects the oracle answered for. The skill and MCP probes are live
+ * projects it was not asked about -- `claude plugin list --json` reports plugins, and both
+ * probes exist for surfaces nothing first-party reports -- so they are columns anchors 1
+ * and 2 check and anchor 3 does not. Written as the sum rather than as 27 so that
+ * relationship is the assertion, and a project appearing in none of the three sets fails.
  */
-const COLUMNS = MANIFEST.oracleProjects + MANIFEST.skillProbeProjects.length;
+const COLUMNS =
+  MANIFEST.oracleProjects + MANIFEST.skillProbeProjects.length + MANIFEST.mcpProbeProjects.length;
 
 // ---------------------------------------------------------------------------
 // The five display forms
@@ -448,13 +469,20 @@ const ws = loadFixtureWorkspace();
  * `viewFrom` asks for a price per plugin row and this gate is about structure, so the
  * index declines everything -- 42 spawns of `claude plugin details` would make the gate
  * need the CLI it is built not to need.
+ *
+ * `inventories` is the opposite call, and the difference is where the answer comes from.
+ * A price needs a subprocess; an inventory is two files, and DEA-144 put them in the
+ * fixture, so reading them here costs nothing and is the only way the plugin half of the
+ * MCP axis is reachable at all. An empty map was the previous value and it silently
+ * deleted a source: `buildMcpCatalog` enumerates a plugin's servers out of this, so with
+ * nothing in it the served rows and the resolver's rows agreed on a set neither had.
  */
 const ctx: AuditContext = {
   ws,
   measurements: [],
   pluginCosts: { get: () => undefined, entries: () => [], size: 0 },
   scope: null,
-  inventories: new Map(),
+  inventories: readInventories(FIXTURE_HOME),
 };
 
 /**
@@ -576,6 +604,61 @@ describe('the served grid is the resolved model', () => {
     assert.ok(
       cells.some((c) => c.chain.length === 3),
       'no skill cell has user, project and local all setting it',
+    );
+  });
+
+  /**
+   * The MCP axis, source by source.
+   *
+   * `MCP_ROWS` is one number over four sources, and DEA-143 is what that costs: it did not
+   * move for a commit that added 21 rows, because the fixture reached neither of the two
+   * sources those rows came from. So the census is checked per presence, and the two
+   * constructed sources are checked against what the generator laid down -- input against
+   * output, the way `skillIds` is. A count read back through `buildMcpCatalog` would shrink
+   * in step with a lost source and agree with itself (DEA-133).
+   */
+  test('the MCP axis carries every source that names a server', () => {
+    const rows = served.mcpServers.map((r) => r.id);
+    const catalog = MANIFEST.mcpCatalogServers;
+
+    assert.deepEqual(countByPresence(buildMcpCatalog(ws, ctx.inventories)), MCP_CENSUS);
+
+    assert.deepEqual(
+      MANIFEST.mcpConnectors.filter((n) => !rows.includes(n)),
+      [],
+      'a connector the fixture records in claudeAiMcpEverConnected got no row',
+    );
+    assert.deepEqual(
+      catalog.filter((s) => s.enabledSomewhere && !rows.includes(s.key)).map((s) => s.key),
+      [],
+      "an enabled plugin's declared server got no row",
+    );
+
+    // The negative half. A disabled plugin's server never loads, and an axis that
+    // enumerated the catalog without asking `resolvePlugin` gets exactly this wrong while
+    // every other assertion here still passes.
+    assert.deepEqual(
+      catalog.filter((s) => !s.enabledSomewhere && rows.includes(s.key)).map((s) => s.key),
+      [],
+      "a disabled plugin's server reached the axis",
+    );
+    assert.ok(
+      catalog.some((s) => !s.enabledSomewhere),
+      'the constructed catalog lost its disabled plugin, so the check above cannot fail',
+    );
+
+    // And the new rows resolve rather than merely existing. Scoped by nothing they are
+    // columns of `false`/`inherited`, which a resolver deleted outright also produces.
+    const fromNewSources = new Set([...MANIFEST.mcpConnectors, ...catalog.map((s) => s.key)]);
+    const decided = served.mcpServers
+      .filter((r) => fromNewSources.has(r.id))
+      .flatMap((r) => r.cells)
+      .filter((c) => c.chain.length > 0);
+    assert.ok(decided.length > 0, 'no connector or plugin-provided cell is decided by any file');
+    assert.deepEqual(
+      [...new Set(decided.map((c) => c.value))].sort(),
+      [false, true],
+      'the constructed deny/allow lists decide in only one direction',
     );
   });
 
@@ -712,7 +795,7 @@ const MUTATIONS: Mutation[] = [
      * the mutation that shows the four-valued axis is compared on its value rather than
      * on its truthiness -- which is what `Cell<V>` was shaped to make possible.
      *
-     * Diverges on exactly one pair out of 2,262. That it is caught at all is the claim;
+     * Diverges on exactly one pair out of 2,565. That it is caught at all is the claim;
      * the logged count is how anyone would notice it stopping.
      */
     name: 'change one skill cell from name-only to user-invocable-only',
@@ -722,6 +805,37 @@ const MUTATIONS: Mutation[] = [
       cell.value = 'user-invocable-only';
     },
     names: /^skill .*: value served="user-invocable-only" resolver="name-only"$/,
+  },
+  {
+    /**
+     * A lost *row*, which is what a lost source looks like from the payload side.
+     *
+     * Every mutation above corrupts a cell. This one deletes a row, and it deletes a
+     * connector's -- the source this fixture had no reach into until DEA-144, when
+     * deleting every connector row from the payload was a no-op because there were none.
+     * Taken from the manifest rather than by index, so it names a row that exists for one
+     * reason and not whichever row happens to sort first.
+     */
+    name: 'drop the served row for a connector',
+    apply: (view) => {
+      const id = MANIFEST.mcpConnectors[0]!;
+      const at = view.mcpServers.findIndex((r) => r.id === id);
+      if (at === -1) throw new Error(`no served row for the connector ${id}`);
+      view.mcpServers.splice(at, 1);
+    },
+    names: /^mcp rows served \d+, resolver enumerates \d+/,
+  },
+  {
+    /** The other source DEA-144 built in: a row that exists because a plugin is switched on. */
+    name: "drop the served row for an enabled plugin's server",
+    apply: (view) => {
+      const id = MANIFEST.mcpCatalogServers.find((s) => s.enabledSomewhere)?.key;
+      if (!id) throw new Error('the manifest records no enabled catalogued server');
+      const at = view.mcpServers.findIndex((r) => r.id === id);
+      if (at === -1) throw new Error(`no served row for the plugin server ${id}`);
+      view.mcpServers.splice(at, 1);
+    },
+    names: /^mcp rows served \d+, resolver enumerates \d+/,
   },
 ];
 
@@ -742,7 +856,7 @@ describe('the gate fails when the payload is wrong', () => {
         `the gate failed, but for the wrong reason: ${failureMessage(report.failures)}`,
       );
       // The count as well as the message: a mutation that diverges on one pair out of
-      // 2,025 is caught, but only just, and that is worth seeing in the log.
+      // 2,565 is caught, but only just, and that is worth seeing in the log.
       console.log(`    caught "${mutation.name}" (${report.failures.length}): ${report.failures[0]}`);
     });
   }

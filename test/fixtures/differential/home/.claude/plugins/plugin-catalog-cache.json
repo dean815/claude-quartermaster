@@ -1,0 +1,44 @@
+{
+  "fetchedAt": "2026-01-01T00:00:00.000Z",
+  "catalog": {
+    "plugins": {
+      "airtable@claude-plugins-official": {
+        "version": "0.0.1",
+        "components": {
+          "skills": [],
+          "commands": [
+            {
+              "name": "cmd-01"
+            }
+          ],
+          "agents": [],
+          "mcpServers": [
+            "airtable"
+          ]
+        }
+      },
+      "chrome-devtools-mcp@claude-plugins-official": {
+        "version": "0.0.1",
+        "components": {
+          "skills": [],
+          "commands": [],
+          "agents": [],
+          "mcpServers": [
+            "chrome-devtools"
+          ]
+        }
+      },
+      "context7@claude-plugins-official": {
+        "version": "0.0.1",
+        "components": {
+          "skills": [],
+          "commands": [],
+          "agents": [],
+          "mcpServers": [
+            "context7"
+          ]
+        }
+      }
+    }
+  }
+}

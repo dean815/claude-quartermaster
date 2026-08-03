@@ -28,6 +28,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { SkillValue } from '../src/model.ts';
+import type { ProjectEntry } from '../src/surfaces/types.ts';
 
 // The generator measures the fixture it just wrote, so the manifest and the gate can
 // never disagree about how much coverage there is. Importing the fixture's own loader
@@ -115,6 +116,8 @@ interface Captured {
   /** Constructed `skillOverrides` for each project-level scope. See section 4b. */
   skillSettings: Record<string, SkillValue> | null;
   skillLocalSettings: Record<string, SkillValue> | null;
+  /** Constructed `~/.claude.json` entry, merged after redaction. See section 4c. */
+  mcpEntry: ProjectEntry | null;
 }
 
 const captured: Captured[] = realPaths.map((real) => {
@@ -132,6 +135,7 @@ const captured: Captured[] = realPaths.map((real) => {
     synthetic: false,
     skillSettings: null,
     skillLocalSettings: null,
+    mcpEntry: null,
   };
 });
 
@@ -249,6 +253,7 @@ const probes: Captured[] = probeSpecs.map((spec) => {
     synthetic: true,
     skillSettings: null,
     skillLocalSettings: null,
+    mcpEntry: null,
   };
 });
 
@@ -316,13 +321,180 @@ const skillProbe: Captured = {
   synthetic: true,
   skillSettings: SKILL_PROJECT,
   skillLocalSettings: SKILL_LOCAL,
+  mcpEntry: null,
 };
 
 /** Constructed overrides ride in after redaction, never through it. */
 const skillBlock = (o: Record<string, SkillValue> | null): Record<string, unknown> =>
   o ? { skillOverrides: o } : {};
 
-const allProjects = [...captured, ...probes, skillProbe];
+// ---------------------------------------------------------------------------
+// 4c. The MCP probe.
+//
+// DEA-143 widened the MCP axis from the deny-list to four sources. This fixture reached
+// two of them -- `~/.claude.json` -> `mcpServers`, and a project's own `.mcp.json` -- and
+// not the other two, which on the live workspace are most of the axis: 39 rows became 60.
+// So 46 of the 60 rows the tool serves were checked by nothing outside the code that
+// serves them, and `MCP_ROWS` in `provenance.test.ts` did not move for a commit that
+// added 21 rows (DEA-144). The two missing sources are built here.
+//
+// Constructed, like the skills half and for the same reason: a connector name says what
+// someone uses as surely as a directory name does, and the redaction allowlist drops the
+// key. Like the skills half it rides in *after* redaction -- widening the allowlist must
+// never become the way a connector reaches the fixture.
+//
+// Renaming the captured list through `fakeServer` was the other option, and it is turned
+// down for a mechanical reason rather than a privacy one -- the two are equally redacted.
+// `fakeServer` numbers the sorted union of every captured server name, so 32 connectors
+// joining that set renumbers every `srv-NN` in the tree, and the fixture could then only
+// be extended by recapturing the whole machine. Construction costs nothing and buys more:
+// a rename preserves the count and whatever joins the machine happens to contain, where
+// here the joins are chosen -- four connectors nothing else names, one a deny-list also
+// names, one an allow-list does -- and this half regenerates byte-identically on a machine
+// that has connected to nothing at all.
+
+/**
+ * claude.ai connectors.
+ *
+ * `claude.ai <Name>` is the form `~/.claude.json` records and the form a deny-list entry
+ * uses, so the prefix is Claude Code's fact and only the name after it is ours. Nothing
+ * else on disk names a connector, which is why each of these is a row that exists for
+ * exactly one reason.
+ */
+const CONNECTORS = [
+  'claude.ai conn-01',
+  'claude.ai conn-02',
+  'claude.ai conn-03',
+  'claude.ai conn-04',
+  // Scoped by the probe below, so a connector row also carries a chain rather than only
+  // existing. `presenceOf` still calls both `ever-connected`: being denied is not a claim
+  // that something is installed, in either direction.
+  'claude.ai conn-05',
+  'claude.ai conn-06',
+];
+
+/** One plugin's catalog entry, and what the fixture expects of it. */
+interface CatalogPlugin {
+  id: string;
+  /** Non-server components. See `CATALOG` for why these are commands and not skills. */
+  commands: string[];
+  /** Bare names, as `components.mcpServers` records them. */
+  mcpServers: string[];
+  /**
+   * The `plugin:X:Y` keys those names become.
+   *
+   * Written out rather than run through `pluginServerKey`, which is the derivation the
+   * gate is checking: deriving the expectation from the function under test agrees with
+   * it whatever it does (DEA-133). These are the form `disabledMcpServers` entries take
+   * on the captured machine, so the literal is somebody else's fact.
+   */
+  serverKeys: string[];
+  /** Guarded against `resolvePlugin` below, and never taken on trust. */
+  enabledSomewhere: boolean;
+}
+
+/**
+ * The constructed plugin catalog.
+ *
+ * Ids are taken from the ones the fixture's own `enabledPlugins` already carries -- plugin
+ * ids stay verbatim here (see the header), so these are the same public marketplace
+ * coordinates the rest of the tree ships, and no new plugin row appears.
+ *
+ * Components are `commands` rather than `skills` throughout. `skillNames` feeds
+ * `allSkillIds`, so a catalogued skill would move the skill axis and its census for a
+ * reason that has nothing to do with the MCP one; `names` is what the guard in
+ * `catalogEnumerations` reads, and a command fills it just as well.
+ */
+const CATALOG: CatalogPlugin[] = [
+  {
+    // On at user scope, and carrying a non-server component as well: the guard is
+    // `!names.length && !mcpServerNames.length`, and with every entry server-only its
+    // `names` half would never be exercised by anything here at all.
+    id: 'airtable@claude-plugins-official',
+    commands: ['cmd-01'],
+    mcpServers: ['airtable'],
+    serverKeys: ['plugin:airtable:airtable'],
+    enabledSomewhere: true,
+  },
+  {
+    // A server and nothing else -- the case DEA-143 found `if (!names.length) continue`
+    // dropping, and 21 catalogued plugins have this shape.
+    //
+    // Off at user scope, and switched on by exactly one file: `probe-local-enable`'s
+    // `settings.local.json`. So this row exists only because `buildMcpCatalog` asks every
+    // live project and takes the whole precedence chain -- the user scope alone says no.
+    // That is the same id the probe above was pointed at, which couples the two on
+    // purpose: if the user scope stops carrying it the probe re-points, and the guard in
+    // section 7 throws rather than letting this quietly become a second copy of the
+    // airtable case. Plugin name and server name also differ, which is the half of the key
+    // derivation a reader cannot check by eye.
+    id: 'chrome-devtools-mcp@claude-plugins-official',
+    commands: [],
+    mcpServers: ['chrome-devtools'],
+    serverKeys: ['plugin:chrome-devtools-mcp:chrome-devtools'],
+    enabledSomewhere: true,
+  },
+  {
+    // Off everywhere. A disabled plugin's server never loads, so this must be no row at
+    // all -- the negative half, and the only one an axis that skipped `resolvePlugin`
+    // would get wrong while looking right.
+    id: 'context7@claude-plugins-official',
+    commands: [],
+    mcpServers: ['context7'],
+    serverKeys: ['plugin:context7:context7'],
+    enabledSomewhere: false,
+  },
+];
+
+// An id the user scope does not carry would widen `allPluginIds` past the count the
+// manifest records, so the gate would fail on the plugin axis for a change made to the
+// MCP one. Caught here, where the message can say what to do about it.
+for (const p of CATALOG) {
+  if (!pluginIds.includes(p.id)) {
+    throw new Error(
+      `catalog plugin ${p.id} is in no enabledPlugins block of this machine's user scope; ` +
+        're-point section 4c at an id the fixture still carries',
+    );
+  }
+}
+
+const MCP_PROBE_NAME = 'probe-mcp-scope';
+
+/**
+ * A deny-list and an allow-list, aimed at rows that exist only because of the two sources
+ * above.
+ *
+ * Without this every connector and plugin-provided cell is `false`/`inherited` with an
+ * empty chain, so the rows would be counted and nothing about them would ever be
+ * resolved. Both directions, because `enabledMcpServers` is a separate key from
+ * `disabledMcpServers` and only `~` exercises it in the captured half.
+ */
+const MCP_PROBE_ENTRY: ProjectEntry = {
+  disabledMcpServers: ['claude.ai conn-05', 'plugin:airtable:airtable'],
+  enabledMcpServers: ['claude.ai conn-06'],
+};
+
+const mcpProbe: Captured = {
+  fake: `${FAKE_HOME}/${MCP_PROBE_NAME}`,
+  rel: MCP_PROBE_NAME,
+  alive: true,
+  settings: null,
+  localSettings: null,
+  mcpJson: null,
+  entry: {},
+  // Not asked. `claude plugin list --json` reports plugins, and this project sets no
+  // `enabledPlugins`, so its answer would restate the user scope for all 42 ids and add
+  // a column to the oracle that says nothing. Nothing first-party reports a resolved
+  // deny-list, which is the surface it exists for -- so, like the skill probe, its
+  // expectation comes from the resolver and it holds no `oracle.json` entry.
+  oracleCwd: null,
+  synthetic: true,
+  skillSettings: null,
+  skillLocalSettings: null,
+  mcpEntry: MCP_PROBE_ENTRY,
+};
+
+const allProjects = [...captured, ...probes, skillProbe, mcpProbe];
 
 // ---------------------------------------------------------------------------
 // 5. Emit the home tree. README.md is prose and survives a regeneration.
@@ -341,10 +513,54 @@ writeText(
   `---\nname: ${SKILL_ON_DISK}\ndescription: Constructed fixture skill. Installed, scoped by nothing.\n---\n`,
 );
 
+// `~/.claude/plugins/` is never copied either -- `installed_plugins.json` records an
+// absolute `installPath` per plugin, and the catalog cache carries every marketplace this
+// machine has fetched. These two are written from section 4c's literals instead.
+//
+// `installPath` names a directory under `/Users/testuser` that exists nowhere, so
+// `componentNames` answers `null`: "could not tell", which is the honest answer for a
+// fixture shipping no install tree. Pointing it inside `home/` would make the on-disk half
+// of `inventory.ts` a second thing this fixture claims to cover, and it covers neither
+// today.
+write('home/.claude/plugins/installed_plugins.json', {
+  plugins: Object.fromEntries(
+    CATALOG.map((p) => [p.id, [{ installPath: `${FAKE_HOME}/.claude/plugins/${p.id}`, version: '0.0.1' }]]),
+  ),
+});
+
+// Commands arrive as objects with a `name`, servers as bare strings. Both are the shapes
+// the real cache uses, and `catalogEnumerations` accepts either for both -- writing one of
+// each keeps that tolerance exercised rather than asserted.
+write('home/.claude/plugins/plugin-catalog-cache.json', {
+  fetchedAt: '2026-01-01T00:00:00.000Z',
+  catalog: {
+    plugins: Object.fromEntries(
+      CATALOG.map((p) => [
+        p.id,
+        {
+          version: '0.0.1',
+          components: {
+            skills: [],
+            commands: p.commands.map((name) => ({ name })),
+            agents: [],
+            mcpServers: p.mcpServers,
+          },
+        },
+      ]),
+    ),
+  },
+});
+
 write('home/.claude.json', {
   numStartups: claudeJson.numStartups,
   mcpServers: pickServers(claudeJson.mcpServers),
-  projects: Object.fromEntries(allProjects.map((c) => [c.fake, pickEntry(c.entry)])),
+  claudeAiMcpEverConnected: CONNECTORS,
+  // Constructed entries merge over the redacted one rather than through it, for the reason
+  // `skillBlock` does: `pickEntry` renames every name it sees through `fakeServer`, and a
+  // constructed one is in no such map -- it would land as `srv-unmapped`.
+  projects: Object.fromEntries(
+    allProjects.map((c) => [c.fake, { ...pickEntry(c.entry), ...(c.mcpEntry ?? {}) }]),
+  ),
 });
 
 for (const c of allProjects) {
@@ -435,6 +651,29 @@ write('oracle.json', oracle);
 //    shrinks becomes a diff in a tracked file.
 
 const ws = loadFixtureWorkspace();
+
+/**
+ * `enabledSomewhere` is a literal, and this is what stops it being a wish.
+ *
+ * `buildMcpCatalog` puts a plugin's server on the axis only where `resolvePlugin` says the
+ * plugin loads in some live project. If a re-pointed marketplace or an edited settings file
+ * ever flips one of the three, the fixture would ship a case that had quietly stopped being
+ * the case it documents -- the positive half with nothing enabled, or the negative half with
+ * nothing disabled, either of which passes every assertion downstream. Throwing here is the
+ * point: a fixture that lost its negative half is DEA-127 with different numbers.
+ */
+const liveProjects = ws.projects.filter((p) => p.alive);
+for (const p of CATALOG) {
+  const on = liveProjects.some((project) => resolvePlugin(ws, project, p.id).value);
+  if (on !== p.enabledSomewhere) {
+    throw new Error(
+      `catalog plugin ${p.id} is enabled in ${on ? 'some' : 'no'} live project of this ` +
+        `fixture, and section 4c declares it enabled ${p.enabledSomewhere ? 'somewhere' : 'nowhere'}; ` +
+        're-point it at an id the fixture still switches that way',
+    );
+  }
+}
+
 const decidedByScope: Record<string, number> = { user: 0, project: 0, local: 0, default: 0 };
 for (const project of ws.projects.filter((p) => p.alive)) {
   for (const plugin of oracle[project.path] ?? []) {
@@ -473,6 +712,19 @@ const manifest = {
       SKILL_ON_DISK,
     ]),
   ].sort((a, b) => a.localeCompare(b)),
+  /** The same third kind, on the MCP axis. See section 4c for why it is not asked. */
+  mcpProbeProjects: [mcpProbe.fake],
+  /**
+   * The connector names the constructed half writes into `claudeAiMcpEverConnected`, and
+   * the `plugin:X:Y` keys its catalog declares. Both are the *input*, so the gate compares
+   * what was laid down against what was served: a source that stops reaching the axis
+   * shortens the served list while these stay put, where a count derived from
+   * `buildMcpCatalog` would shrink in step and agree with itself.
+   */
+  mcpConnectors: CONNECTORS,
+  mcpCatalogServers: CATALOG.flatMap((p) =>
+    p.serverKeys.map((key) => ({ key, enabledSomewhere: p.enabledSomewhere })),
+  ),
 };
 write('manifest.json', manifest);
 
@@ -489,5 +741,8 @@ console.table({
   pluginProjectPairs: pairs,
   serverNamesRenamed: fakeServer.size,
   constructedSkills: manifest.skillIds.length,
+  constructedConnectors: CONNECTORS.length,
+  catalogPlugins: CATALOG.length,
+  catalogServerRows: manifest.mcpCatalogServers.filter((s) => s.enabledSomewhere).length,
   ...decidedByScope,
 });
