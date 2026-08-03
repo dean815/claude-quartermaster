@@ -634,8 +634,15 @@ describe('what it refuses rather than guesses', () => {
 const LIVE = join(homedir(), '.claude.json');
 const liveSkip = !existsSync(LIVE) && `no ${LIVE} on this machine`;
 
-/** The five fields `readClaudeJson` builds its result from -- restated, not imported. */
-const MODELLED = ['numStartups', 'mcpServers', 'projects', 'skillUsage', 'pluginUsage'];
+/** The six fields `readClaudeJson` builds its result from -- restated, not imported. */
+const MODELLED = [
+  'numStartups',
+  'mcpServers',
+  'projects',
+  'claudeAiMcpEverConnected',
+  'skillUsage',
+  'pluginUsage',
+];
 
 let dir = '';
 let liveCopy = '';

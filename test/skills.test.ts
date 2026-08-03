@@ -57,6 +57,7 @@ const claudeJson = (): ClaudeJson => ({
   path: '/home/.claude.json',
   mcpServers: {},
   projects: {},
+  claudeAiMcpEverConnected: [],
   skillUsage: {},
   pluginUsage: {},
 });
@@ -108,6 +109,7 @@ function inventory(id: string, skillNames: string[], otherNames: string[] = []):
         source: 'plugin-catalog-cache.json',
         names: [...skillNames, ...otherNames],
         skillNames,
+        mcpServerNames: [],
         sha: null,
         version: '1',
         fetchedAt: null,

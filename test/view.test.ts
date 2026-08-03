@@ -30,7 +30,8 @@ import {
 import type { AuditContext } from '../src/detect.ts';
 import { loadWorkspace } from '../src/surfaces/read.ts';
 import { measureProject } from '../src/cost/transcript.ts';
-import { allMcpServerNames, allPluginIds } from '../src/resolve.ts';
+import { allPluginIds } from '../src/resolve.ts';
+import { allMcpServerNames, buildMcpCatalog } from '../src/mcp.ts';
 import { allSkillIds, buildSkillCatalog } from '../src/skills.ts';
 import { resolveMcpServer, resolvePlugin, resolveSkill } from '../src/resolve.ts';
 import type { Cell } from '../src/model.ts';
@@ -68,6 +69,7 @@ const claudeJson = (body: Partial<ClaudeJson> = {}): ClaudeJson => ({
   path: '/home/.claude.json',
   mcpServers: {},
   projects: {},
+  claudeAiMcpEverConnected: [],
   skillUsage: {},
   pluginUsage: {},
   ...body,
@@ -200,6 +202,7 @@ const KEY_SEP = '\u001F';
 function referencePairs(ctx: AuditContext): Map<string, Cell<unknown>> {
   const { ws } = ctx;
   const catalog = buildSkillCatalog(ws, ctx.measurements, ctx.inventories);
+  const mcpCatalog = buildMcpCatalog(ws, ctx.inventories);
   const out = new Map<string, Cell<unknown>>();
   const live = ws.projects.filter((p) => p.alive);
   const add = (kind: string, id: string, p: ProjectRecord, cell: Cell<unknown>) =>
@@ -207,7 +210,7 @@ function referencePairs(ctx: AuditContext): Map<string, Cell<unknown>> {
 
   for (const p of live) {
     for (const id of allPluginIds(ws, ctx.inventories)) add('plugin', id, p, resolvePlugin(ws, p, id));
-    for (const id of allMcpServerNames(ws)) add('mcp', id, p, resolveMcpServer(ws, p, id));
+    for (const id of allMcpServerNames(mcpCatalog)) add('mcp', id, p, resolveMcpServer(ws, p, id));
     for (const id of allSkillIds(catalog)) add('skill', id, p, resolveSkill(ws, p, id));
   }
   return out;

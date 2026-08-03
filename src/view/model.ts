@@ -27,13 +27,8 @@ import { basename } from 'node:path';
 import type { AuditContext } from '../detect.ts';
 import { distribution, type Distribution } from '../cost/summary.ts';
 import type { Cell, McpValue, Origin, PluginValue, Scope, SkillValue } from '../model.ts';
-import {
-  allMcpServerNames,
-  allPluginIds,
-  resolveMcpServer,
-  resolvePlugin,
-  resolveSkill,
-} from '../resolve.ts';
+import { allMcpServerNames, buildMcpCatalog } from '../mcp.ts';
+import { allPluginIds, resolveMcpServer, resolvePlugin, resolveSkill } from '../resolve.ts';
 import { allSkillIds, buildSkillCatalog } from '../skills.ts';
 import { memorySlug } from '../surfaces/read.ts';
 import type { ProjectRecord, Workspace } from '../surfaces/types.ts';
@@ -332,10 +327,12 @@ export function viewFrom(ctx: AuditContext): GridView {
       };
     });
 
-  // Both axes enumerate what is *installed*, not what some settings file happens to
-  // mention (DEA-134). Deriving rows from `skillOverrides` made the grid circular: a
-  // skill appeared only once it had been scoped, and scoping is what the grid is for.
+  // All three axes enumerate what is *installed*, not what some settings file happens to
+  // mention (DEA-134, and DEA-143 for MCP). Deriving rows from `skillOverrides` or from
+  // `disabledMcpServers` made the grid circular: a row appeared only once it had been
+  // scoped, and scoping is what the grid is for.
   const skillCatalog = buildSkillCatalog(ws, ctx.measurements, ctx.inventories);
+  const mcpCatalog = buildMcpCatalog(ws, ctx.inventories);
 
   return {
     projects: columns.map((c) => c.project),
@@ -348,7 +345,7 @@ export function viewFrom(ctx: AuditContext): GridView {
     ),
     mcpServers: rowsFor<McpValue>(
       'mcp',
-      allMcpServerNames(ws),
+      allMcpServerNames(mcpCatalog),
       columns,
       (record, id) => resolveMcpServer(ws, record, id),
       noCost,

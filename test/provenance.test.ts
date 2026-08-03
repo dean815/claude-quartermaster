@@ -48,7 +48,8 @@ import { gunzipSync } from 'node:zlib';
 
 import type { AuditContext } from '../src/detect.ts';
 import { SKILL_VALUES, type Cell } from '../src/model.ts';
-import { allMcpServerNames, allPluginIds, resolveMcpServer, resolvePlugin, resolveSkill } from '../src/resolve.ts';
+import { allMcpServerNames, buildMcpCatalog } from '../src/mcp.ts';
+import { allPluginIds, resolveMcpServer, resolvePlugin, resolveSkill } from '../src/resolve.ts';
 import { allSkillIds, buildSkillCatalog } from '../src/skills.ts';
 import type { ProjectRecord, Workspace } from '../src/surfaces/types.ts';
 import { projectId, type ExtensionKind } from '../src/view/model.ts';
@@ -70,6 +71,18 @@ const MANIFEST = readManifest();
  * enough to survive a legitimately smaller capture is also low enough for 975 pairs to
  * become five, which is the DEA-127 failure with different numbers. Regenerating the
  * fixture moves these, and moving them is an edit someone has to make on purpose.
+ *
+ * **DEA-143 widened the MCP axis and did not move either number, which is a gap and not
+ * a reassurance.** The axis now also enumerates `claudeAiMcpEverConnected` and the MCP
+ * servers of enabled plugins; on the live workspace those took it from 39 rows to 60.
+ * The fixture reaches neither: its redaction allowlist drops the connector key -- a
+ * connector name identifies what someone uses as surely as a directory name does, which
+ * is why every captured server here is `srv-NN` -- and it ships no `plugin-catalog-cache.json`
+ * for the gate to read. So 39 is the deny-list-and-declaration set, unchanged, and this
+ * gate says nothing about the two sources DEA-143 added. `test/mcp.test.ts` owns that
+ * claim, with the source removals shipped as mutations. Putting them here means teaching
+ * the generator to rename connectors through the same map as `srv-NN` and capturing a
+ * catalog, which is DEA-138-shaped work on a fixture nobody should hand-edit.
  */
 const MCP_ROWS = 39;
 const CHAIN_LINKS = 1768;
@@ -242,7 +255,7 @@ function checkAgainstResolver(view: StructureResponse, ctx: AuditContext, report
   const catalog = buildSkillCatalog(ws, ctx.measurements, ctx.inventories);
   const expectedRows: Array<[ExtensionKind, string[], AnyRow[]]> = [
     ['plugin', allPluginIds(ws, ctx.inventories), view.plugins],
-    ['mcp', allMcpServerNames(ws), view.mcpServers],
+    ['mcp', allMcpServerNames(buildMcpCatalog(ws, ctx.inventories)), view.mcpServers],
     ['skill', allSkillIds(catalog), view.skills],
   ];
   for (const [kind, expected, served] of expectedRows) {

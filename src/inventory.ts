@@ -37,6 +37,15 @@ export interface SourceEnumeration {
    * for a real skill and for a plugin's own repo tooling alike.
    */
   skillNames: string[];
+  /**
+   * Servers the source lists under `mcpServers`, bare -- `airtable`, not
+   * `plugin:airtable:airtable`. `mcp.ts` owns the derivation into a config key.
+   *
+   * Deliberately outside `names`: `names` drives the on-disk mismatch check, and an
+   * MCP server is a process a plugin launches rather than a file under `installPath`,
+   * so every one of these would report as missing.
+   */
+  mcpServerNames: string[];
   /** The build the source describes. Differs from the installed sha when stale. */
   sha: string | null;
   version: string | null;
@@ -169,12 +178,28 @@ export function catalogEnumerations(raw: unknown, source: string): Map<string, S
         }
       }
     }
-    if (!names.length) continue;
+    // `mcpServers` is a bare string array here, where `skills` is objects with a
+    // `name`. Both spellings are accepted so a catalog that grows the richer shape does
+    // not silently enumerate nothing.
+    const mcpServerNames: string[] = [];
+    const declared = e.components?.['mcpServers'];
+    if (Array.isArray(declared)) {
+      for (const item of declared) {
+        const name = typeof item === 'string' ? item : (item as { name?: unknown })?.name;
+        if (typeof name === 'string' && name) mcpServerNames.push(name);
+      }
+    }
+
+    // 21 catalogued plugins declare an MCP server and nothing else -- `context7` and
+    // `github` among the installed ones. Testing `names` alone dropped every one of
+    // them before the MCP axis had a reason to ask.
+    if (!names.length && !mcpServerNames.length) continue;
 
     out.set(id, {
       source,
       names,
       skillNames,
+      mcpServerNames,
       sha: typeof e.sha === 'string' ? e.sha : null,
       version: typeof e.version === 'string' ? e.version : null,
       fetchedAt,

@@ -64,6 +64,14 @@ export interface ClaudeJson {
   numStartups?: number;
   mcpServers: Record<string, McpServerSpec>;
   projects: Record<string, ProjectEntry>;
+  /**
+   * claude.ai connectors this installation has connected to, in the `claude.ai <Name>`
+   * form the deny-list uses. The only on-disk trace they leave.
+   *
+   * Historical, and the key name says so -- read `mcp.ts` before treating it as a set
+   * of servers that load today.
+   */
+  claudeAiMcpEverConnected: string[];
   skillUsage: Record<string, UsageRecord>;
   pluginUsage: Record<string, UsageRecord>;
 }
