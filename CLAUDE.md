@@ -48,6 +48,24 @@ agentic, and granting it enough turns to answer also grants it enough to apply f
 An audit tool must not mutate config as a side effect of reporting, so the adapter
 never shells out to it.
 
+**A first-party subcommand writes what we promised not to, so disclose it (DEA-140).**
+`qm` writes no Claude Code config, but on a machine without `~/.claude.json` the
+subcommands it invokes create one: `claude plugin list --json`, `claude plugin details`
+and `claude doctor` each do, and the file arrives carrying a `machineID` and a `userID`
+the user did not have. `claude --version` leaves a fresh HOME clean, so it is the
+subcommand and not the binary. This is the `/doctor` rule above applied to a case it
+missed. Resolved by disclosure rather than refusal: not shelling out would remove the
+resolver's only oracle for plugin cost and installation health precisely on a fresh
+machine, which is where a first-time user runs this. Narrowing the promise to "*we*
+don't write it" was rejected — that distinction is not one the user experiences.
+So every `claude` spawn goes through one door (`src/disclose.ts`), the file's existence
+is recorded at import — before any of them — and the report names the command that
+initialised it, as a top-level field beside `unreadable` and `unchecked`. Never as a
+finding: it has no severity and is a property of this run, not of the configuration.
+The day it fails: it watches one path, so a first-party command that starts
+initialising some *other* file goes unreported, and nothing here says what the
+subprocess put inside.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32

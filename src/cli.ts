@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 /**
- * `qm` -- read-only. Nothing here writes to any Claude Code config.
+ * `qm` -- read-only. Nothing here writes to any Claude Code config; the first-party
+ * subcommands it invokes do initialise `~/.claude.json` on a machine that has none,
+ * and the run discloses it. See `disclose.ts`.
  */
 import { homedir } from 'node:os';
-import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 
 import { loadWorkspace, problems } from './surfaces/read.ts';
+import { claudeCli } from './disclose.ts';
 import { measureProject } from './cost/transcript.ts';
 import { profileFrom } from './cost/summary.ts';
 import {
@@ -172,10 +174,9 @@ class LazyPluginCosts implements PluginCostIndex {
 
     let parsed: PluginCost | null = null;
     try {
-      const text = execFileSync(
-        'claude',
+      const text = claudeCli.run(
         ['plugin', 'details', pluginLookupName(id, entry?.installPath)],
-        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30_000 },
+        { timeoutMs: 30_000 },
       );
       parsed = parsePluginDetails(id, text);
       this.cache.set(id, version, sha, parsed);
@@ -208,11 +209,7 @@ class LazyPluginCosts implements PluginCostIndex {
     this.listAttempted = true;
     try {
       const raw: InstalledPlugin[] = JSON.parse(
-        execFileSync('claude', ['plugin', 'list', '--json'], {
-          encoding: 'utf8',
-          stdio: ['ignore', 'pipe', 'ignore'],
-          timeout: 60_000,
-        }),
+        claudeCli.run(['plugin', 'list', '--json'], { timeoutMs: 60_000 }),
       );
       // `plugin details` resolves the manifest name, which can differ in case from the
       // lowercased marketplace id -- see pluginLookupName.
@@ -462,7 +459,9 @@ ${BOLD}qm${RESET} -- audit which Claude Code extensions load where, and what the
   --full    also scan git hygiene and project layout via project-optimizer
   --no-github  skip GitHub checks in --full (for offline use or no gh CLI)
 
-Read-only. Nothing here writes to any Claude Code config.
+Read-only: qm writes no Claude Code config. The first-party \`claude\` subcommands it
+invokes do create ~/.claude.json on a machine that has none, and the run says so when
+that happens.
 `);
     return;
   }
@@ -538,6 +537,11 @@ Read-only. Nothing here writes to any Claude Code config.
           unreadable: problems,
           unchecked: delegated.unchecked,
           unpriced: unpricedPlugins(ctx),
+          // Not a finding, and deliberately not routed through one: it has no severity
+          // and says nothing about the user's configuration. It reports what this run
+          // did -- null on every machine that already had the file, which is nearly all
+          // of them.
+          initialised: claudeCli.disclosure(),
           ...(drift ? { drift } : {}),
           findings,
         },
@@ -592,4 +596,12 @@ try {
   // Every exit path, including the early returns: a price paid on this run must not be
   // paid again on the next one.
   flushPrices();
+
+  // Here for the same reason, and not in `printFindings`: `baseline` and `serve` spawn
+  // the same subcommands `audit` does, so a disclosure only `audit` makes is not one.
+  // stderr rather than stdout so it survives `--json` and a redirect without either
+  // corrupting the payload or being suppressed -- `--json` also carries it in the
+  // report body, where a consumer can read it as a field.
+  const init = claudeCli.disclosure();
+  if (init) process.stderr.write(`\n${init.note}\n`);
 }
