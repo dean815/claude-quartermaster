@@ -80,6 +80,11 @@ export function readClaudeJson(path: string): ClaudeJson {
     numStartups: raw.numStartups,
     mcpServers: raw.mcpServers ?? {},
     projects: (raw.projects ?? {}) as Record<string, ProjectEntry>,
+    // Guarded rather than defaulted, because this one is iterated: a key holding
+    // something other than an array would throw where `?? []` would not have.
+    claudeAiMcpEverConnected: Array.isArray(raw.claudeAiMcpEverConnected)
+      ? (raw.claudeAiMcpEverConnected as string[])
+      : [],
     skillUsage: raw.skillUsage ?? {},
     pluginUsage: raw.pluginUsage ?? {},
   };

@@ -50,6 +50,7 @@ function claudeJson(body: Partial<ClaudeJson> = {}): ClaudeJson {
     path: '/home/.claude.json',
     mcpServers: {},
     projects: {},
+    claudeAiMcpEverConnected: [],
     skillUsage: {},
     pluginUsage: {},
     ...body,

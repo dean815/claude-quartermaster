@@ -155,13 +155,9 @@ export function allPluginIds(
   return [...ids].sort();
 }
 
-/** Every MCP server name reachable from any surface. */
-export function allMcpServerNames(ws: Workspace): string[] {
-  const names = new Set<string>(Object.keys(ws.claudeJson.mcpServers));
-  for (const p of ws.projects) {
-    if (p.mcpJson) for (const n of Object.keys(p.mcpJson.mcpServers)) names.add(n);
-    for (const n of p.entry?.disabledMcpServers ?? []) names.add(n);
-    for (const n of p.entry?.enabledMcpServers ?? []) names.add(n);
-  }
-  return [...names].sort();
-}
+/*
+ * The MCP axis lives in `mcp.ts`, next to `allSkillIds` in `skills.ts` and for the same
+ * reason (DEA-143): enumerating it needs sources this file does not read, and one of
+ * them -- an enabled plugin's catalog entry -- needs `resolvePlugin` from this file. The
+ * dependency runs one way only, which it could not if the enumerator stayed here.
+ */
