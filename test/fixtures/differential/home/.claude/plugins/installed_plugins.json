@@ -1,0 +1,22 @@
+{
+  "plugins": {
+    "airtable@claude-plugins-official": [
+      {
+        "installPath": "/Users/testuser/.claude/plugins/airtable@claude-plugins-official",
+        "version": "0.0.1"
+      }
+    ],
+    "chrome-devtools-mcp@claude-plugins-official": [
+      {
+        "installPath": "/Users/testuser/.claude/plugins/chrome-devtools-mcp@claude-plugins-official",
+        "version": "0.0.1"
+      }
+    ],
+    "context7@claude-plugins-official": [
+      {
+        "installPath": "/Users/testuser/.claude/plugins/context7@claude-plugins-official",
+        "version": "0.0.1"
+      }
+    ]
+  }
+}

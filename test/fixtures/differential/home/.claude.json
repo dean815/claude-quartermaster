@@ -20,6 +20,14 @@
       "type": "stdio"
     }
   },
+  "claudeAiMcpEverConnected": [
+    "claude.ai conn-01",
+    "claude.ai conn-02",
+    "claude.ai conn-03",
+    "claude.ai conn-04",
+    "claude.ai conn-05",
+    "claude.ai conn-06"
+  ],
   "projects": {
     "/Users/testuser": {
       "disabledMcpServers": [
@@ -1077,6 +1085,15 @@
     },
     "/Users/testuser/probe-local-disable": {},
     "/Users/testuser/probe-local-enable": {},
-    "/Users/testuser/probe-skill-chain": {}
+    "/Users/testuser/probe-skill-chain": {},
+    "/Users/testuser/probe-mcp-scope": {
+      "disabledMcpServers": [
+        "claude.ai conn-05",
+        "plugin:airtable:airtable"
+      ],
+      "enabledMcpServers": [
+        "claude.ai conn-06"
+      ]
+    }
   }
 }
