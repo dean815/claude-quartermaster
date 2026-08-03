@@ -20,18 +20,20 @@
  * names the command, which keeps "not examined" visible instead of letting an
  * unchecked domain read as clean.
  */
-import { execFileSync } from 'node:child_process';
+import { claudeCli } from '../disclose.ts';
 
 import type { Adapter, Availability } from './types.ts';
 
-/** Installation health only. Cheap, read-only, and not the checkup. */
+/**
+ * Installation health only. Cheap, read-only, and not the checkup.
+ *
+ * This adapter runs on every audit, not only under `--full`, so on a machine without
+ * `~/.claude.json` this is usually the spawn that creates it -- hence the funnel
+ * rather than a bare `execFileSync` (DEA-140).
+ */
 export function installationSummary(): string | null {
   try {
-    return execFileSync('claude', ['doctor'], {
-      encoding: 'utf8',
-      timeout: 60_000,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
+    return claudeCli.run(['doctor'], { timeoutMs: 60_000 });
   } catch {
     return null;
   }

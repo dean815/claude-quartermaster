@@ -14,9 +14,10 @@
  * schemas. Tool *names* still load at startup, and on one measured session they were
  * 34,593 chars across 39 servers. `transcript.ts` covers what this cannot.
  */
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+import { claudeCli } from '../disclose.ts';
 
 export interface ComponentCost {
   name: string;
@@ -219,10 +220,8 @@ export function pluginCost(id: string, opts: PluginCostOptions = {}): PluginCost
   const name = pluginLookupName(id, opts.installPath);
   let out: string;
   try {
-    out = execFileSync('claude', ['plugin', 'details', name], {
-      encoding: 'utf8',
-      timeout: opts.timeoutMs ?? 30_000,
-      stdio: ['ignore', 'pipe', 'ignore'],
+    out = claudeCli.run(['plugin', 'details', name], {
+      timeoutMs: opts.timeoutMs ?? 30_000,
       ...(opts.cwd ? { cwd: opts.cwd } : {}),
     });
   } catch {
