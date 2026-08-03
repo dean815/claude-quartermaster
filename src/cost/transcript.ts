@@ -77,9 +77,23 @@ export interface TranscriptMeasurement {
 const UUID_NAMESPACE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const UUID_CHARS = 36;
 
-/** `plugin:marketing:ahrefs` in a status list is `plugin_marketing_ahrefs` in a tool name. */
+/**
+ * `plugin:marketing:ahrefs` in a status list is `plugin_marketing_ahrefs` in a tool name.
+ *
+ * `.` is here for the same reason as `:` and ` `, and was missing (DEA-123): the
+ * connector `claude.ai raindrop.io` publishes tools under `claude_ai_raindrop_io`, so
+ * without it every one of the 36 `claude_ai_*` namespaces on this machine failed to
+ * join back to the name its own status list uses. Hyphens are deliberately *not*
+ * mapped -- `plugin_pdf-viewer_pdf` and `gemini-api-docs-mcp` keep theirs in the
+ * observed tool names.
+ *
+ * Widening it changes nothing for the caller that had it: `unauthenticatedButListed`
+ * scores 38 hits across 2,071 transcripts either way, because every server this
+ * workspace reports unauthenticated is a `plugin:X:Y` with no dot in it. The direction
+ * this is used in stays one-way -- see `mcp.ts` on why reversing it is a guess.
+ */
 export function normalizeServerName(name: string): string {
-  return name.replaceAll(':', '_').replaceAll(' ', '_');
+  return name.replaceAll(':', '_').replaceAll(' ', '_').replaceAll('.', '_');
 }
 
 /**

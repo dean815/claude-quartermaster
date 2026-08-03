@@ -15,6 +15,7 @@ before they calcify.
 ```bash
 qm audit          # ranked findings across every project
 qm cost           # what your baseline context actually costs
+qm effect         # what toggling each extension needs: a reload, or a restart
 qm baseline       # record today's findings
 qm audit --drift  # what changed since
 ```
@@ -135,6 +136,21 @@ decided rather than what's wrong with it:
 
 Plus `qm cost` for the measured baseline distribution, and `qm baseline` /
 `qm audit --drift` to turn re-onboarding into a diff.
+
+### `qm effect` — reload or restart, and mostly reload
+
+Toggling a skill, command, agent, hook, LSP, monitor or theme never invalidates the
+prompt cache; those need `/reload-plugins` and nothing more. Two things genuinely cost
+a restart: a bare-tool-name deny rule (`"Bash"`, `"*"`), and a plugin providing an MCP
+server whose tools are not deferred.
+
+Only the first is observable. Session transcripts record what was *deferred*; a tool
+that loaded eagerly lands in the system prompt, which this tool does not read. Across
+2,071 transcripts the one candidate signal — a server publishing MCP instructions and no
+deferred tools — never held for any server in more than 31% of its sessions, and held
+for none in all of them. It measures connection timing, not deferral. So the answer for
+an unmeasured server is **`unknown`**, carrying the sample count, and never the scarier
+guess: a tool that cries "restart" at a skill toggle is one the user learns to ignore.
 
 ### The state model: two axes, not six letters
 

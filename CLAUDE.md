@@ -102,6 +102,29 @@ plugin whose `Hooks` count is **0**; an absent Hooks key means "couldn't tell", 
 property. Across 469 sessions the MCP tool-name block ran 192 → 34,369 chars
 (median 1,050). Always carry the sample count.
 
+**Non-deferral is unobservable, so `restart` has one route, not two (DEA-123).** The
+docs name two cache-invalidating changes: a bare-tool-name deny rule, and a plugin
+providing an MCP server whose tools aren't deferred. Transcripts record only what *was*
+deferred — an eagerly-loaded tool lands in the system prompt, which we don't read — so
+the second is not measurable here. Checked before designing around it: across 2,071
+transcripts the one candidate signal (a server publishing `mcp_instructions` and no
+`deferred_tools`) covers 14 servers over 25 session-occurrences, and **every one of the
+14 also appears deferred elsewhere** — 30.8% of sessions at worst
+(`plugin_airtable_airtable`, 12 of 39), 0.6% at best, none at 100%. It measures
+connection timing. So `src/effect.ts` classifies `reload` / `unknown`, `restart` comes
+from the deny-rule half alone, and `DeferralEvidence` has two values with the missing
+third named in place. `unknown` is an answer, not a polite `restart`: defaulting to the
+scarier verdict when unmeasured is the cry-wolf behaviour the classifier exists to
+prevent, and it would satisfy the issue's letter while doing so. The predicate is
+shared with `bareDenyRules`, not copied.
+
+Two joins are load-bearing and both were quietly broken. `normalizeServerName` mapped
+`:` and ` ` but not `.`, so `claude.ai Airtable` never matched `claude_ai_Airtable` —
+36 of 60 MCP rows read `unknown` that are in fact observed. Hyphens are *not* mapped
+(`plugin_pdf-viewer_pdf` keeps its), so the rule is those three characters and no more.
+And any per-settings-file walk needs the `~`-dedup: `~/.claude/settings.json` arrives
+twice, which double-counted its deny rules.
+
 **A gate that cannot fail is not a gate.** Before trusting a green check, break the code
 underneath it and confirm the suite goes red. Ship the mutation as a test, asserting both
 *that* it fails and that the message names the right divergence — a gate failing for
