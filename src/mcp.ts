@@ -66,7 +66,7 @@
  * between a resolved `Cell` and `skillPresenceIn`, and it is drawn here for the same
  * reason.
  */
-import type { PluginInventory } from './inventory.ts';
+import { pluginNamespace, type PluginInventory, type PluginKeyBasis } from './inventory.ts';
 import { resolvePlugin } from './resolve.ts';
 import type { Workspace } from './surfaces/types.ts';
 
@@ -84,23 +84,11 @@ import type { Workspace } from './surfaces/types.ts';
 export type McpPresence = 'available' | 'ever-connected' | 'scoped-only';
 
 /**
- * Which half of a plugin-provided row's name is load-bearing, and whether it was read or
- * assumed.
- *
- * - `manifest`       the plugin's own `.claude-plugin/plugin.json` named it. This is the
- *                    string Claude Code namespaces by, so the key is exact.
- * - `marketplace-id` no manifest could be read, so the id prefix stands in. Across the
- *                    42 plugins installed here that substitution is right 39 times and
- *                    wrong once, with 2 unmeasurable -- and nothing in the resulting
- *                    string says which of those a given row is.
- *
- * Recorded rather than folded into the name because the name cannot carry it: both bases
- * produce a `plugin:X:Y` string, and a consumer holding only the row -- the grid, and
- * DEA-112's write -- has no inventory left to consult. Folding the difference into the
- * key is how a guess starts reading like a measurement, which is the objection
- * `duplicateAccessPaths` raises to hiding its `basis` inside `severity`.
+ * Re-exported from `inventory.ts`, which is where the substitution it describes lives
+ * (DEA-146). It stays importable from here because `McpEntry.keyBasis` is declared here,
+ * and moving a consumer's import path is churn nobody asked for.
  */
-export type PluginKeyBasis = 'manifest' | 'marketplace-id';
+export type { PluginKeyBasis } from './inventory.ts';
 
 export interface McpEntry {
   /** The name a `disabledMcpServers` entry would use. */
@@ -155,7 +143,7 @@ export interface McpCatalog {
  * `manifestName` is required rather than optional, and `null` is its "could not read"
  * value. An optional parameter would let a call site omit it and silently get the guess,
  * which is exactly the failure being fixed; required, every caller has to have gone and
- * looked. What the caller substitutes on `null` is the same id prefix as before --
+ * looked. What `pluginNamespace` substitutes on `null` is the same id prefix as before --
  * still the best available guess, and `PluginKeyBasis` is how the row says so.
  */
 export function pluginServerKey(
@@ -163,7 +151,7 @@ export function pluginServerKey(
   serverName: string,
   manifestName: string | null,
 ): string {
-  return `plugin:${manifestName ?? pluginId.split('@')[0] ?? pluginId}:${serverName}`;
+  return `plugin:${pluginNamespace(pluginId, manifestName).name}:${serverName}`;
 }
 
 interface Acc {
@@ -219,7 +207,7 @@ export function buildMcpCatalog(
     if (!live.some((p) => resolvePlugin(ws, p, inv.id).value)) continue;
     // Read once per plugin rather than per server: the basis is a property of the
     // manifest, so two servers from one plugin can never disagree about it.
-    const basis: PluginKeyBasis = inv.manifestName === null ? 'marketplace-id' : 'manifest';
+    const basis: PluginKeyBasis = pluginNamespace(inv.id, inv.manifestName).basis;
     for (const src of inv.enumerated) {
       for (const name of src.mcpServerNames) {
         const a = of(pluginServerKey(inv.id, name, inv.manifestName));
