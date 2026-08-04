@@ -849,6 +849,9 @@ const providing = (id: string, server: string): PluginInventory => ({
   installPath: null,
   version: null,
   sha: null,
+  // No install path, so no manifest to read: the key falls back to the marketplace id,
+  // which is what `plugin:vendor:thing` below is.
+  manifestName: null,
   installed: null,
   enumerated: [
     {

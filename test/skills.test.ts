@@ -90,6 +90,7 @@ function inventory(id: string, skillNames: string[], otherNames: string[] = []):
     installPath: `/plugins/${id}`,
     version: '1',
     sha: null,
+    manifestName: null,
     installed: [...skillNames, ...otherNames],
     enumerated: [
       {

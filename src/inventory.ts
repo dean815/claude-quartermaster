@@ -59,6 +59,13 @@ export interface PluginInventory {
   version: string | null;
   sha: string | null;
   /**
+   * The name the plugin's own manifest gives it, which is what Claude Code namespaces
+   * its MCP servers and skills by. `null` means no readable manifest said -- "could not
+   * tell", never "the marketplace id is right". `mcp.ts` owns the derivation into a
+   * config key and records which of the two it used.
+   */
+  manifestName: string | null;
+  /**
    * Component names found under `installPath`. `null` means the directory could not be
    * read, which is "unknown" and never "nothing installed" -- the difference decides
    * whether a plugin counts as compared at all.
@@ -117,6 +124,40 @@ export function componentNames(installPath: string): string[] | null {
   // a partial answer, and a partial answer would make absence look proven when it is not.
   if (!walk(installPath, 0)) return null;
   return [...found].sort();
+}
+
+/**
+ * `<installPath>/.claude-plugin/plugin.json` -> `name`, or `null` when nothing readable
+ * says.
+ *
+ * `null` is the whole point of this returning what it returns. The caller that wants a
+ * string has to say what it substitutes and why, because the two situations are not the
+ * same claim: a manifest reading `Notion` is Claude Code's own spelling of the plugin,
+ * and an unreadable one leaves the marketplace id as a guess that happens to be right 39
+ * times out of 42 here. That is CLAUDE.md's `usageCount` rule -- an absent signal is not
+ * a zero -- applied to a name instead of to a counter, and the live path it protects is
+ * the 2 installed plugins whose install directory carries no manifest at all.
+ *
+ * `pluginLookupName` in `cost/plugins.ts` reads the same file for `claude plugin details`
+ * and now calls this rather than carrying a second copy of the read: the parse, the
+ * non-string guard and the empty-string guard are one body with two callers, so a
+ * manifest shape that starts fooling one cannot keep fooling only the other.
+ */
+export function readManifestName(installPath: string | null | undefined): string | null {
+  if (!installPath) return null;
+  try {
+    const manifest = JSON.parse(
+      readFileSync(join(installPath, '.claude-plugin', 'plugin.json'), 'utf8'),
+    ) as { name?: unknown };
+    // Manifest contents are third-party input. Anything that is not a plain non-empty
+    // string is not a name, and rounding one up to a config key would put an object's
+    // stringification into a deny-list entry.
+    return typeof manifest.name === 'string' && manifest.name.trim() ? manifest.name : null;
+  } catch {
+    // Missing or malformed. Plenty of plugins ship without one, and a cache directory
+    // can outlive the build it held.
+    return null;
+  }
 }
 
 /** `installed_plugins.json` -> one build per plugin id. */
@@ -240,6 +281,7 @@ export function readInventories(home: string): Map<string, PluginInventory> {
       installPath: build.installPath,
       version: build.version,
       sha: build.sha,
+      manifestName: readManifestName(build.installPath),
       installed: componentNames(build.installPath),
       enumerated: entry ? [entry] : [],
     });

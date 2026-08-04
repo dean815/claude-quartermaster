@@ -116,6 +116,30 @@ day it fails: this covers one of four reverse-engineered behaviours. `plugin det
 output, the usage counters, and MCP tool-name loading change silently, and every
 user-facing string says so because "the oracle agrees" reads as "drift is handled".
 
+**A key nobody matches is worse than a key nobody reads (DEA-145).** `pluginServerKey`
+built `plugin:<marketplace id>:<server>`; Claude Code namespaces by the plugin's
+*manifest* name (`<installPath>/.claude-plugin/plugin.json` → `name`). Measured **inside
+the `needsAuthMcpServers` arrays Claude Code writes** — not by grepping transcripts, where
+this repo's own prose about the bug produces 86 false hits — `plugin:Notion:notion` appears
+389 times and `plugin:notion:notion` **0**, against 14,064 `mcp__plugin_Notion_notion__`
+tool calls. It hid because 39 of 42 installed manifests equal their id prefix. The cost was
+not cosmetic: the grid labelled a row with a string no config file matches, so a Phase 2
+write would have emitted it into `disabledMcpServers`, reported success, and left the
+server loading — and the deferral join pointed at a namespace no session published, so the
+busiest MCP server on the machine classified `unknown`.
+**The fallback is a value, not a default.** `readManifestName` returns `null` where nothing
+is readable (2 of 42 here), never the id; `McpEntry.keyBasis` carries
+`manifest` / `marketplace-id` onto the row, because a row has no inventory left to consult
+and both bases produce an identical-looking `plugin:X:Y`. `pluginServerKey`'s third
+parameter is required, so no call site can omit it and get the guess silently. The mutation
+that matters is invisible to the axis: promoting the fallback to a confirmed name renames
+no row, so only the basis field catches it. `joinIsExact` was **not** promoted alongside —
+nothing can date a plugin-provided server, so promoting the join swaps one "could not tell"
+for another while leaving one guard where there were two; it needs `installedAt` first, and
+exactness is now per-entry rather than per-kind. The day it fails: the same defect is live
+on the **skill** axis — `shortPluginName` splits the id while transcripts list
+`Notion:create-page`.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32

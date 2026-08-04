@@ -738,14 +738,14 @@ export interface ServerObservation {
  * - `connector` **a guess.** `claude.ai Linear` publishes as `claude_ai_Linear` *or* as a
  *               bare UUID carrying no name at all -- 31 of the namespaces observed here
  *               are UUIDs, and nothing on disk maps one back to a connector name.
- * - `plugin`    **a guess, and this is the one that looked exact.** `pluginServerKey`
- *               builds `plugin:<marketplace id>:<server>`; Claude Code namespaces by the
- *               plugin's *manifest* name. 39 of the 40 readable manifests here agree, 2
- *               could not be read, and the one that disagrees is
- *               `notion@claude-plugins-official`, whose `.claude-plugin/plugin.json` says
- *               `"name": "Notion"` and which publishes `plugin_Notion_notion` against a
- *               key of `plugin:notion:notion`. It is precisely the server this detector
- *               would otherwise have accused, which is what a guess costs.
+ * - `plugin`    **still a guess, and no longer for the reason it was.** It used to be
+ *               `plugin:<marketplace id>:<server>` against a namespace Claude Code builds
+ *               from the plugin's *manifest* name, which cost this detector precisely the
+ *               server it would otherwise have accused: `notion@claude-plugins-official`
+ *               says `"name": "Notion"` and publishes `plugin_Notion_notion`. DEA-145
+ *               reads the manifest, so the spelling is now right where a manifest can be
+ *               read -- 40 of the 42 plugins here -- and `McpEntry.keyBasis` says which
+ *               rows those are.
  * - `builtin`   unreachable. `(built-in)` is the pseudo-namespace `transcript.ts` gives a
  *               deferred tool that is not an MCP tool at all, and no config key produces
  *               it.
@@ -755,10 +755,19 @@ export interface ServerObservation {
  * a hit is evidence the server was there. A guessed name that misses is not evidence it
  * was absent, so it can never support an accusation.
  *
- * Reading the manifest name would make the plugin join exact and was rejected here:
- * acquiring a new source is not what this issue asked for, and `pluginServerKey` builds
- * the grid's axis as well, so changing which half of the id it uses is a change to what
- * every row is called. Filed separately.
+ * **`plugin` was deliberately not promoted with the key (DEA-145), and the reason is
+ * measured.** Two independent guards keep a plugin-provided server out of an accusation:
+ * this join, and `configuredAt`, which for a plugin-provided key finds neither a user
+ * scope nor a project `.mcp.json` to date it by, returns `null`, and so lands on
+ * `age-unproven`. Promoting the join alone therefore moves rows from one way of saying
+ * "could not tell" to another, and leaves one guard where there were two -- so the next
+ * unrelated change to dating turns an absence into an accusation with nothing left to
+ * stop it. Measured after the key was fixed: all 6 plugin rows on that machine read
+ * `appeared`, and no observation of any kind reads `cannot-tell`, so promotion is
+ * unobservable there as well as unsafe. It needs `installedAt` from
+ * `installed_plugins.json` first. And the predicate would have to change shape:
+ * exactness is now per *entry* rather than per kind, since a plugin whose manifest could
+ * not be read is still the old guess, and `keyBasis` is the field that already knows.
  */
 function joinIsExact(kind: ServerKind): boolean {
   return kind === 'direct';
