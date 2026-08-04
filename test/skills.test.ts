@@ -29,28 +29,15 @@ import type { TranscriptMeasurement } from '../src/cost/transcript.ts';
 import type {
   ClaudeJson,
   PersonalSkill,
-  ProjectRecord,
   SettingsFile,
   Workspace,
 } from '../src/surfaces/types.ts';
+import { project } from './factories.ts';
 
 const settings = (path: string, body: Partial<SettingsFile> = {}): SettingsFile => ({
   path,
   rest: {},
   ...body,
-});
-
-const project = (path: string): ProjectRecord => ({
-  path,
-  alive: true,
-  registered: true,
-  settings: null,
-  localSettings: null,
-  mcpJson: null,
-  entry: null,
-  rules: [],
-  memory: null,
-  claudeMd: null,
 });
 
 const claudeJson = (): ClaudeJson => ({

@@ -31,28 +31,14 @@ import type { PluginInventory } from '../src/inventory.ts';
 import type {
   ClaudeJson,
   McpServerSpec,
-  ProjectRecord,
   SettingsFile,
   Workspace,
 } from '../src/surfaces/types.ts';
+import { project } from './factories.ts';
 
 const settings = (path: string, body: Partial<SettingsFile> = {}): SettingsFile => ({
   path,
   rest: {},
-  ...body,
-});
-
-const project = (path: string, body: Partial<ProjectRecord> = {}): ProjectRecord => ({
-  path,
-  alive: true,
-  registered: true,
-  settings: null,
-  localSettings: null,
-  mcpJson: null,
-  entry: null,
-  rules: [],
-  memory: null,
-  claudeMd: null,
   ...body,
 });
 

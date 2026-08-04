@@ -27,27 +27,14 @@ import {
 import { loadWorkspace } from '../src/surfaces/read.ts';
 import { measureProject, measureTranscript } from '../src/cost/transcript.ts';
 import { readInventories } from '../src/inventory.ts';
-import type { ProjectRecord, SettingsFile, Workspace, ClaudeJson } from '../src/surfaces/types.ts';
+import type { SettingsFile, Workspace, ClaudeJson } from '../src/surfaces/types.ts';
 import type { TranscriptMeasurement, ServerCost } from '../src/cost/transcript.ts';
 import type { PluginCost, PluginCostIndex } from '../src/cost/plugins.ts';
+import { project } from './factories.ts';
 
 const settings = (path: string, body: Partial<SettingsFile> = {}): SettingsFile => ({
   path,
   rest: {},
-  ...body,
-});
-
-const project = (path: string, body: Partial<ProjectRecord> = {}): ProjectRecord => ({
-  path,
-  alive: true,
-  registered: true,
-  settings: null,
-  localSettings: null,
-  mcpJson: null,
-  entry: null,
-  rules: [],
-  memory: null,
-  claudeMd: null,
   ...body,
 });
 

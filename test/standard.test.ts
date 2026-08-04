@@ -20,26 +20,13 @@ import {
   STANDARD,
 } from '../src/standard.ts';
 import type { AuditContext, Finding } from '../src/detect.ts';
-import type { ProjectRecord, SettingsFile, Workspace, ClaudeJson } from '../src/surfaces/types.ts';
+import type { SettingsFile, Workspace, ClaudeJson } from '../src/surfaces/types.ts';
 import type { PluginCost, PluginCostIndex } from '../src/cost/plugins.ts';
+import { project } from './factories.ts';
 
 const settings = (path: string, body: Partial<SettingsFile> = {}): SettingsFile => ({
   path,
   rest: {},
-  ...body,
-});
-
-const project = (path: string, body: Partial<ProjectRecord> = {}): ProjectRecord => ({
-  path,
-  alive: true,
-  registered: true,
-  settings: null,
-  localSettings: null,
-  mcpJson: null,
-  entry: null,
-  rules: [],
-  memory: null,
-  claudeMd: null,
   ...body,
 });
 

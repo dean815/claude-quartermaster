@@ -51,6 +51,8 @@ const settings = (path: string, body: Partial<SettingsFile> = {}): SettingsFile 
   ...body,
 });
 
+// Duplicated on purpose (DEA-137): this copy feeds the fails-open allowlist sweep
+// below, whose control is the per-file edit cost -- do not point it at ./factories.ts.
 const project = (path: string, body: Partial<ProjectRecord> = {}): ProjectRecord => ({
   path,
   alive: true,
