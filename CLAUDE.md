@@ -92,6 +92,30 @@ absent, and all 11 findings today rest on the name match. `serviceOf` strips
 only by that suffix; checked across the 145 live namespaces, both collapses it causes are
 correct, so no such case exists here yet.
 
+**A recording cannot notice that the thing it recorded changed (DEA-118).** The
+differential suite replays a captured `claude plugin list --json` in CI, which catches
+our regressions and never theirs — a recording agrees with itself forever. `qm oracle`
+re-asks the live binary weekly. Three things fall out of "silent when they agree".
+*Silence is not evidence of health*, so every run overwrites
+`~/.local/state/claude-quartermaster/oracle-run.json` and `--status` reads it; an
+all-clear line or a heartbeat issue was rejected because output nobody needs is output
+nobody reads, and the divergence line has to survive being skimmed. *Zero mismatches has
+two causes*, so a sweep where projects existed and none answered reports and exits 2
+rather than passing — the DEA-127 defect one layer out. And *the dedupe key is the exact
+set of diverging pairs*: keying on "diverged at all" files once and then stays silent
+through every later, different disagreement, leaving an issue whose table is wrong;
+keying on the run dedupes nothing. A different set files a second issue naming the first
+as superseded, which can overstate — and an issue that overstates is recoverable where
+one that silently understates is the whole failure being prevented. Scheduling is a
+launchd plist plus an install script the user runs; `qm` never installs or loads it,
+because that is a live-environment write. Filing is reachable only by handing
+`runOracleCheck` a filer, constructed in exactly one place behind `--file-issue`, so
+there is no flag to forget. The comparison **moved** out of the test rather than being
+copied — `comparePairs` and `askableProjects` now have three callers and one body. The
+day it fails: this covers one of four reverse-engineered behaviours. `plugin details`
+output, the usage counters, and MCP tool-name loading change silently, and every
+user-facing string says so because "the oracle agrees" reads as "drift is handled".
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32

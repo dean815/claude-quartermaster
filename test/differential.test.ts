@@ -17,14 +17,27 @@
  *
  * Replay never skips. A missing, empty, or degenerate fixture fails, because a gate
  * that quietly declines to run is precisely the defect this arrangement removes.
+ *
+ * The comparison itself moved to `src/oracle.ts` for DEA-118, which runs it a third way:
+ * on a weekly schedule against the live binary, to catch a Claude Code release changing
+ * the rules underneath a resolver that was reverse-engineered from them. Three callers,
+ * one loop -- a copy per caller is how the copy nobody runs drifts.
  */
 import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
 
 import { loadWorkspace } from '../src/surfaces/read.ts';
-import { resolvePlugin } from '../src/resolve.ts';
+import {
+  askableProjects,
+  comparePairs,
+  describeMismatch,
+  liveOracle,
+  type Comparison,
+  type FirstPartyPlugin,
+  type Mismatch,
+  type OracleCase as Case,
+} from '../src/oracle.ts';
 import type { Workspace, ProjectRecord } from '../src/surfaces/types.ts';
 import {
   FIXTURE_HOME,
@@ -34,81 +47,11 @@ import {
   readManifest,
 } from './fixtures/differential/load.ts';
 
-interface FirstPartyPlugin {
-  id: string;
-  enabled: boolean;
-}
-
-/** One project, plus the first-party opinion of every plugin visible from it. */
-interface Case {
-  project: ProjectRecord;
-  expected: FirstPartyPlugin[];
-}
-
-/**
- * The comparison itself, shared by both modes.
- *
- * Live and replay differ only in where the cases come from. A second copy of this loop
- * would be a second thing to keep in step, and the copy that drifted would be the one
- * nobody runs -- which is the failure this file already had once.
- */
-interface Outcome {
-  compared: number;
-  /**
-   * Pairs each scope actually *won*, counted per scope.
-   *
-   * Two subtleties, both learned by mutation rather than reasoning.
-   *
-   * It has to be per scope rather than one total: a pair decided at user scope agrees
-   * with the oracle even if every line of precedence handling is deleted, so "some
-   * project-ish scope spoke" reads as healthy while one of the two scopes goes entirely
-   * untested. That is exactly what happened -- 19 pairs at `project`, none at `local`,
-   * and demoting `local` below `user` produced no mismatch at all.
-   *
-   * And it counts the *winner*, not every scope that had an opinion. A pair where
-   * `project` is overruled by `local` protects `project` from nothing: break `project`
-   * and that pair still resolves correctly. Demoting `local` produces exactly as many
-   * mismatches as there are pairs `local` won -- 2, matching `manifest.decidedByScope`.
-   * Counting participation instead would report 20 project-scope pairs where only 19
-   * can fail, i.e. it would overstate the fixture's power by precisely the pairs that
-   * cannot detect anything.
-   */
-  decided: { project: number; local: number };
-  mismatches: string[];
-}
-
-function comparePairs(ws: Workspace, cases: Case[]): Outcome {
-  const mismatches: string[] = [];
-  const decided = { project: 0, local: 0 };
-  let compared = 0;
-
-  for (const { project, expected } of cases) {
-    for (const plugin of expected) {
-      const ours = resolvePlugin(ws, project, plugin.id);
-      compared++;
-      const winner = ours.chain.at(-1)?.scope;
-      if (winner === 'project') decided.project++;
-      if (winner === 'local') decided.local++;
-      if (ours.value !== plugin.enabled) {
-        mismatches.push(
-          `${project.path}\n    ${plugin.id}\n` +
-            `      first-party: ${plugin.enabled}\n` +
-            `      resolver:    ${ours.value} (${ours.origin}, chain=[${ours.chain
-              .map((l) => `${l.scope}=${l.value}`)
-              .join(', ')}])`,
-        );
-      }
-    }
-  }
-
-  return { compared, decided, mismatches };
-}
-
-const scopeTally = (d: Outcome['decided']) =>
+const scopeTally = (d: Comparison['decided']) =>
   `decided at project scope: ${d.project}, local scope: ${d.local}`;
 
-const failureMessage = (mismatches: string[]) =>
-  `\n  ${mismatches.length} mismatch(es):\n  ${mismatches.join('\n  ')}`;
+const failureMessage = (mismatches: readonly Mismatch[]) =>
+  `\n  ${mismatches.length} mismatch(es):\n  ${mismatches.map(describeMismatch).join('\n  ')}`;
 
 // --- live -------------------------------------------------------------------
 
@@ -121,20 +64,6 @@ function claudeAvailable(): boolean {
   }
 }
 
-function firstPartyView(cwd: string): FirstPartyPlugin[] | null {
-  try {
-    const out = execFileSync('claude', ['plugin', 'list', '--json'], {
-      cwd,
-      encoding: 'utf8',
-      timeout: 60_000,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    return JSON.parse(out) as FirstPartyPlugin[];
-  } catch {
-    return null;
-  }
-}
-
 const available = claudeAvailable();
 
 describe('resolver matches live `claude plugin list --json`', { skip: !available && 'claude CLI unavailable' }, () => {
@@ -143,11 +72,10 @@ describe('resolver matches live `claude plugin list --json`', { skip: !available
 
   before(() => {
     ws = loadWorkspace();
-    // Only directories that still exist can be asked for a first-party opinion.
-    // Worktrees are skipped: they inherit their parent's settings by a different path.
-    live = ws.projects.filter(
-      (p) => p.alive && existsSync(p.path) && !p.path.includes('/worktrees/'),
-    );
+    // Which projects can be asked is `askableProjects`, shared with the scheduled check
+    // so both compare the same population -- a job whose green covers a different set
+    // from CI's green is two checks pretending to be one.
+    live = askableProjects(ws);
   });
 
   test('every (plugin, project) pair agrees', (t) => {
@@ -160,7 +88,7 @@ describe('resolver matches live `claude plugin list --json`', { skip: !available
     const cases: Case[] = [];
     let unreadable = 0;
     for (const project of live) {
-      const expected = firstPartyView(project.path);
+      const expected = liveOracle(project.path);
       if (!expected) {
         unreadable++;
         continue;

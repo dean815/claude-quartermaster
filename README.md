@@ -18,6 +18,7 @@ qm cost           # what your baseline context actually costs
 qm effect         # what toggling each extension needs: a reload, or a restart
 qm baseline       # record today's findings
 qm audit --drift  # what changed since
+qm oracle         # re-ask the live binary whether the resolver is still right
 ```
 
 ---
@@ -191,6 +192,24 @@ working directory. **924 (plugin, project) pairs across 22 projects, zero mismat
 > three scopes. Synthetic fixtures close the gap, and mutation testing confirms it:
 > removing local-scope handling now fails 6 tests.
 
+That gate runs two ways — live where the CLI exists, and against a recorded fixture
+everywhere. Both catch **our** regressions. Neither can catch **theirs**: a recording
+agrees with itself forever, so a green replay only proves the resolver still matches the
+release the fixture was captured from.
+
+`qm oracle` is the other half. It re-asks the live binary on a weekly schedule
+(`scripts/install-oracle-schedule.sh` installs a launchd agent; `qm` never installs,
+loads, or writes one — that would be a live-environment write). It **prints nothing when
+the answers still match**, and files a single Linear issue when they don't, deduplicated
+on exactly which pairs disagree. Because silence is the healthy signal, a silent job and
+a dead one look identical — so every run leaves a timestamp behind and `qm oracle
+--status` is how you ask which one you have.
+
+> **⚙︎ Note —** It checks **one** of four reverse-engineered behaviours: the
+> per-directory `enabled` resolution. `claude plugin details` output, the usage-counter
+> semantics, and MCP tool-name loading can all change without this noticing. "The oracle
+> agrees" is not "drift is handled," and every place this reports says so.
+
 ### Not yet
 
 No writes. The tool reads, models, and reports.
@@ -341,8 +360,10 @@ against `**/.claude/settings*.json`** that flags redundant entries as they're wr
 surfaces/  →  resolve  →  detect  →  delegate  →  cli
 (8 readers)   (value ×    (10 pure   (/doctor,    (audit, cost,
               origin)     functions)  proj-opt)    baseline, drift)
-                   ↑
-              cost/ (transcript measurement, plugin details, aggregation)
+                   ↑            ↑
+                   |       cost/ (transcript measurement, plugin details, aggregation)
+              oracle (the live-vs-resolver comparison, shared by the differential
+                      suite and the weekly scheduled check)
 ```
 
 TypeScript + Node, ESM, zero runtime dependencies. Tests run on `node:test` against a
