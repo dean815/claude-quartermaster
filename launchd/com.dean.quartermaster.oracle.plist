@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The weekly live-oracle check (DEA-118).
+
+  A template, not a finished agent: launchd does not expand $HOME or any other variable
+  inside these paths, so every one of them has to be absolute and this file cannot know
+  where the repo was cloned. `scripts/install-oracle-schedule.sh` substitutes the three
+  __TOKENS__ and writes the result to ~/Library/LaunchAgents.
+
+  `qm` itself never installs, loads, or unloads this. Scheduling the check is a write to
+  the live environment, and a tool whose whole promise is that it does not make those
+  cannot make an exception for its own convenience. Running the installer is the user's
+  decision, taken once, in the open.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.dean.quartermaster.oracle</string>
+
+  <!-- Source, via type stripping, so the schedule never runs a stale dist/ build. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>--experimental-strip-types</string>
+    <string>__REPO__/src/cli.ts</string>
+    <string>oracle</string>
+    <string>--file-issue</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+
+  <!-- Sunday 09:10 local. Weekly is the cadence: a full sweep spawns `claude` once per
+       registered project and takes ~25s, and the thing being watched is a Claude Code
+       release, which is not a daily event. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>0</integer>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>10</integer>
+  </dict>
+
+  <!-- Not at load. Installing the schedule should not itself run a sweep — the installer
+       tells you to run `qm oracle` by hand once, where you can see what it says. -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <!-- The team to file into, and a path to a chmod 600 file holding the API token.
+       The token is deliberately not an EnvironmentVariables value: this plist lands in
+       ~/Library/LaunchAgents at mode 644, so a key written here is readable by every
+       process the user runs. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>QM_LINEAR_TEAM</key>
+    <string>__TEAM__</string>
+    <key>LINEAR_API_KEY_FILE</key>
+    <string>__TOKEN_FILE__</string>
+  </dict>
+
+  <!-- A healthy run writes nothing to either of these. That is the point, and it is why
+       `qm oracle --status` exists: the log staying empty is also what a job that never
+       fired looks like. -->
+  <key>StandardOutPath</key>
+  <string>__STATE__/oracle.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__STATE__/oracle.err.log</string>
+</dict>
+</plist>

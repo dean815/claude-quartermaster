@@ -42,6 +42,14 @@ import {
   tally,
   type EffectReport,
 } from './effect.ts';
+import {
+  liveOracle,
+  readRunState,
+  runOracleCheck,
+  statusReport,
+  type IssueFiler,
+} from './oracle.ts';
+import { linearConfigFromEnv, linearFiler } from './linear.ts';
 import { buildSkillCatalog, allSkillIds } from './skills.ts';
 import { buildMcpCatalog, allMcpServerNames } from './mcp.ts';
 import { allPluginIds } from './resolve.ts';
@@ -71,6 +79,10 @@ interface Options {
   full: boolean;
   github: boolean;
   drift: boolean;
+  /** `qm oracle --status`: read the last run's record instead of making a new one. */
+  status: boolean;
+  /** `qm oracle --file-issue`: the one flag in this tool with an outward side effect. */
+  fileIssue: boolean;
   project: string | null;
   port: number;
 }
@@ -106,6 +118,8 @@ function parseArgs(argv: string[]): { command: string; opts: Options } {
       full: argv.includes('--full'),
       github: !argv.includes('--no-github'),
       drift: argv.includes('--drift'),
+      status: argv.includes('--status'),
+      fileIssue: argv.includes('--file-issue'),
       project: projectIdx === -1 ? null : (argv[projectIdx] ?? null),
       port: parsePort(portIdx === -1 ? null : (argv[portIdx] ?? null)),
     },
@@ -468,9 +482,18 @@ function effectReportFor(ctx: AuditContext): EffectReport {
   });
 }
 
-function baselinePath(): string {
+function stateDir(): string {
   const base = process.env['XDG_STATE_HOME'] ?? join(homedir(), '.local', 'state');
-  return join(base, 'claude-quartermaster', 'baseline.json');
+  return join(base, 'claude-quartermaster');
+}
+
+function baselinePath(): string {
+  return join(stateDir(), 'baseline.json');
+}
+
+/** Beside the baseline, for the same reason: it is this tool's state, not the user's. */
+function oracleStatePath(): string {
+  return join(stateDir(), 'oracle-run.json');
 }
 
 /** Drift is the diff, so only what moved is worth printing. */
@@ -495,6 +518,74 @@ function printDrift(
   console.log(
     `\n${DIM}${drift.appeared.length} new · ${drift.resolved.length} resolved · ${drift.unchanged} unchanged${RESET}\n`,
   );
+}
+
+/**
+ * `qm oracle` -- ask the live binary the question the resolver answers, and say nothing
+ * when the answers still match (DEA-118).
+ *
+ * A distinct subcommand rather than a flag on `qm audit`, for two reasons. It is the one
+ * path in this tool that can file an issue, and something that reaches outward must not
+ * be one typo away from the command people run daily. And it needs none of what `audit`
+ * builds -- no transcript measurement, no plugin pricing -- so it loads the workspace
+ * itself and skips `buildContext` entirely.
+ *
+ * Not named `drift-check`: `qm audit --drift` already exists and means the diff against
+ * a saved baseline of *our* findings. This is the opposite direction -- whether the
+ * first-party behaviour our findings rest on has moved underneath them -- and two
+ * neighbouring things both called drift is how someone runs the wrong one.
+ *
+ * Exit codes, because a scheduled job is read by machines: 0 agreed, 1 diverging, 2 the
+ * check itself failed.
+ */
+async function oracle(opts: Options): Promise<void> {
+  const statePath = oracleStatePath();
+
+  if (opts.status) {
+    console.log(statusReport(readRunState(statePath), new Date(), statePath));
+    return;
+  }
+
+  // Constructed here and nowhere else. Dry run is not a mode this falls back to on
+  // error -- an unconfigured `--file-issue` stops, because a scheduled job that quietly
+  // downgrades to filing nothing is the silent failure this whole command is about.
+  let file: IssueFiler | undefined;
+  if (opts.fileIssue) {
+    const cfg = linearConfigFromEnv(process.env);
+    if ('error' in cfg) {
+      console.error(`qm: --file-issue cannot file — ${cfg.error}`);
+      process.exit(2);
+    }
+    file = linearFiler(cfg);
+  }
+
+  const outcome = await runOracleCheck({
+    ws: loadWorkspace(),
+    read: liveOracle,
+    statePath,
+    now: new Date(),
+    ...(file ? { file } : {}),
+  });
+
+  if (outcome.broken) {
+    console.error(outcome.report);
+    process.exitCode = 2;
+    return;
+  }
+
+  // Silence is the answer when they agree. No all-clear line, no heartbeat: the run is
+  // recorded in `statePath` and `qm oracle --status` is how you ask.
+  if (!outcome.report) return;
+
+  console.log(outcome.report);
+  if (outcome.draft && !file) {
+    console.log(
+      `\n  Dry run — nothing was filed. Pass --file-issue to open this in Linear:\n` +
+        `    ${outcome.draft.title}`,
+    );
+  }
+  if (outcome.filed) console.log(`\n  Filed ${outcome.filed.identifier} — ${outcome.filed.url}`);
+  process.exitCode = 1;
 }
 
 /**
@@ -551,14 +642,30 @@ ${BOLD}qm${RESET} -- audit which Claude Code extensions load where, and what the
   qm effect   [--json]        what toggling each extension needs: reload, or a restart
   qm baseline [--full]        record today's findings, so --drift can diff against them
   qm serve    [--port <n>]    serve the grid on 127.0.0.1 until Ctrl-C
+  qm oracle   [--status] [--file-issue]
 
   --full    also scan git hygiene and project layout via project-optimizer
   --no-github  skip GitHub checks in --full (for offline use or no gh CLI)
+
+\`qm oracle\` re-asks \`claude plugin list --json\` in every registered project and compares
+it against the resolver, which was built from reverse-engineered rules. It prints nothing
+when they agree — \`--status\` reads the last run, which is how you tell a quiet check from
+a dead one. \`--file-issue\` opens a Linear issue for a divergence and is the only thing in
+this tool that reaches outside the machine; without it the run is a dry run. It checks the
+per-directory \`enabled\` resolution and nothing else. Schedule it weekly with
+scripts/install-oracle-schedule.sh.
 
 Read-only: qm writes no Claude Code config. The first-party \`claude\` subcommands it
 invokes do create ~/.claude.json on a machine that has none, and the run says so when
 that happens.
 `);
+    return;
+  }
+
+  // Before `buildContext`, which measures every transcript in the workspace. This
+  // command reads none of that, and a weekly job should not pay for it.
+  if (command === 'oracle') {
+    await oracle(opts);
     return;
   }
 
