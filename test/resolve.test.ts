@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import { resolvePlugin, resolveSkill, resolveMcpServer, allPluginIds } from '../src/resolve.ts';
 import type { SettingsFile, ProjectRecord, Workspace, ClaudeJson } from '../src/surfaces/types.ts';
 import type { PluginInventory } from '../src/inventory.ts';
+import { project } from './factories.ts';
 
 const inventory = (id: string): PluginInventory => ({
   id,
@@ -27,22 +28,6 @@ const inventory = (id: string): PluginInventory => ({
 
 function settings(path: string, body: Partial<SettingsFile> = {}): SettingsFile {
   return { path, rest: {}, ...body };
-}
-
-function project(path: string, body: Partial<ProjectRecord> = {}): ProjectRecord {
-  return {
-    path,
-    alive: true,
-    registered: true,
-    settings: null,
-    localSettings: null,
-    mcpJson: null,
-    entry: null,
-    rules: [],
-    memory: null,
-    claudeMd: null,
-    ...body,
-  };
 }
 
 function claudeJson(body: Partial<ClaudeJson> = {}): ClaudeJson {
