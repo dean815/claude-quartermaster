@@ -35,7 +35,18 @@ import {
   readBaseline,
 } from './standard.ts';
 import { startServer, DEFAULT_PORT } from './view/server.ts';
+import {
+  buildDeferralIndex,
+  candidateChanges,
+  classifyAll,
+  tally,
+  type EffectReport,
+} from './effect.ts';
+import { buildSkillCatalog, allSkillIds } from './skills.ts';
+import { buildMcpCatalog, allMcpServerNames } from './mcp.ts';
+import { allPluginIds } from './resolve.ts';
 import type { TranscriptMeasurement } from './cost/transcript.ts';
+import type { SettingsFile } from './surfaces/types.ts';
 
 const BOLD = '[1m';
 const DIM = '[2m';
@@ -373,6 +384,90 @@ function printCost(ctx: AuditContext): void {
   console.log();
 }
 
+/**
+ * `qm effect` -- what each togglable extension would cost to switch, before anyone
+ * switches it.
+ *
+ * A subcommand rather than a line in `qm audit`, and read-only like every other:
+ * nothing here is a *finding*. A finding says the configuration is wrong, and "toggling
+ * this skill needs /reload-plugins" says nothing is wrong at all. Folding it into the
+ * audit would put ~500 rows of routine answers beside a dozen problems and bury them.
+ *
+ * It stages nothing and writes nothing. The changes classified are hypothetical -- see
+ * `candidateChanges` -- because Phase 1b has no apply path to stage a real one.
+ */
+function printEffects(ctx: AuditContext): void {
+  const report = effectReportFor(ctx);
+  const rows = tally(report);
+
+  console.log(
+    `\n${BOLD}pending-change effects${RESET} ${DIM}· ${report.classifications.length} togglable ` +
+      `entries · deferral measured from ${report.measuredSessions} of ${report.totalSessions} sessions${RESET}\n`,
+  );
+
+  console.log(`  ${DIM}${'change kind'.padEnd(14)}${'reload'.padStart(8)}${'restart'.padStart(9)}${'unknown'.padStart(9)}${RESET}`);
+  for (const r of rows) {
+    console.log(
+      `  ${r.kind.padEnd(14)}${String(r.reload).padStart(8)}${String(r.restart).padStart(9)}${String(r.unknown).padStart(9)}`,
+    );
+  }
+
+  const restarts = report.classifications.filter((c) => c.effect === 'restart');
+  console.log(`\n  ${BOLD}needs a restart${RESET}`);
+  if (!restarts.length) {
+    console.log(`    ${DIM}nothing${RESET}`);
+  }
+  for (const c of restarts) {
+    console.log(`    ${c.reason}`);
+    for (const e of c.evidence.slice(0, 6)) console.log(`      ${DIM}·${RESET} ${e}`);
+  }
+
+  const unknowns = report.classifications.filter((c) => c.effect === 'unknown');
+  console.log(`\n  ${BOLD}could not tell${RESET} ${DIM}(${unknowns.length})${RESET}`);
+  console.log(
+    `    ${DIM}Nothing records tools that loaded eagerly, so an unmeasured server is${RESET}\n` +
+      `    ${DIM}"could not tell", never "restart". Open a session in the project to measure it.${RESET}`,
+  );
+  for (const c of unknowns.slice(0, 8)) {
+    const id = c.change.kind === 'mcp-server' ? c.change.name : 'id' in c.change ? c.change.id : '';
+    console.log(`    ${c.change.kind.padEnd(11)} ${id}`);
+  }
+  if (unknowns.length > 8) console.log(`    ${DIM}…and ${unknowns.length - 8} more${RESET}`);
+  console.log();
+}
+
+/** The workspace's whole hypothetical change set, classified. */
+function effectReportFor(ctx: AuditContext): EffectReport {
+  const denyRules: Array<{ rules: readonly string[]; source: string; project?: string }> = [];
+  // Deduplicated by path, for the reason `contributingFiles` gives: `~` is a registered
+  // project whose `.claude/settings.json` *is* `~/.claude/settings.json`, so one file
+  // arrives twice and the tally counted its rules twice.
+  const seen = new Set<string>();
+  const addDeny = (file: SettingsFile | null, project?: string) => {
+    const rules = file?.permissions?.deny;
+    if (!file || !rules?.length || seen.has(file.path)) return;
+    seen.add(file.path);
+    denyRules.push({ rules, source: file.path, ...(project ? { project } : {}) });
+  };
+  addDeny(ctx.ws.userSettings);
+  for (const p of ctx.ws.projects) {
+    addDeny(p.settings, p.path);
+    addDeny(p.localSettings, p.path);
+  }
+
+  const changes = candidateChanges({
+    skills: allSkillIds(buildSkillCatalog(ctx.ws, ctx.measurements, ctx.inventories)),
+    plugins: allPluginIds(ctx.ws, ctx.inventories),
+    mcpServers: allMcpServerNames(buildMcpCatalog(ctx.ws, ctx.inventories)),
+    denyRules,
+  });
+
+  return classifyAll(changes, {
+    index: buildDeferralIndex(ctx.measurements),
+    inventories: ctx.inventories,
+  });
+}
+
 function baselinePath(): string {
   const base = process.env['XDG_STATE_HOME'] ?? join(homedir(), '.local', 'state');
   return join(base, 'claude-quartermaster', 'baseline.json');
@@ -453,6 +548,7 @@ ${BOLD}qm${RESET} -- audit which Claude Code extensions load where, and what the
 
   qm audit    [--json] [--full] [--project <path>] [--drift] [--no-plugin-cost]
   qm cost     [--json] [--project <path>]
+  qm effect   [--json]        what toggling each extension needs: reload, or a restart
   qm baseline [--full]        record today's findings, so --drift can diff against them
   qm serve    [--port <n>]    serve the grid on 127.0.0.1 until Ctrl-C
 
@@ -478,6 +574,15 @@ that happens.
       console.log(JSON.stringify(profileFrom(ctx.measurements), null, 2));
     } else {
       printCost(ctx);
+    }
+    return;
+  }
+
+  if (command === 'effect') {
+    if (opts.json) {
+      console.log(JSON.stringify(effectReportFor(ctx), null, 2));
+    } else {
+      printEffects(ctx);
     }
     return;
   }

@@ -494,23 +494,30 @@ export function noPathScopedRules(ctx: AuditContext): Finding[] {
 }
 
 /**
+ * Does this deny rule remove a tool definition from the system prompt?
+ *
+ * A bare name does, and that invalidates the prompt cache. A scoped rule like
+ * `Bash(rm *)` does not. An `mcp__<server>__<tool>` rule already names exactly one tool
+ * -- MCP tools have no `Tool(pattern)` form to scope down to, so there is nothing to
+ * fix. Flagging them told the user to "scope" the rules that stop Claude placing trades.
+ *
+ * Exported because `effect.ts` asks the same question of a *staged* rule that this asks
+ * of a written one, and two copies of the predicate drift the moment either is edited
+ * -- the reasoning that keeps the Blocking/Gap/Polish rubric in one place.
+ */
+export function isBareDenyRule(rule: string): boolean {
+  return !rule.includes('(') && rule.trim() !== '' && !rule.startsWith('mcp__');
+}
+
+/**
  * A bare tool name in a deny rule removes the tool from the system prompt and
  * invalidates the prompt cache. A scoped rule like `Bash(rm *)` does not.
  */
 export function bareDenyRules(ctx: AuditContext): Finding[] {
   const out: Finding[] = [];
 
-  /**
-   * An `mcp__<server>__<tool>` rule already names exactly one tool -- MCP tools have
-   * no `Tool(pattern)` form to scope down to, so there is nothing to fix. Flagging
-   * them told the user to "scope" the rules that stop Claude placing trades.
-   */
-  const isFullyQualifiedMcpTool = (rule: string) => rule.startsWith('mcp__');
-
   const check = (path: string, deny: string[] | undefined, project?: string) => {
-    const bare = (deny ?? []).filter(
-      (r) => !r.includes('(') && r.trim() !== '' && !isFullyQualifiedMcpTool(r),
-    );
+    const bare = (deny ?? []).filter(isBareDenyRule);
     if (!bare.length) return;
     out.push({
       detector: 'bare-deny-rules',
