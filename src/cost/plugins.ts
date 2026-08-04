@@ -14,10 +14,8 @@
  * schemas. Tool *names* still load at startup, and on one measured session they were
  * 34,593 chars across 39 servers. `transcript.ts` covers what this cannot.
  */
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { claudeCli } from '../disclose.ts';
+import { readManifestName } from '../inventory.ts';
 
 export interface ComponentCost {
   name: string;
@@ -180,24 +178,14 @@ export function parsePluginDetails(id: string, text: string): PluginCost {
  * Surveyed across 42 installed plugins: 39 match, 1 differs in case, 2 ship no
  * manifest. Neither source covers the set alone, so the manifest wins where it exists
  * and the id prefix is the fallback.
+ *
+ * The read itself lives in `inventory.ts` (DEA-145), which needs the same fact and needs
+ * the *unreadable* case to stay distinguishable. Collapsing it into a string is right
+ * here and only here: this value becomes an argv entry, and `plugin details` has to be
+ * asked something.
  */
 export function pluginLookupName(id: string, installPath: string | null | undefined): string {
-  const fallback = id.split('@')[0]!;
-  if (!installPath) return fallback;
-
-  try {
-    const manifest = JSON.parse(
-      readFileSync(join(installPath, '.claude-plugin', 'plugin.json'), 'utf8'),
-    ) as { name?: unknown };
-    // Manifest contents are third-party input and this value becomes an argv entry.
-    // Anything that is not a plain non-empty string is not worth trusting.
-    return typeof manifest.name === 'string' && manifest.name.trim()
-      ? manifest.name
-      : fallback;
-  } catch {
-    // Missing or malformed manifest -- plenty of plugins ship without one.
-    return fallback;
-  }
+  return readManifestName(installPath) ?? id.split('@')[0]!;
 }
 
 export interface PluginCostOptions {

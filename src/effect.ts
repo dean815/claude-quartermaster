@@ -215,12 +215,20 @@ export function worstEffect(effects: readonly Effect[]): Effect {
  * no catalog entry -- which is "could not tell" and not "provides none". An empty array
  * is the positive claim: a source enumerated this plugin's components and listed no MCP
  * server among them.
+ *
+ * The keys are spelled with the plugin's manifest name where one could be read, and with
+ * the marketplace id where none could (DEA-145). No second return value says which,
+ * because the caller passed the whole `PluginInventory` in and `manifestName === null` is
+ * that answer at the source -- `McpEntry.keyBasis` exists only because a *row* has no
+ * inventory left to consult. What it changes here is a verdict: `notion@...` keyed as
+ * `plugin:notion:notion` joined to a namespace no session published and classified
+ * `unknown`; keyed as `plugin:Notion:notion` it is `observed-deferred` and `reload`.
  */
 export function pluginServerKeys(inv: PluginInventory | undefined): string[] | null {
   if (!inv || !inv.enumerated.length) return null;
   const out = new Set<string>();
   for (const src of inv.enumerated) {
-    for (const name of src.mcpServerNames) out.add(pluginServerKey(inv.id, name));
+    for (const name of src.mcpServerNames) out.add(pluginServerKey(inv.id, name, inv.manifestName));
   }
   return [...out].sort();
 }

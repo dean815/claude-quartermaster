@@ -13,7 +13,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -23,6 +23,7 @@ import {
   countByPresence,
   pluginServerKey,
   type McpCatalog,
+  type PluginKeyBasis,
 } from '../src/mcp.ts';
 import { catalogEnumerations, readInventories } from '../src/inventory.ts';
 import { resolvePlugin } from '../src/resolve.ts';
@@ -64,13 +65,24 @@ function workspace(body: Partial<Workspace> = {}): Workspace {
   };
 }
 
-/** A plugin whose catalog entry declares MCP servers and nothing else. */
-function inventory(id: string, mcpServerNames: string[]): PluginInventory {
+/**
+ * A plugin whose catalog entry declares MCP servers and nothing else.
+ *
+ * `manifestName` defaults to `null` -- "no manifest could be read" -- because that is
+ * what an install path pointing at nothing yields, and it keeps every pre-DEA-145 case
+ * below asserting the same key it always did. Pass a name to get the other branch.
+ */
+function inventory(
+  id: string,
+  mcpServerNames: string[],
+  manifestName: string | null = null,
+): PluginInventory {
   return {
     id,
     installPath: `/plugins/${id}`,
     version: '1',
     sha: null,
+    manifestName,
     installed: [],
     enumerated: [
       {
@@ -170,6 +182,101 @@ describe('the sources are read off disk', () => {
     assert.deepEqual(airtable.names, ['airtable-cli']);
     assert.deepEqual(context7.names, []);
   });
+
+  /**
+   * The third source, and the one DEA-145 added: `<installPath>/.claude-plugin/plugin.json`.
+   *
+   * Read through `readInventories` off a real directory rather than through a hand-built
+   * `PluginInventory`, because the defect being fixed was that nothing ever opened this
+   * file. A factory setting `manifestName` by hand tests the plumbing downstream of the
+   * read and would have passed on every day the bug existed.
+   *
+   * The install paths are the fixtures `cost-plugins.test.ts` already reads for
+   * `pluginLookupName` -- deliberately the same four directories, since both callers now
+   * share one reader and a manifest shape that starts fooling one must not be able to
+   * keep fooling only the other.
+   */
+  test('readInventories reads each plugin manifest name off disk', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'qm-mcp-'));
+    try {
+      const at = (name: string) => join(import.meta.dirname, 'fixtures', 'plugin-manifests', name);
+      mkdirSync(join(dir, '.claude', 'plugins'), { recursive: true });
+      writeFileSync(
+        join(dir, '.claude', 'plugins', 'installed_plugins.json'),
+        JSON.stringify({
+          plugins: {
+            'notion@claude-plugins-official': [{ installPath: at('cased'), version: '0.1.0' }],
+            'humanizer@agent-toolkit': [{ installPath: at('nomanifest'), version: '1' }],
+            'broken@m': [{ installPath: at('malformed'), version: '1' }],
+            'anon@m': [{ installPath: at('nameless'), version: '1' }],
+            'gone@m': [{ installPath: join(dir, 'uninstalled'), version: '1' }],
+          },
+        }),
+      );
+
+      const inv = readInventories(dir);
+      assert.equal(inv.get('notion@claude-plugins-official')!.manifestName, 'Notion');
+
+      // Four ways of failing to read a name, all of which must stay "could not tell".
+      // An id-shaped string here would be a guess wearing a reading's clothes, and no
+      // consumer downstream could ever tell the difference again.
+      for (const id of ['humanizer@agent-toolkit', 'broken@m', 'anon@m', 'gone@m']) {
+        assert.equal(
+          inv.get(id)!.manifestName,
+          null,
+          `${id}: an unreadable manifest must not resolve to the marketplace id here`,
+        );
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * The two disk sources meeting: a manifest that disagrees with the id, and a catalog
+   * that declares the server, reaching the axis as one row.
+   *
+   * `plugin:Notion:notion` is pinned as a literal here for the third time in this file
+   * and for the same reason each time -- it is Claude Code's spelling, not ours.
+   */
+  test('and a plugin whose manifest disagrees with its id gets the manifest row', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'qm-mcp-'));
+    try {
+      const id = 'notion@claude-plugins-official';
+      const plugins = join(dir, '.claude', 'plugins');
+      mkdirSync(plugins, { recursive: true });
+      writeFileSync(
+        join(plugins, 'installed_plugins.json'),
+        JSON.stringify({
+          plugins: {
+            [id]: [
+              {
+                installPath: join(import.meta.dirname, 'fixtures', 'plugin-manifests', 'cased'),
+                version: '0.1.0',
+              },
+            ],
+          },
+        }),
+      );
+      writeFileSync(
+        join(plugins, 'plugin-catalog-cache.json'),
+        JSON.stringify({ catalog: { plugins: { [id]: { components: { mcpServers: ['notion'] } } } } }),
+      );
+
+      const ws = workspace({
+        userSettings: settings('/home/.claude/settings.json', { enabledPlugins: { [id]: true } }),
+        projects: [project('/p')],
+      });
+      const catalog = buildMcpCatalog(ws, readInventories(dir));
+
+      assert.deepEqual(allMcpServerNames(catalog), ['plugin:Notion:notion']);
+      const entry = entryOf(catalog, 'plugin:Notion:notion')!;
+      assert.equal(entry.fromPlugin, id);
+      assert.equal(entry.keyBasis, 'manifest');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -247,19 +354,57 @@ describe('the axis is not the deny-list', () => {
  * on both sides of the comparison, which agrees with itself whatever it does (DEA-133).
  */
 describe('the plugin server key', () => {
-  test('drops the marketplace and keeps the plugin short name', () => {
-    assert.equal(pluginServerKey('figma@claude-plugins-official', 'figma'), 'plugin:figma:figma');
+  test('drops the marketplace and keeps the plugin manifest name', () => {
     assert.equal(
-      pluginServerKey('airtable@claude-plugins-official', 'airtable'),
+      pluginServerKey('figma@claude-plugins-official', 'figma', 'figma'),
+      'plugin:figma:figma',
+    );
+    assert.equal(
+      pluginServerKey('airtable@claude-plugins-official', 'airtable', 'airtable'),
       'plugin:airtable:airtable',
     );
     // Plugin name and server name differ, and the key carries both.
     assert.equal(
-      pluginServerKey('chrome-devtools-mcp@claude-plugins-official', 'chrome-devtools'),
+      pluginServerKey('chrome-devtools-mcp@claude-plugins-official', 'chrome-devtools', 'chrome-devtools-mcp'),
       'plugin:chrome-devtools-mcp:chrome-devtools',
     );
     // A local plugin with no marketplace half is not mangled into one.
-    assert.equal(pluginServerKey('local-plugin', 'srv'), 'plugin:local-plugin:srv');
+    assert.equal(pluginServerKey('local-plugin', 'srv', 'local-plugin'), 'plugin:local-plugin:srv');
+  });
+
+  /**
+   * The case the marketplace id gets wrong, and the reason this function takes a third
+   * argument (DEA-145).
+   *
+   * `plugin:Notion:notion` is a literal for the same reason every other key here is, and
+   * it is a stronger one: it is not merely the shape a deny-list entry takes, it is a
+   * string counted 389 times inside the `needsAuthMcpServers` arrays Claude Code writes
+   * into its own transcripts, against 0 for `plugin:notion:notion`. Deriving it from
+   * `pluginServerKey` would put the function on both sides of the comparison.
+   */
+  test('and the manifest name wins where it differs from the id', () => {
+    assert.equal(
+      pluginServerKey('notion@claude-plugins-official', 'notion', 'Notion'),
+      'plugin:Notion:notion',
+    );
+    // The neighbouring plugin that provides a server of the same name. Both spellings
+    // appear in the same field, which is what says the middle segment is the plugin and
+    // the last one is the server.
+    assert.equal(
+      pluginServerKey('productivity@claude-plugins-official', 'notion', 'productivity'),
+      'plugin:productivity:notion',
+    );
+  });
+
+  test('and an unreadable manifest falls back to the id without claiming it was read', () => {
+    // 2 of the 42 plugins installed on the measured machine ship no readable manifest.
+    assert.equal(pluginServerKey('humanizer@agent-toolkit', 'srv', null), 'plugin:humanizer:srv');
+    // The fallback key is indistinguishable from a confirmed one by inspection -- which
+    // is the whole reason `McpEntry.keyBasis` exists rather than a naming convention.
+    assert.equal(
+      pluginServerKey('humanizer@agent-toolkit', 'srv', null),
+      pluginServerKey('humanizer@agent-toolkit', 'srv', 'humanizer'),
+    );
   });
 
   test('a plugin-provided server and its deny-list entry are one row, not two', () => {
@@ -404,12 +549,17 @@ interface Scenario {
  * `bravo` explicitly, `charlie` by never being mentioned. Both spellings of "off" are
  * here because a filter written as `enabledPlugins[id] === false` catches one and misses
  * the other.
+ *
+ * `delta` is `notion`'s shape: enabled, and carrying a manifest name its marketplace id
+ * does not predict. `alpha` is the other live case, an install with no readable manifest
+ * at all. One of each is the minimum that makes the two DEA-145 mutations below
+ * distinguishable from each other.
  */
 function scenario(): Scenario {
   return {
     ws: workspace({
       userSettings: settings('/home/.claude/settings.json', {
-        enabledPlugins: { 'alpha@m': true, 'bravo@m': false },
+        enabledPlugins: { 'alpha@m': true, 'bravo@m': false, 'delta@m': true },
       }),
       projects: [
         project('/p', {
@@ -426,6 +576,7 @@ function scenario(): Scenario {
       ['alpha@m', inventory('alpha@m', ['alpha'])],
       ['bravo@m', inventory('bravo@m', ['bravo'])],
       ['charlie@m', inventory('charlie@m', ['charlie'])],
+      ['delta@m', inventory('delta@m', ['delta'], 'Delta')],
     ]),
   };
 }
@@ -441,9 +592,25 @@ function scenario(): Scenario {
 const EXPECTED_AXIS = [
   'claude.ai Gmail',
   'legacy-srv',
+  'plugin:Delta:delta',
   'plugin:alpha:alpha',
   'proj-srv',
   'user-srv',
+];
+
+/**
+ * How each plugin row's name was arrived at, written out separately.
+ *
+ * A second expectation rather than a richer `EXPECTED_AXIS`, because the axis is the
+ * thing that *cannot* see this: `plugin:alpha:alpha` reads identically whether the name
+ * was read from a manifest or assumed from the id, so a gate over names alone passes a
+ * build that has stopped telling the two apart. That is the argument
+ * `duplicateAccessPaths` makes for printing `basis` beside a finding rather than folding
+ * it into severity.
+ */
+const EXPECTED_BASIS: ReadonlyArray<readonly [string, PluginKeyBasis]> = [
+  ['plugin:Delta:delta', 'manifest'],
+  ['plugin:alpha:alpha', 'marketplace-id'],
 ];
 
 /** Every row the expectation and the axis disagree about, named. */
@@ -457,10 +624,39 @@ function diff(actual: readonly string[]): string[] {
   return out;
 }
 
+/** Every plugin row whose name came from somewhere the expectation did not say. */
+function basisDiff(catalog: McpCatalog): string[] {
+  const out: string[] = [];
+  const got = new Map(
+    catalog.entries.filter((e) => e.fromPlugin !== null).map((e) => [e.name, e.keyBasis]),
+  );
+  for (const [name, basis] of EXPECTED_BASIS) {
+    const seen = got.get(name);
+    if (seen === undefined) out.push(`no plugin row ${name}`);
+    else if (seen !== basis) out.push(`${name} spelled from ${seen}, expected ${basis}`);
+  }
+  for (const [name, basis] of got) {
+    if (!EXPECTED_BASIS.some(([n]) => n === name)) {
+      out.push(`extra plugin row ${name} (${basis})`);
+    }
+  }
+  return out;
+}
+
+/** Both halves of the gate: what the rows are called, and where each name came from. */
+function gateFailures(s: Scenario): string[] {
+  const catalog = buildMcpCatalog(s.ws, s.inventories);
+  return [...diff(allMcpServerNames(catalog)), ...basisDiff(catalog)];
+}
+
 describe('every source reaches the axis', () => {
   test('and the axis is exactly what the sources name', () => {
     const { ws, inventories } = scenario();
     assert.deepEqual(diff(axisOf(ws, inventories)), []);
+  });
+
+  test('and each plugin row records whether its name was read or assumed', () => {
+    assert.deepEqual(basisDiff(buildMcpCatalog(scenario().ws, scenario().inventories)), []);
   });
 
   /**
@@ -540,6 +736,40 @@ const MUTATIONS: Mutation[] = [
     },
     names: /^(missing row plugin:alpha:alpha|extra row plugin:alpha:alpha@m:alpha)$/,
   },
+  {
+    /**
+     * DEA-145, from the only side a test can reach without editing source: a reader that
+     * opens no manifest and hands back the marketplace id.
+     *
+     * This is the live bug, not a hypothetical -- `notion@claude-plugins-official` ships
+     * `"name": "Notion"`, and the key this produced (`plugin:notion:notion`) appears zero
+     * times in the `needsAuthMcpServers` arrays Claude Code writes, against 389 for
+     * `plugin:Notion:notion`. A Phase 2 write derived from that row would report success
+     * and leave the server loading.
+     */
+    name: 'build the plugin key from the marketplace id',
+    apply: (s) => {
+      for (const inv of s.inventories.values()) inv.manifestName = inv.id.split('@')[0]!;
+    },
+    names: /^(missing row plugin:Delta:delta|extra row plugin:delta:delta)$/,
+  },
+  {
+    /**
+     * The fallback, promoted to a reading -- as if `readManifestName` returned the id
+     * prefix instead of `null` when it could not open the file.
+     *
+     * `diff` reports nothing for this one: the rows are identical, because the fallback
+     * key *is* the id-derived key. Only `basisDiff` can see it, which is the case for
+     * carrying the basis as a field. Left unnoticed it is the `usageCount` mistake --
+     * "couldn't tell" recorded as a confirmed value -- and it disarms every consumer
+     * downstream that would otherwise have known to distrust the key.
+     */
+    name: 'treat an unreadable manifest as a confirmed name',
+    apply: (s) => {
+      for (const inv of s.inventories.values()) inv.manifestName ??= inv.id.split('@')[0]!;
+    },
+    names: /^plugin:alpha:alpha spelled from manifest, expected marketplace-id$/,
+  },
 ];
 
 describe('the gate fails when a source is lost', () => {
@@ -548,7 +778,7 @@ describe('the gate fails when a source is lost', () => {
       const s = scenario();
       mutation.apply(s);
 
-      const failures = diff(axisOf(s.ws, s.inventories));
+      const failures = gateFailures(s);
       assert.ok(
         failures.length > 0,
         `mutation "${mutation.name}" did not fail the gate -- that is a hole in the gate, ` +
@@ -562,10 +792,9 @@ describe('the gate fails when a source is lost', () => {
     });
   }
 
-  /** The positive control the four above are measured against. */
+  /** The positive control the six above are measured against. */
   test('and passes when nothing is lost', () => {
-    const s = scenario();
-    assert.deepEqual(diff(axisOf(s.ws, s.inventories)), []);
+    assert.deepEqual(gateFailures(scenario()), []);
   });
 });
 
@@ -625,18 +854,33 @@ describe('the catalog agrees with the live workspace', () => {
 
     const installed = Object.keys(rawBuilds.plugins ?? {});
     const expected: string[] = [];
+    let fromManifest = 0;
     for (const id of installed) {
       const servers = rawCatalog.catalog?.plugins?.[id]?.components?.mcpServers;
       if (!Array.isArray(servers) || !servers.length) continue;
       // The enabled half comes from the resolver on purpose: it is the claim under test
       // on the *other* axis, and restating plugin precedence here would fork it.
       if (!ws.projects.some((p) => p.alive && resolvePlugin(ws, p, id).value)) continue;
-      for (const s of servers) expected.push(`plugin:${id.split('@')[0]}:${s}`);
+      // The name half is read straight off disk, never through `readManifestName` --
+      // routing it through the reader that feeds `buildMcpCatalog` would put the same
+      // function on both sides of the comparison (DEA-133). This half is Claude Code's
+      // own file layout; the other half is the whole pipeline.
+      const installPath = rawBuilds.plugins[id]?.at(-1)?.installPath;
+      const name = installPath
+        ? rawJson(join(installPath, '.claude-plugin', 'plugin.json'))?.name
+        : null;
+      if (typeof name === 'string' && name) fromManifest++;
+      for (const s of servers) {
+        expected.push(`plugin:${typeof name === 'string' && name ? name : id.split('@')[0]}:${s}`);
+      }
     }
     if (!expected.length) return t.skip('no enabled plugin declares an MCP server here');
 
     assert.deepEqual(expected.filter((n) => !axis.has(n)), []);
-    console.log(`    live: ${expected.length} server(s) from enabled plugins`);
+    console.log(
+      `    live: ${expected.length} server(s) from enabled plugins, ` +
+        `${fromManifest} of those plugins named by their own manifest`,
+    );
   });
 
   test('and a disabled plugin contributes none', (t) => {

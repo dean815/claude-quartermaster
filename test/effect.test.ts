@@ -72,11 +72,18 @@ const unmeasuredSession = (id: string): TranscriptMeasurement => ({
   servers: [],
 });
 
-const inventory = (id: string, mcpServerNames: string[] | null): PluginInventory => ({
+const inventory = (
+  id: string,
+  mcpServerNames: string[] | null,
+  manifestName: string | null = null,
+): PluginInventory => ({
   id,
   installPath: `/plugins/${id}`,
   version: '1.0.0',
   sha: null,
+  // `null` is "no manifest could be read", which is what an install path pointing at
+  // nothing yields; the key then falls back to the marketplace id.
+  manifestName,
   installed: [],
   // `null` is the "no source covers this plugin" case, which is not the same shape as
   // a source that covers it and lists nothing.
@@ -329,6 +336,41 @@ describe('plugin component sources', () => {
 
   test('and an id absent from the inventory reads as uncovered', () => {
     assert.equal(pluginServerKeys(undefined), null);
+  });
+
+  /**
+   * The key the classifier joins on is the plugin's manifest name (DEA-145), and this
+   * is the case that decides a verdict rather than a label.
+   *
+   * `plugin:Notion:notion` is a literal -- Claude Code's spelling, counted 389 times in
+   * the `needsAuthMcpServers` arrays of the transcripts this was measured against, where
+   * `plugin:notion:notion` appears zero times. Keyed the old way, the busiest MCP server
+   * on that machine joined to a namespace no session ever published and classified
+   * `unknown`; keyed this way it is `observed-deferred`, so a plugin toggle is `reload`.
+   */
+  test('and the key carries the manifest name where one was read', () => {
+    const notion = inventory('notion@claude-plugins-official', ['notion'], 'Notion');
+    assert.deepEqual(pluginServerKeys(notion), ['plugin:Notion:notion']);
+
+    const i: ClassifyInput = {
+      index: buildDeferralIndex([session('s1', ['plugin_Notion_notion'])]),
+      inventories: new Map([[notion.id, notion]]),
+    };
+    const c = classify({ kind: 'plugin', id: notion.id }, i);
+    assert.equal(c.effect, 'reload');
+    assert.deepEqual(c.evidence, [
+      'plugin:Notion:notion -> plugin_Notion_notion: tools deferred in 1 of 1 measured sessions',
+    ]);
+
+    // The same plugin keyed from its marketplace id -- the state before DEA-145, and
+    // what an unreadable manifest still produces. It must not silently keep the verdict.
+    const guessed = inventory('notion@claude-plugins-official', ['notion']);
+    assert.deepEqual(pluginServerKeys(guessed), ['plugin:notion:notion']);
+    assert.equal(
+      classify({ kind: 'plugin', id: guessed.id }, { ...i, inventories: new Map([[guessed.id, guessed]]) })
+        .effect,
+      'unknown',
+    );
   });
 });
 

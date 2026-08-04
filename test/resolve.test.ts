@@ -22,6 +22,7 @@ const inventory = (id: string): PluginInventory => ({
   installPath: `/plugins/${id}`,
   version: '1',
   sha: null,
+  manifestName: null,
   installed: [],
   enumerated: [],
 });

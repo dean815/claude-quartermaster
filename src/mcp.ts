@@ -83,6 +83,25 @@ import type { Workspace } from './surfaces/types.ts';
  */
 export type McpPresence = 'available' | 'ever-connected' | 'scoped-only';
 
+/**
+ * Which half of a plugin-provided row's name is load-bearing, and whether it was read or
+ * assumed.
+ *
+ * - `manifest`       the plugin's own `.claude-plugin/plugin.json` named it. This is the
+ *                    string Claude Code namespaces by, so the key is exact.
+ * - `marketplace-id` no manifest could be read, so the id prefix stands in. Across the
+ *                    42 plugins installed here that substitution is right 39 times and
+ *                    wrong once, with 2 unmeasurable -- and nothing in the resulting
+ *                    string says which of those a given row is.
+ *
+ * Recorded rather than folded into the name because the name cannot carry it: both bases
+ * produce a `plugin:X:Y` string, and a consumer holding only the row -- the grid, and
+ * DEA-112's write -- has no inventory left to consult. Folding the difference into the
+ * key is how a guess starts reading like a measurement, which is the objection
+ * `duplicateAccessPaths` raises to hiding its `basis` inside `severity`.
+ */
+export type PluginKeyBasis = 'manifest' | 'marketplace-id';
+
 export interface McpEntry {
   /** The name a `disabledMcpServers` entry would use. */
   name: string;
@@ -97,6 +116,11 @@ export interface McpEntry {
    * so it is no more a row than a plugin nobody installed.
    */
   fromPlugin: string | null;
+  /**
+   * Where the plugin half of the name came from. `null` exactly when `fromPlugin` is --
+   * no plugin provides this row, so there is no key to have got right or wrong.
+   */
+  keyBasis: PluginKeyBasis | null;
   /** `claudeAiMcpEverConnected` names it. Connected once; says nothing about today. */
   everConnected: boolean;
   /** Projects whose deny-list or allow-list names it, sorted. */
@@ -109,21 +133,44 @@ export interface McpCatalog {
 }
 
 /**
- * `airtable@claude-plugins-official` + `airtable` -> `plugin:airtable:airtable`.
+ * `notion@claude-plugins-official` + manifest `Notion` + `notion`
+ * -> `plugin:Notion:notion`.
  *
- * Derived rather than invented: this is the form the deny-list already writes, checked
- * against the seven `plugin:X:Y` entries the captured machine carries. The marketplace
- * half of the id is dropped, which is what makes `figma@claude-plugins-official` and a
- * `plugin:figma:figma` deny entry the same row instead of two.
+ * The middle segment is the plugin's **manifest** name, not the marketplace id. Claude
+ * Code never uses the id here, and the difference is invisible on 39 of the 42 plugins
+ * installed on the machine this was measured against -- which is what let it stand
+ * (DEA-145). Counted across the transcripts there, inside the `needsAuthMcpServers`
+ * field Claude Code writes rather than anywhere prose could reach:
+ *
+ *   - `plugin:Notion:notion`         389 occurrences
+ *   - `plugin:productivity:notion`    27 occurrences (a second plugin, same server name)
+ *   - `plugin:notion:notion`           0 occurrences -- the key this used to build
+ *
+ * with `mcp__plugin_Notion_notion__` on 14,064 tool calls for the same server. So the
+ * old key was not merely differently-cased: it is a string Claude Code matches nothing
+ * against. It cost the audit twice -- the grid labelled that row with a name no config
+ * file could act on, and `deferralOf` joined it to a namespace no session ever published,
+ * so the busiest MCP server on the machine read as unobserved.
+ *
+ * `manifestName` is required rather than optional, and `null` is its "could not read"
+ * value. An optional parameter would let a call site omit it and silently get the guess,
+ * which is exactly the failure being fixed; required, every caller has to have gone and
+ * looked. What the caller substitutes on `null` is the same id prefix as before --
+ * still the best available guess, and `PluginKeyBasis` is how the row says so.
  */
-export function pluginServerKey(pluginId: string, serverName: string): string {
-  return `plugin:${pluginId.split('@')[0] ?? pluginId}:${serverName}`;
+export function pluginServerKey(
+  pluginId: string,
+  serverName: string,
+  manifestName: string | null,
+): string {
+  return `plugin:${manifestName ?? pluginId.split('@')[0] ?? pluginId}:${serverName}`;
 }
 
 interface Acc {
   userScope: boolean;
   declaredIn: Set<string>;
   fromPlugin: string | null;
+  keyBasis: PluginKeyBasis | null;
   everConnected: boolean;
   scopedIn: Set<string>;
 }
@@ -141,6 +188,7 @@ export function buildMcpCatalog(
         userScope: false,
         declaredIn: new Set(),
         fromPlugin: null,
+        keyBasis: null,
         everConnected: false,
         scopedIn: new Set(),
       };
@@ -169,8 +217,15 @@ export function buildMcpCatalog(
     // projects is deliberate -- a dead project's column is never rendered, so a plugin
     // enabled nowhere but there loads nowhere anyone can see.
     if (!live.some((p) => resolvePlugin(ws, p, inv.id).value)) continue;
+    // Read once per plugin rather than per server: the basis is a property of the
+    // manifest, so two servers from one plugin can never disagree about it.
+    const basis: PluginKeyBasis = inv.manifestName === null ? 'marketplace-id' : 'manifest';
     for (const src of inv.enumerated) {
-      for (const name of src.mcpServerNames) of(pluginServerKey(inv.id, name)).fromPlugin = inv.id;
+      for (const name of src.mcpServerNames) {
+        const a = of(pluginServerKey(inv.id, name, inv.manifestName));
+        a.fromPlugin = inv.id;
+        a.keyBasis = basis;
+      }
     }
   }
 
@@ -181,6 +236,7 @@ export function buildMcpCatalog(
       userScope: a.userScope,
       declaredIn: [...a.declaredIn].sort(),
       fromPlugin: a.fromPlugin,
+      keyBasis: a.keyBasis,
       everConnected: a.everConnected,
       scopedIn: [...a.scopedIn].sort(),
     }))
