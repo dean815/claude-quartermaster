@@ -1,0 +1,3 @@
+{"type":"user","message":{"role":"user","content":"hello"}}
+{"type":"attachment","attachment":{"type":"skill_listing","content":"- deploy\n- release\n","skillCount":2,"names":["deploy","release"]}}
+{"type":"assistant","message":{"role":"assistant","content":"hi"}}

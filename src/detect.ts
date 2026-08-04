@@ -8,10 +8,12 @@
  */
 import type { Workspace, ProjectRecord, McpServerSpec } from './surfaces/types.ts';
 import type { TranscriptMeasurement, ServerCost, ServerKind } from './cost/transcript.ts';
-import { normalizeServerName } from './cost/transcript.ts';
+import { classifyServer, normalizeServerName } from './cost/transcript.ts';
 import type { PluginCostIndex } from './cost/plugins.ts';
 import type { PluginInventory } from './inventory.ts';
-import { resolvePlugin, allPluginIds } from './resolve.ts';
+import type { McpEntry } from './mcp.ts';
+import { buildMcpCatalog } from './mcp.ts';
+import { resolveMcpServer, resolvePlugin, allPluginIds } from './resolve.ts';
 import { pluginUsage, isDemonstrablyUnused } from './usage.ts';
 
 export type Severity = 'high' | 'medium' | 'low' | 'info';
@@ -662,8 +664,313 @@ export function inventoryMismatch(ctx: AuditContext): Finding[] {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// never-observed-server (DEA-130)
+// ---------------------------------------------------------------------------
+
+/**
+ * Why an absence proves nothing.
+ *
+ * Each of these is a way a server can be missing from every session and still not be
+ * unused, and each has to read as "could not tell" rather than as a zero. That is the
+ * `pluginUsage.usageCount` rule from CLAUDE.md -- an absent signal is not a zero --
+ * applied to a set of sessions instead of to a counter.
+ *
+ * - `no-sessions`        nothing was measured where this server could have loaded.
+ * - `no-tool-name-block` sessions were measured and none carried a tool-name block, so
+ *                        nothing about any server was observable in them. Note that
+ *                        `measureTranscript` drops a zero-char block, which collapses
+ *                        "no block" and "an empty block" into this one answer -- the
+ *                        conservative direction, and the reason it is not split.
+ * - `inexact-join`       the config key does not join onto a transcript namespace
+ *                        reliably. See `joinIsExact`.
+ * - `age-unproven`       nothing shows the server existed before the sessions did, so
+ *                        its absence may be chronology. Covers both halves: a server
+ *                        datably newer than every observable session, and one nothing
+ *                        can date at all.
+ */
+export type UnobservedReason =
+  | 'no-sessions'
+  | 'no-tool-name-block'
+  | 'inexact-join'
+  | 'age-unproven';
+
+export interface ServerObservation {
+  /** The config key, in the form a deny-list entry would use. */
+  name: string;
+  kind: ServerKind;
+  /**
+   * Sessions the verdict rests on: reachable, carrying a tool-name block, and no older
+   * than the configuration. Zero whenever the verdict is `cannot-tell`, because the
+   * sample is exactly what is missing then.
+   */
+  sessions: number;
+  verdict: 'appeared' | 'never-appeared' | 'cannot-tell';
+  /** Null unless `verdict` is `cannot-tell`. */
+  reason: UnobservedReason | null;
+  /** Reachable sessions dropped for carrying no tool-name block. */
+  unobservable: number;
+  /** When the configuration can be dated, in epoch ms. Null when nothing dates it. */
+  configuredAt: number | null;
+  /**
+   * Projects whose `.mcp.json` declares it, carried through from the catalog rather than
+   * recomputed. Asking "does this project's `.mcp.json` name it" a second time is a
+   * second copy of a predicate `buildMcpCatalog` already owns.
+   */
+  declaredIn: string[];
+}
+
+/**
+ * Does a config key join onto the namespace a transcript records, or is the join a guess?
+ *
+ * The whole verdict rests here, so it is measured rather than asserted. `view/model.ts`
+ * says the join "is exact for two of the four server kinds"; checked against this
+ * machine, it is exact for one.
+ *
+ * - `direct`    **exact.** The key in `~/.claude.json` -> `mcpServers`, or in a project's
+ *               `.mcp.json`, *is* the namespace. All 8 direct keys here (`linkedin`,
+ *               `robinhood-trading`, `raindrop`, `linear-server`, `n8n`, `logic-pro`,
+ *               `deepgram-docs`, `greptile`) are plain identifiers that `normalizeServerName`
+ *               leaves untouched, and the 7 that ever loaded published under exactly that
+ *               spelling. The day it fails: a direct key carrying `:`, ` ` or `.` relies
+ *               on the forward map, which is verified for status-list names and for no
+ *               direct key, because this machine has none.
+ * - `connector` **a guess.** `claude.ai Linear` publishes as `claude_ai_Linear` *or* as a
+ *               bare UUID carrying no name at all -- 31 of the namespaces observed here
+ *               are UUIDs, and nothing on disk maps one back to a connector name.
+ * - `plugin`    **a guess, and this is the one that looked exact.** `pluginServerKey`
+ *               builds `plugin:<marketplace id>:<server>`; Claude Code namespaces by the
+ *               plugin's *manifest* name. 39 of the 40 readable manifests here agree, 2
+ *               could not be read, and the one that disagrees is
+ *               `notion@claude-plugins-official`, whose `.claude-plugin/plugin.json` says
+ *               `"name": "Notion"` and which publishes `plugin_Notion_notion` against a
+ *               key of `plugin:notion:notion`. It is precisely the server this detector
+ *               would otherwise have accused, which is what a guess costs.
+ * - `builtin`   unreachable. `(built-in)` is the pseudo-namespace `transcript.ts` gives a
+ *               deferred tool that is not an MCP tool at all, and no config key produces
+ *               it.
+ *
+ * Used in one direction only -- the asymmetry `duplicateAccessPaths` applies to its URL
+ * signal, for the same reason. A guessed name that *matches* still settles an appearance:
+ * a hit is evidence the server was there. A guessed name that misses is not evidence it
+ * was absent, so it can never support an accusation.
+ *
+ * Reading the manifest name would make the plugin join exact and was rejected here:
+ * acquiring a new source is not what this issue asked for, and `pluginServerKey` builds
+ * the grid's axis as well, so changing which half of the id it uses is a change to what
+ * every row is called. Filed separately.
+ */
+function joinIsExact(kind: ServerKind): boolean {
+  return kind === 'direct';
+}
+
+/**
+ * Every namespace one session can be said to have seen.
+ *
+ * Not just published tool names. An unauthenticated server has no tool list to publish
+ * (`transcript.ts`), and one still connecting has not published yet -- both are named in
+ * the startup record all the same. Counting only tool names would accuse every server
+ * that asked the user to log in, which is 31 of them here.
+ */
+function namespacesSeen(m: TranscriptMeasurement): Set<string> {
+  const out = new Set<string>();
+  for (const s of m.servers) out.add(s.server);
+  for (const s of m.needsAuth) out.add(normalizeServerName(s));
+  for (const s of m.pending) out.add(normalizeServerName(s));
+  return out;
+}
+
+/**
+ * Live projects a session could have loaded this server in.
+ *
+ * The three provisioning routes reach different sets, and folding them into one would
+ * make the sample count a fiction: a user-scope launch spec reaches every project, a
+ * project's `.mcp.json` reaches only that project, and a plugin's server reaches wherever
+ * `resolvePlugin` says the plugin is on. `greptile` is declared by one project out of 27,
+ * and "absent from 479 sessions" would be a sentence about the other 26.
+ */
+function reachableProjects(ctx: AuditContext, entry: McpEntry): Set<string> {
+  const provisioned = ctx.ws.projects.filter(
+    (p) =>
+      p.alive &&
+      (entry.userScope ||
+        entry.declaredIn.includes(p.path) ||
+        (entry.fromPlugin !== null && resolvePlugin(ctx.ws, p, entry.fromPlugin).value)),
+  );
+
+  // An empty chain means no file decided, which `mcp.ts` is explicit is *not* a decision
+  // to disable -- `resolveMcpServer` returning `false`/`inherited` says nobody scoped
+  // this, not that it cannot load. Only a link that resolved false is a denial.
+  return new Set(
+    provisioned
+      .filter((p) => {
+        const cell = resolveMcpServer(ctx.ws, p, entry.name);
+        return cell.chain.length === 0 || cell.value;
+      })
+      .map((p) => p.path),
+  );
+}
+
+/** The earliest time anything can show this server was configured. See `McpJsonFile`. */
+function configuredAt(ctx: AuditContext, entry: McpEntry): number | null {
+  if (entry.userScope) return null;
+  const times = ctx.ws.projects
+    .filter((p) => entry.declaredIn.includes(p.path))
+    .map((p) => p.mcpJson?.modifiedAt)
+    .filter((t): t is number => typeof t === 'number');
+  return times.length ? Math.min(...times) : null;
+}
+
+/**
+ * Whether each configured server has ever been seen, or whether we cannot tell.
+ *
+ * The order of the tests is the claim. The sample is established first, because a
+ * question asked of no evidence has no answer; then an appearance, which settles the
+ * matter for any kind; then the join, which can only block an accusation; then
+ * chronology, which narrows the sample to the sessions that ran after the server
+ * existed and reports `age-unproven` when none did.
+ *
+ * Exported so the gate can assert the verdict rather than the prose. A test that reads
+ * only the findings cannot distinguish the four ways of saying nothing.
+ */
+export function observeMcpServers(ctx: AuditContext): ServerObservation[] {
+  const catalog = buildMcpCatalog(ctx.ws, ctx.inventories);
+  const out: ServerObservation[] = [];
+
+  for (const entry of catalog.entries) {
+    // `available` is the only presence saying something on disk provides it now.
+    // `ever-connected` is historical by its own key name and `scoped-only` means no
+    // source says what the thing is; neither is "configured and enabled".
+    if (entry.presence !== 'available') continue;
+
+    const reachable = reachableProjects(ctx, entry);
+    // Denied wherever it could have loaded. Not enabled, so not this finding -- and not
+    // a coverage gap either, because nothing was expected of it.
+    if (!reachable.size) continue;
+
+    const ns = normalizeServerName(entry.name);
+    const kind = classifyServer(ns);
+    const at = configuredAt(ctx, entry);
+
+    const sample = ctx.measurements.filter((m) => m.project !== null && reachable.has(m.project));
+    const observable = sample.filter((m) => m.blocks.some((b) => b.kind === 'deferred_tools'));
+    const base = {
+      name: entry.name,
+      kind,
+      configuredAt: at,
+      declaredIn: entry.declaredIn,
+      unobservable: sample.length - observable.length,
+    };
+    const cannotTell = (reason: UnobservedReason): ServerObservation => ({
+      ...base,
+      sessions: 0,
+      verdict: 'cannot-tell',
+      reason,
+    });
+
+    if (!sample.length) out.push(cannotTell('no-sessions'));
+    else if (!observable.length) out.push(cannotTell('no-tool-name-block'));
+    else if (observable.some((m) => namespacesSeen(m).has(ns)))
+      out.push({ ...base, sessions: observable.length, verdict: 'appeared', reason: null });
+    else if (!joinIsExact(kind)) out.push(cannotTell('inexact-join'));
+    else {
+      const after = at === null ? [] : observable.filter((m) => m.modifiedAt >= at);
+      if (!after.length) out.push(cannotTell('age-unproven'));
+      else out.push({ ...base, sessions: after.length, verdict: 'never-appeared', reason: null });
+    }
+  }
+  return out;
+}
+
+/** How each reason reads in the coverage note. */
+const UNOBSERVED_REASONS: Record<UnobservedReason, string> = {
+  'no-sessions': 'no measured session could have loaded it',
+  'no-tool-name-block': 'the sessions that could carried no tool-name block',
+  'inexact-join': 'its config key does not join onto a transcript namespace reliably',
+  'age-unproven': 'nothing shows it was configured before the sessions ran',
+};
+
+function day(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
+ * A server that is configured, enabled, and has never once been there.
+ *
+ * The same shape of claim as a tracked credential file: true by definition rather than
+ * by judgement. Every session that could have loaded it recorded which servers were
+ * present, and it was in none of them.
+ *
+ * The coverage note is not optional politeness. Most configured servers land in
+ * `cannot-tell` on a real machine, and a report that printed only the accusations would
+ * read as full coverage it does not have -- the mistake `inventoryMismatch` makes the
+ * same repair for.
+ */
+export function neverObservedServers(ctx: AuditContext): Finding[] {
+  const observations = observeMcpServers(ctx);
+  const out: Finding[] = [];
+
+  const mcpJsonOf = new Map(ctx.ws.projects.flatMap((p) => (p.mcpJson ? [[p.path, p.mcpJson.path]] : [])));
+
+  for (const o of observations.filter((x) => x.verdict === 'never-appeared')) {
+    const declared = o.declaredIn.map((path) => mcpJsonOf.get(path)).filter((p): p is string => Boolean(p));
+    out.push({
+      detector: 'never-observed-server',
+      key: `never-observed-server ${o.name}`,
+      severity: 'low',
+      title: `${o.name} is configured and has never appeared in ${o.sessions} session${o.sessions === 1 ? '' : 's'}`,
+      detail:
+        'Something on disk provides it and no project denies it, so every one of those ' +
+        'sessions could have loaded it. None recorded it -- not as a published tool ' +
+        'name, not as a server awaiting authentication, not as one still connecting.',
+      evidence: [
+        `kind: ${o.kind} — the config key is the tool namespace verbatim, so the join is exact`,
+        `sessions that could have shown it: ${o.sessions}`,
+        ...(o.unobservable
+          ? [`sessions excluded for carrying no tool-name block: ${o.unobservable}`]
+          : []),
+        ...(o.configuredAt === null ? [] : [`configured no later than ${day(o.configuredAt)}`]),
+        ...declared.map((p) => `declared in ${p}`),
+      ],
+      fix: declared.length
+        ? `Approve it in /mcp if it is wanted, or delete the entry from ${declared[0]!}. ` +
+          '`claude mcp remove` is documented against user scope and does not reach a ' +
+          'project-declared server.'
+        : `claude mcp remove ${o.name}`,
+    });
+  }
+
+  const unknown = observations.filter((o) => o.verdict === 'cannot-tell');
+  if (unknown.length) {
+    const byReason = new Map<UnobservedReason, number>();
+    for (const o of unknown) byReason.set(o.reason!, (byReason.get(o.reason!) ?? 0) + 1);
+
+    out.push({
+      detector: 'never-observed-server',
+      key: 'never-observed-server coverage',
+      severity: 'info',
+      title: `${unknown.length} of ${observations.length} configured MCP servers could not be checked against the sessions`,
+      detail:
+        'Absence of a signal is not a zero. Each of these is missing from every session ' +
+        'measured for it, and for each there is a reason that absence says nothing -- so ' +
+        'none of them is being called unused.',
+      evidence: [
+        ...[...byReason.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([reason, n]) => `${n} because ${UNOBSERVED_REASONS[reason]}`),
+        ...unknown
+          .slice(0, 8)
+          .map((o) => `  ${o.name} (${o.kind}) — ${o.reason}`),
+      ],
+    });
+  }
+
+  return out;
+}
+
 export const DETECTORS = [
   duplicateAccessPaths,
+  neverObservedServers,
   costWithoutUse,
   unscopedSkills,
   orphanedProjectConfig,

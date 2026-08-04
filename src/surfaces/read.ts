@@ -70,7 +70,19 @@ export function readSettings(path: string): SettingsFile | null {
 export function readMcpJson(path: string): McpJsonFile | null {
   const raw = readJsonSafe(path);
   if (!raw) return null;
-  return { path, mcpServers: (raw.mcpServers ?? {}) as Record<string, McpServerSpec> };
+  // The file parsed, so it exists; a stat that nonetheless fails leaves the field off
+  // rather than substituting a time, because a wrong date reads as a measurement.
+  let modifiedAt: number | undefined;
+  try {
+    modifiedAt = statSync(path).mtimeMs;
+  } catch {
+    modifiedAt = undefined;
+  }
+  return {
+    path,
+    ...(modifiedAt === undefined ? {} : { modifiedAt }),
+    mcpServers: (raw.mcpServers ?? {}) as Record<string, McpServerSpec>,
+  };
 }
 
 export function readClaudeJson(path: string): ClaudeJson {

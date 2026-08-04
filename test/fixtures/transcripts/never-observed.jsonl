@@ -1,0 +1,3 @@
+{"type":"user","message":{"role":"user","content":"hello"}}
+{"type":"attachment","attachment":{"type":"deferred_tools_delta","addedNames":["mcp__seen-server__search","mcp__seen-server__fetch","mcp__plugin_Vendor_thing__do","mcp__plugin_agree_agree__do","WebFetch"],"addedLines":["mcp__seen-server__search","mcp__seen-server__fetch","mcp__plugin_Vendor_thing__do","mcp__plugin_agree_agree__do","WebFetch"],"removedNames":[],"readdedNames":[],"needsAuthMcpServers":["auth-only-server"],"pendingMcpServers":[]}}
+{"type":"assistant","message":{"role":"assistant","content":"hi"}}
