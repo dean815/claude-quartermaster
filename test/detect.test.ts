@@ -19,14 +19,17 @@ import {
   noPathScopedRules,
   bareDenyRules,
   oversizedMemory,
+  neverObservedServers,
+  observeMcpServers,
   runAll,
   rank,
   type AuditContext,
   type Finding,
+  type ServerObservation,
 } from '../src/detect.ts';
 import { loadWorkspace } from '../src/surfaces/read.ts';
 import { measureProject, measureTranscript } from '../src/cost/transcript.ts';
-import { readInventories } from '../src/inventory.ts';
+import { readInventories, type PluginInventory } from '../src/inventory.ts';
 import type { ProjectRecord, SettingsFile, Workspace, ClaudeJson } from '../src/surfaces/types.ts';
 import type { TranscriptMeasurement, ServerCost } from '../src/cost/transcript.ts';
 import type { PluginCost, PluginCostIndex } from '../src/cost/plugins.ts';
@@ -837,6 +840,341 @@ describe('the gate fails when the duplicate detector is wrong', () => {
   /** The positive control the four above are measured against. */
   test('and passes when nothing is wrong', () => {
     assert.deepEqual(diff(findingsOf(scenario())), []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// never-observed-server: the gate, and the mutations it is measured by (DEA-130)
+// ---------------------------------------------------------------------------
+
+/**
+ * Older than any checkout. Git sets a working file's mtime to the moment it was written,
+ * so the two transcript fixtures are always newer than this and never newer than `LATE`.
+ * Pinning both ends as literals keeps the chronology test from being decided by whichever
+ * side of the comparison the implementation happens to compute.
+ */
+const OLD = Date.parse('2026-01-01T00:00:00Z');
+const LATE = Date.now() + 86_400_000;
+
+/** A plugin the catalog says provides one MCP server, and nothing else. */
+const providing = (id: string, server: string): PluginInventory => ({
+  id,
+  installPath: null,
+  version: null,
+  sha: null,
+  installed: null,
+  enumerated: [
+    {
+      source: 'plugin-catalog-cache.json',
+      names: [],
+      skillNames: [],
+      mcpServerNames: [server],
+      sha: null,
+      version: null,
+      fetchedAt: null,
+    },
+  ],
+});
+
+/**
+ * Four projects, one recorded session shape each way, and eight configured servers that
+ * exercise every answer this detector can give.
+ *
+ * Measured through `measureTranscript` rather than hand-built measurements, for the
+ * reason the duplicate-path scenario above gives: what reached the transcript is the
+ * property under test, and a hand-built measurement would let the test decide it.
+ *
+ * `/p` holds the three servers the session can speak to. `/late` declares one in a file
+ * dated after that session. `/quiet` has no sessions at all. `/dark`'s only session
+ * carries a skill listing and no tool-name block. The two plugins differ in one thing:
+ * `agree` publishes under the spelling its config key normalises to, and `Vendor` does
+ * not -- which is the live `notion@claude-plugins-official` case, reproduced.
+ */
+function observed() {
+  const withBlock = join(TRANSCRIPTS, 'never-observed.jsonl');
+  const noBlock = join(TRANSCRIPTS, 'no-tool-block.jsonl');
+  return {
+    ws: {
+      userSettings: settings('/home/.claude/settings.json', {
+        enabledPlugins: { 'vendor@mk': true, 'agree@mk': true },
+      }),
+      projects: [
+        project('/p', {
+          mcpJson: {
+            path: '/p/.mcp.json',
+            modifiedAt: OLD,
+            mcpServers: { 'seen-server': {}, 'auth-only-server': {}, 'unseen-server': {} },
+          },
+        }),
+        project('/late', {
+          mcpJson: { path: '/late/.mcp.json', modifiedAt: LATE, mcpServers: { 'late-server': {} } },
+        }),
+        project('/quiet', {
+          mcpJson: { path: '/quiet/.mcp.json', modifiedAt: OLD, mcpServers: { 'quiet-server': {} } },
+        }),
+        project('/dark', {
+          mcpJson: { path: '/dark/.mcp.json', modifiedAt: OLD, mcpServers: { 'dark-server': {} } },
+        }),
+      ],
+    } satisfies Partial<Workspace>,
+    measurements: [
+      measureTranscript(withBlock, '/p'),
+      measureTranscript(withBlock, '/late'),
+      measureTranscript(noBlock, '/dark'),
+    ],
+    inventories: new Map([
+      ['vendor@mk', providing('vendor@mk', 'thing')],
+      ['agree@mk', providing('agree@mk', 'agree')],
+    ]),
+  };
+}
+
+type Observed = ReturnType<typeof observed>;
+
+const observationsOf = (s: Observed): ServerObservation[] =>
+  observeMcpServers(
+    ctx(s.ws, { measurements: s.measurements, inventories: s.inventories }),
+  );
+
+const describeObservation = (o: ServerObservation): string =>
+  `${o.name} | ${o.verdict} | ${o.reason ?? '-'} | ${o.sessions}`;
+
+/**
+ * Every verdict that workspace supports, written out.
+ *
+ * A literal, and the whole gate. One `never-appeared`, one `appeared` for each of the two
+ * ways a session can name a server, and one of each way an absence can prove nothing.
+ * Every mutation below is measured against this rather than against a second run of the
+ * classifier, which would agree with itself whatever the classifier does.
+ */
+const EXPECTED_OBSERVATIONS = [
+  'auth-only-server | appeared | - | 1',
+  'dark-server | cannot-tell | no-tool-name-block | 0',
+  'late-server | cannot-tell | age-unproven | 0',
+  'plugin:agree:agree | appeared | - | 2',
+  'plugin:vendor:thing | cannot-tell | inexact-join | 0',
+  'quiet-server | cannot-tell | no-sessions | 0',
+  'seen-server | appeared | - | 1',
+  'unseen-server | never-appeared | - | 1',
+];
+
+/** Every server the expectation and the classifier disagree about, named. */
+function observationDiff(actual: readonly ServerObservation[]): string[] {
+  const out: string[] = [];
+  const got = new Map(actual.map((o) => [o.name, describeObservation(o)]));
+  const want = new Map(EXPECTED_OBSERVATIONS.map((line) => [line.split(' | ')[0]!, line]));
+
+  for (const [name, line] of want) {
+    const seen = got.get(name);
+    if (!seen) {
+      out.push(`missing server ${name}`);
+      continue;
+    }
+    if (seen === line) continue;
+    const [, wantVerdict, wantReason, wantSessions] = line.split(' | ');
+    const [, gotVerdict, gotReason, gotSessions] = seen.split(' | ');
+    out.push(
+      wantVerdict !== gotVerdict
+        ? `verdict changed for ${name}: ${wantVerdict}(${wantReason}) -> ${gotVerdict}(${gotReason})`
+        : wantReason !== gotReason
+          ? `reason changed for ${name}: ${wantReason} -> ${gotReason}`
+          : `sample changed for ${name}: ${wantSessions} -> ${gotSessions}`,
+    );
+  }
+  for (const name of got.keys()) if (!want.has(name)) out.push(`extra server ${name}`);
+  return out;
+}
+
+describe('never-observed-server tells "never appeared" from "could not tell"', () => {
+  test('the verdicts are exactly what the sessions support', () => {
+    assert.deepEqual(observationDiff(observationsOf(observed())), []);
+  });
+
+  test('a server named in no session, in a project that measured one, is reported', () => {
+    const f = neverObservedServers(
+      ctx(observed().ws, { measurements: observed().measurements, inventories: observed().inventories }),
+    );
+    const accusations = f.filter((x) => x.severity !== 'info');
+    assert.equal(accusations.length, 1);
+    assert.match(accusations[0]!.title, /^unseen-server is configured and has never appeared in 1 session$/);
+    assert.ok(
+      accusations[0]!.evidence.some((e) => /^kind: direct/.test(e)),
+      accusations[0]!.evidence.join(' / '),
+    );
+    assert.ok(accusations[0]!.evidence.some((e) => e.includes('/p/.mcp.json')));
+  });
+
+  /**
+   * The four silences, counted rather than implied. A report that printed only the
+   * accusation would read as coverage of all eight.
+   */
+  test('the coverage note names every server it could not check, and why', () => {
+    const f = neverObservedServers(
+      ctx(observed().ws, { measurements: observed().measurements, inventories: observed().inventories }),
+    );
+    const note = f.find((x) => x.severity === 'info')!;
+    assert.match(note.title, /^4 of 8 configured MCP servers could not be checked/);
+    for (const reason of ['no-sessions', 'no-tool-name-block', 'inexact-join', 'age-unproven']) {
+      assert.ok(note.evidence.some((e) => e.includes(reason)), `${reason} missing: ${note.evidence.join(' / ')}`);
+    }
+  });
+
+  /**
+   * The asymmetry, and the reason the plugin kind is not simply excluded. A guessed name
+   * that hits still settles an appearance -- `plugin_agree_agree` is there, so the server
+   * was there. Only the miss is uninformative.
+   */
+  test('a guessed join confirms an appearance but never supports an accusation', () => {
+    const byName = new Map(observationsOf(observed()).map((o) => [o.name, o]));
+    assert.equal(byName.get('plugin:agree:agree')!.verdict, 'appeared');
+    assert.equal(byName.get('plugin:vendor:thing')!.verdict, 'cannot-tell');
+    assert.equal(byName.get('plugin:vendor:thing')!.reason, 'inexact-join');
+  });
+
+  test('a workspace that configures no server says nothing at all', () => {
+    assert.deepEqual(neverObservedServers(ctx()), []);
+  });
+});
+
+interface ObservationMutation {
+  name: string;
+  /** The verdicts a classifier carrying this defect would return. */
+  run: (s: Observed) => ServerObservation[];
+  /** What the divergence must say, so a gate failing for another reason shows. */
+  names: RegExp;
+}
+
+/**
+ * A defect that turns one silence into an accusation, expressed as the output such a
+ * classifier would produce. Four of the five mutations below are this shape; only the
+ * reason code differs.
+ */
+const accuse =
+  (reason: string) =>
+  (s: Observed): ServerObservation[] =>
+    observationsOf(s).map((o) =>
+      o.reason === reason ? { ...o, verdict: 'never-appeared' as const, reason: null } : o,
+    );
+
+const OBSERVATION_MUTATIONS: ObservationMutation[] = [
+  {
+    /**
+     * The one the live workspace would have caught on its own. `plugin:notion:notion`
+     * publishes as `plugin_Notion_notion` because Claude Code namespaces by the plugin's
+     * manifest name, so a classifier that trusted the marketplace-id spelling would call
+     * the busiest MCP server on that machine never used.
+     */
+    name: 'treat the plugin join as exact',
+    run: accuse('inexact-join'),
+    names: /^verdict changed for plugin:vendor:thing: cannot-tell\(inexact-join\) -> never-appeared\(-\)$/,
+  },
+  {
+    /**
+     * A server named only in `needsAuthMcpServers` was there -- it asked the user to log
+     * in. Reading published tool names alone would accuse every one of them, which is 31
+     * servers on the machine this was built against.
+     */
+    name: 'read published tool names and ignore the status lists',
+    run: (s) => {
+      for (const m of s.measurements) {
+        m.needsAuth = [];
+        m.pending = [];
+      }
+      return observationsOf(s);
+    },
+    names: /^verdict changed for auth-only-server: appeared\(-\) -> never-appeared\(-\)$/,
+  },
+  {
+    /**
+     * The other direction of the same defect, and the one that makes an unambiguously
+     * observed server fire: a classifier that read the status lists and not the tool
+     * names would accuse `seen-server`, whose tools are in the transcript verbatim.
+     */
+    name: 'read the status lists and ignore published tool names',
+    run: (s) => {
+      for (const m of s.measurements) m.servers = [];
+      return observationsOf(s);
+    },
+    names: /^verdict changed for seen-server: appeared\(-\) -> never-appeared\(-\)$/,
+  },
+  {
+    /** An empty sample is not a sample. Nothing was measured where `/quiet` could load. */
+    name: 'treat a project with no measured session as proof of absence',
+    run: accuse('no-sessions'),
+    names: /^verdict changed for quiet-server: cannot-tell\(no-sessions\) -> never-appeared\(-\)$/,
+  },
+  {
+    /** A session that recorded no tool-name block recorded nothing about any server. */
+    name: 'treat a session carrying no tool-name block as evidence',
+    run: accuse('no-tool-name-block'),
+    names: /^verdict changed for dark-server: cannot-tell\(no-tool-name-block\) -> never-appeared\(-\)$/,
+  },
+  {
+    /** A server declared after the session ran could not have been in it. */
+    name: 'ignore when the configuration was written',
+    run: accuse('age-unproven'),
+    names: /^verdict changed for late-server: cannot-tell\(age-unproven\) -> never-appeared\(-\)$/,
+  },
+];
+
+describe('the gate fails when the never-observed classifier is wrong', () => {
+  for (const mutation of OBSERVATION_MUTATIONS) {
+    test(mutation.name, () => {
+      const failures = observationDiff(mutation.run(observed()));
+      assert.ok(
+        failures.length > 0,
+        `mutation "${mutation.name}" did not fail the gate -- that is a hole in the gate, ` +
+          'not a mutation to delete',
+      );
+      assert.ok(
+        failures.some((f) => mutation.names.test(f)),
+        `the gate failed, but for the wrong reason: ${failures.join('; ')}`,
+      );
+      console.log(`    caught "${mutation.name}" (${failures.length}): ${failures[0]}`);
+    });
+  }
+
+  /** The positive control the six above are measured against. */
+  test('and passes when nothing is wrong', () => {
+    assert.deepEqual(observationDiff(observationsOf(observed())), []);
+  });
+});
+
+/**
+ * The accusation, checked against every session on this machine rather than against the
+ * ones the detector chose to look at.
+ *
+ * Independent of `reachableProjects`, deliberately: a bug that narrowed the sample to the
+ * wrong projects would make the detector agree with itself and still be wrong about the
+ * world. If a namespace turns up anywhere at all, the accusation is unsound.
+ */
+describe('never-observed-server accuses nothing the live workspace has ever seen', () => {
+  const ws = loadWorkspace();
+  const measurements = ws.projects
+    .filter((p) => p.alive)
+    .flatMap((p) => measureProject(homedir(), p.path));
+  const live: AuditContext = {
+    ws,
+    measurements,
+    pluginCosts: new Map(),
+    inventories: readInventories(homedir()),
+  };
+
+  test('every accused namespace is absent from every measured session', (t) => {
+    const accused = observeMcpServers(live).filter((o) => o.verdict === 'never-appeared');
+    if (!accused.length) return t.skip('no server on this machine is accused');
+
+    const everywhere = new Set<string>();
+    for (const m of measurements) {
+      for (const s of m.servers) everywhere.add(s.server);
+      for (const s of [...m.needsAuth, ...m.pending]) {
+        everywhere.add(s.replaceAll(':', '_').replaceAll(' ', '_').replaceAll('.', '_'));
+      }
+    }
+    for (const o of accused) {
+      const ns = o.name.replaceAll(':', '_').replaceAll(' ', '_').replaceAll('.', '_');
+      assert.equal(everywhere.has(ns), false, `${o.name} is accused but ${ns} was seen`);
+    }
   });
 });
 

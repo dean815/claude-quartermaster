@@ -112,11 +112,12 @@ largest tool-name block observed, conveying nothing to the model.
 
 ### Shipped — `qm audit`, read-only
 
-Ten detectors over a resolved model of every extension × every project:
+Eleven detectors over a resolved model of every extension × every project:
 
 | Detector | What it catches |
 |---|---|
 | **duplicate-access-paths** | one service live through several namespaces at once, ranked by the *redundant* chars |
+| **never-observed-server** | a configured, enabled MCP server absent from every session that could have loaded it — and a count of the ones where absence proves nothing |
 | **cost-without-use** | enabled, hookless, never-invoked plugins, ranked by what disabling saves |
 | **unscoped-skills** | a large skill listing with no `skillOverrides` anywhere |
 | **orphaned-project-config** | deny-lists for directories that no longer exist |

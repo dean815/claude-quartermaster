@@ -28,6 +28,20 @@ export interface SettingsFile {
 /** A `.mcp.json` -- servers a project declares for itself. */
 export interface McpJsonFile {
   path: string;
+  /**
+   * mtime, in epoch ms. Absent when nothing recorded one -- never assume a time.
+   *
+   * Read for one question (DEA-130): a server declared after the last measured session
+   * cannot have appeared in it, and absence would then be chronology rather than disuse.
+   * Only this file can answer it. `~/.claude.json` carries the user-scope launch specs
+   * and every live session writes telemetry to it, so its mtime is always ~now and dates
+   * nothing; a server declared only there stays undatable, which is an answer.
+   *
+   * The day it fails: an edit to any other key moves the mtime, so a long-standing
+   * server in a recently-touched file reads as undatable. That errs towards saying
+   * nothing, which is the direction this tool errs in everywhere else.
+   */
+  modifiedAt?: number;
   mcpServers: Record<string, McpServerSpec>;
 }
 
