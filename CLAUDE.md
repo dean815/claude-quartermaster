@@ -229,3 +229,5 @@ only 18 of 42 plugins (DEA-131).
 - Never assume an extension type is per-project toggleable; check the table above.
 - Never treat a plugin toggle as a security boundary — it controls loading, not
   authority. Use `permissions.deny`, which merges across scopes rather than overriding.
+
+@.claude/dean-guidelines.md
