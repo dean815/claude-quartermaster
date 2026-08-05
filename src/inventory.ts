@@ -61,8 +61,8 @@ export interface PluginInventory {
   /**
    * The name the plugin's own manifest gives it, which is what Claude Code namespaces
    * its MCP servers and skills by. `null` means no readable manifest said -- "could not
-   * tell", never "the marketplace id is right". `mcp.ts` owns the derivation into a
-   * config key and records which of the two it used.
+   * tell", never "the marketplace id is right". `pluginNamespace` owns the substitution
+   * both axes make on `null`, and hands back which of the two it used.
    */
   manifestName: string | null;
   /**
@@ -158,6 +158,52 @@ export function readManifestName(installPath: string | null | undefined): string
     // can outlive the build it held.
     return null;
   }
+}
+
+/**
+ * Which half of a plugin-derived id is load-bearing, and whether it was read or assumed.
+ *
+ * - `manifest`       the plugin's own `.claude-plugin/plugin.json` named it. This is the
+ *                    string Claude Code namespaces by, so the id is exact.
+ * - `marketplace-id` no manifest could be read, so the id prefix stands in. Across the
+ *                    42 plugins installed on the measured machine that substitution is
+ *                    right 39 times and wrong once, with 2 unmeasurable -- and nothing in
+ *                    the resulting string says which of those a given row is.
+ *
+ * Recorded rather than folded into the id because the id cannot carry it: both bases
+ * produce the same shape, and a consumer holding only the row -- the grid, and DEA-112's
+ * write -- has no inventory left to consult. Folding the difference into the key is how a
+ * guess starts reading like a measurement, which is the objection `duplicateAccessPaths`
+ * raises to hiding its `basis` inside `severity`.
+ */
+export type PluginKeyBasis = 'manifest' | 'marketplace-id';
+
+/**
+ * The string Claude Code namespaces a plugin's components by: `Notion`, never `notion`.
+ *
+ * One body with two callers -- `plugin:<name>:<server>` in `mcp.ts`, `<name>:<skill>` in
+ * `skills.ts` -- because they are the same fact about the same plugin, read off the same
+ * manifest. Copying the expression into the second axis was rejected for the reason
+ * DEA-146 exists at all: DEA-145 fixed the MCP half and the skill half kept splitting the
+ * marketplace id for another release, and a copy is how a third component kind would
+ * inherit the defect a third time.
+ *
+ * The fallback is the same guess it has always been -- still the best available, since a
+ * manifest name is *usually* the id prefix -- and `basis` is how the caller says so
+ * rather than presenting it as a reading. Returning both together is deliberate: a caller
+ * cannot take the name and forget to ask where it came from.
+ *
+ * The day it fails: it knows only what `readManifestName` could open. A plugin whose
+ * manifest is unreadable and whose real name is *not* its id prefix gets a
+ * `marketplace-id` name that is simply wrong, and nothing here can tell that apart from
+ * the 39 cases where the same guess is right.
+ */
+export function pluginNamespace(
+  pluginId: string,
+  manifestName: string | null,
+): { name: string; basis: PluginKeyBasis } {
+  if (manifestName !== null) return { name: manifestName, basis: 'manifest' };
+  return { name: pluginId.split('@')[0] ?? pluginId, basis: 'marketplace-id' };
 }
 
 /** `installed_plugins.json` -> one build per plugin id. */

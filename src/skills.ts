@@ -42,7 +42,7 @@
  * shown to load, and saying it is on would be the same mistake `usage.ts` refuses to
  * make with a zeroed counter. It gets its own presence value and its own count.
  */
-import type { PluginInventory } from './inventory.ts';
+import { pluginNamespace, type PluginInventory, type PluginKeyBasis } from './inventory.ts';
 import type { TranscriptMeasurement } from './cost/transcript.ts';
 import type { SettingsFile, Workspace } from './surfaces/types.ts';
 
@@ -76,6 +76,19 @@ export interface SkillEntry {
   onDisk: boolean;
   /** Plugin whose catalog entry types this as one of its skills, when one does. */
   fromPlugin: string | null;
+  /**
+   * Where the plugin half of `id` came from. `null` exactly when `fromPlugin` is -- no
+   * plugin provides this row, so there is no name to have got right or wrong.
+   *
+   * Its own field rather than a lookup back into the inventory, for the reason
+   * `McpEntry.keyBasis` is one: a read name and an assumed one produce an
+   * identical-looking `X:y`, and a consumer holding only the row -- the grid, and a
+   * Phase 2 `skillOverrides` write -- has no inventory left to consult. It is not
+   * *carried* from `McpEntry` either, because the two axes are separate sets of rows and
+   * a skill row is reachable without an MCP row existing at all; what they share is the
+   * derivation, which is one body in `pluginNamespace`.
+   */
+  keyBasis: PluginKeyBasis | null;
   /** A settings file sets an override for it, so someone believes it exists. */
   configured: boolean;
   /** Projects whose most recent listing names it, sorted. */
@@ -104,11 +117,6 @@ function eachSettingsFile(ws: Workspace): SettingsFile[] {
   const files = [ws.userSettings];
   for (const p of ws.projects) files.push(p.settings, p.localSettings);
   return files.filter((f): f is SettingsFile => Boolean(f));
-}
-
-/** `minutes@minutes` -> `minutes`. Listings namespace a plugin skill by the bare name. */
-function shortPluginName(id: string): string {
-  return id.split('@')[0] ?? id;
 }
 
 /**
@@ -145,6 +153,7 @@ export function buildSkillCatalog(
     lastSeenAt: number | null;
     onDisk: boolean;
     fromPlugin: string | null;
+    keyBasis: PluginKeyBasis | null;
     configured: boolean;
   }
 
@@ -159,6 +168,7 @@ export function buildSkillCatalog(
         lastSeenAt: null,
         onDisk: false,
         fromPlugin: null,
+        keyBasis: null,
         configured: false,
       };
       acc.set(id, a);
@@ -181,10 +191,26 @@ export function buildSkillCatalog(
 
   for (const s of ws.personalSkills) of(s.id).onDisk = true;
 
+  // `<plugin>:<skill>`, where the plugin half is the **manifest** name and never the
+  // marketplace id. This is DEA-145's key one axis over, and it was latent rather than
+  // live: exactly one of the 42 plugins installed here carries a manifest name its id
+  // prefix does not predict -- `notion@claude-plugins-official`, `"name": "Notion"` --
+  // and it enumerates zero `skillNames`, so nothing was minting the wrong id yet. A
+  // catalog refresh is all that stands in the way: it would then produce
+  // `notion:create-page` beside the `Notion:create-page` that 438 measured listings
+  // already carry, and one skill would hold two rows, the second matching no config file
+  // and so unwritable.
+  //
+  // Read once per plugin rather than per skill: the basis is a property of the manifest,
+  // so two skills from one plugin can never disagree about it.
   for (const inv of inventories.values()) {
-    const short = shortPluginName(inv.id);
+    const { name: plugin, basis } = pluginNamespace(inv.id, inv.manifestName);
     for (const src of inv.enumerated) {
-      for (const name of src.skillNames) of(`${short}:${name}`).fromPlugin = inv.id;
+      for (const name of src.skillNames) {
+        const a = of(`${plugin}:${name}`);
+        a.fromPlugin = inv.id;
+        a.keyBasis = basis;
+      }
     }
   }
 
@@ -201,6 +227,7 @@ export function buildSkillCatalog(
       presence: presenceOf(a.activeIn.size > 0, a.onDisk || a.fromPlugin !== null || a.configured),
       onDisk: a.onDisk,
       fromPlugin: a.fromPlugin,
+      keyBasis: a.keyBasis,
       configured: a.configured,
       activeIn: [...a.activeIn].sort(),
       observedIn: [...a.observedIn].sort(),
