@@ -8,6 +8,7 @@
 | `transcripts/duplicate-launch-urls.jsonl` | yes | `detect.test.ts` — two namespaces at one URL, and two whose names collapse but whose URLs disagree |
 | `transcripts/never-observed.jsonl` | yes | `detect.test.ts` — one server published as tool names, one named only in `needsAuthMcpServers`, one plugin namespace spelled with its *manifest* name (`plugin_Vendor_thing`) against a config key of `plugin:vendor:thing`, and one configured server mentioned nowhere at all |
 | `transcripts/no-tool-block.jsonl` | yes | `detect.test.ts` — a measured session carrying a skill listing and no `deferred_tools` record, so nothing about any server was observable in it |
+| `doctor/` | yes | `validity.test.ts` — real `claude doctor` output paired with the `claude plugin list --json` answer for the same files, so a settings file's validity is checked against first-party on both sides. See its own README |
 | `differential/` | yes | the differential gate, replayed in CI — project *and* server names are synthetic, see its own README |
 | `local-snapshot/` | **no** | nothing, currently — see below |
 

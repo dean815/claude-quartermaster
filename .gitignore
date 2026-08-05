@@ -19,3 +19,9 @@ test/fixtures/local-snapshot/
 # project directories contain nothing else, so being silently skipped would delete the
 # projects outright and quietly shrink the gate.
 !test/fixtures/differential/**/settings.local.json
+
+# Same trap, second fixture (DEA-147). Two of the six recorded cases exist *only* to pair
+# two settings files with different validities, and in both the local file is the one
+# Claude Code discards. Skipped, they would degrade to single-file cases that still pass
+# -- so `validity.test.ts` also asserts every file the manifest records is on disk.
+!test/fixtures/doctor/**/settings.local.json

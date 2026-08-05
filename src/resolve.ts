@@ -23,6 +23,19 @@ import type { PluginInventory } from './inventory.ts';
  * serving two scopes. Counted twice, every globally-enabled plugin would resolve as
  * `restated`, and the audit would open with 42 fabricated findings. A file
  * contributes once, at its lowest applicable precedence.
+ *
+ * **Parsing is not the test for whether a file counts (DEA-147).** Claude Code validates
+ * against a schema before it merges, and a file that fails in the whole-file way is
+ * dropped entire -- so its links leave the chain here and the project resolves as though
+ * it had none. That moves `origin` for every cell the file decided, which is why this is
+ * a resolver change and not a reporting one.
+ *
+ * The condition is `discarded` and nothing wider. A `field-dropped` file keeps every key
+ * but the one that failed, so it resolves exactly as it did before this existed; and
+ * `not-checked` is the *usual* state, because validity costs one `claude doctor` spawn
+ * per project and lives behind `--full`. Widening either into `discarded` deletes live
+ * overrides from the model on no evidence, which is worse than the reporting gap it
+ * would be trying to close.
  */
 function contributingFiles(
   ws: Workspace,
@@ -34,6 +47,7 @@ function contributingFiles(
   const push = (scope: Scope, file: SettingsFile | null) => {
     if (!file || seen.has(file.path)) return;
     seen.add(file.path);
+    if (file.validity === 'discarded') return;
     out.push({ scope, file });
   };
 
@@ -138,6 +152,11 @@ export function resolveMcpServer(
  * Widening this changes no detector output: an unmentioned id has no project-scope link,
  * so it is never `restated`, never `overridden`, and never enabled anywhere -- each of
  * the three consumers drops it on its own first test.
+ *
+ * A `discarded` file is read here on purpose, unlike in `contributingFiles`. The two are
+ * different questions: whether a file decides a cell, and whether an id is worth a row.
+ * An id named only by a voided file still resolves -- to whatever the chain without that
+ * file says -- and showing that row is how anyone sees the entry is not in effect.
  */
 export function allPluginIds(
   ws: Workspace,

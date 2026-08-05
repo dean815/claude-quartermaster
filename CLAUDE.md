@@ -140,6 +140,34 @@ exactness is now per-entry rather than per-kind. The day it fails: the same defe
 on the **skill** axis — `shortPluginName` splits the id while transcripts list
 `Notion:create-page`.
 
+**A file that parses is not a file that applies, and "invalid" is not one state
+(DEA-147).** Claude Code validates a settings file against a schema before merging it,
+and the issue's title — one bad key voids the whole file — is true for some keys and
+false for others. Measured on 2.1.221 with `claude plugin list --json` as the oracle:
+`hooks: 42` fails the schema, `doctor` reports it, and `enabledPlugins` **still
+applies**; `extraKnownMarketplaces.<id>.source` as a string and `permissions.deny` as a
+string each void the file entire. So `SettingsValidity` has four values —
+`accepted` / `field-dropped` / `discarded` / `not-checked` — and **only `discarded`
+removes a file's links from the chain.** Reading `field-dropped` as void reports live
+overrides as dead, which is DEA-123's cry-wolf failure arriving from the opposite side.
+The only observable discriminator is the trailing sentence `This field was ignored.`,
+so it is pinned as one constant and the fixture is a *recording*, never a restatement of
+the rule. **`not-checked` is the common case, not the exception:** `doctor` validates per
+working directory, so checking 28 projects here is 28 spawns and 15.6s, which puts it
+behind `--full`; without it every file reads `not-checked` and resolves exactly as
+parsing alone always did. `readSettings`'s second parameter is required for the
+`pluginServerKey` reason — a default would pick one of the two wrong answers silently.
+`qm effect` grows a fourth verdict, `none`, for a deny rule in a discarded file: it is
+neither `reload` nor `restart` because the change does not land. The day it fails: three
+ways. That sentence is first-party prose and can change in any release, taking every
+`field-dropped` file to `discarded` with it. Validity is per *file* while the error names
+a *key*, so a `field-dropped` file whose dropped field is `permissions` has deny rules
+that are equally not in force and `effect.ts` still says `reload` for them. And whether
+`doctor` reports on `~/.claude/settings.json` from a non-home cwd is **unmeasured** —
+establishing it means corrupting the live user settings file — so user scope is
+`not-checked` unless a run *names* it, which on this machine happens only because `~` is
+itself a registered project and that run covers the file as its own project scope.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32

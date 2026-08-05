@@ -146,17 +146,17 @@ const CASES: Array<{ label: string; change: PendingChange; expect: Effect }> = [
   // The deny-rule half -- the only route to `restart` there is.
   {
     label: 'bare deny rule',
-    change: { kind: 'deny-rule', rules: ['Bash'], source: '/s.json' },
+    change: { kind: 'deny-rule', rules: ['Bash'], source: '/s.json', sourceValidity: 'accepted' },
     expect: 'restart',
   },
   {
     label: 'wildcard deny rule',
-    change: { kind: 'deny-rule', rules: ['*'], source: '/s.json' },
+    change: { kind: 'deny-rule', rules: ['*'], source: '/s.json', sourceValidity: 'accepted' },
     expect: 'restart',
   },
   {
     label: 'scoped deny rule',
-    change: { kind: 'deny-rule', rules: ['Bash(rm *)'], source: '/s.json' },
+    change: { kind: 'deny-rule', rules: ['Bash(rm *)'], source: '/s.json', sourceValidity: 'accepted' },
     expect: 'reload',
   },
   {
@@ -166,12 +166,45 @@ const CASES: Array<{ label: string; change: PendingChange; expect: Effect }> = [
       kind: 'deny-rule',
       rules: ['mcp__robinhood-trading__place_equity_order'],
       source: '/s.json',
+      sourceValidity: 'accepted',
     },
     expect: 'reload',
   },
   {
     label: 'mixed deny rules, one bare',
-    change: { kind: 'deny-rule', rules: ['Bash(rm *)', 'WebFetch'], source: '/s.json' },
+    change: {
+      kind: 'deny-rule',
+      rules: ['Bash(rm *)', 'WebFetch'],
+      source: '/s.json',
+      sourceValidity: 'accepted',
+    },
+    expect: 'restart',
+  },
+
+  /**
+   * The DEA-147 half: the same bare rule, in a file Claude Code drops.
+   *
+   * Three cases and not one, because the interesting claim is the *boundary*. A rule
+   * whose file is discarded is not in force, so changing it moves nothing -- but the
+   * other two validities must keep answering `restart`, and a check written as "is the
+   * validity anything other than accepted" passes the first row and fails these two.
+   * `not-checked` is the one that matters most: it is what every file reads without
+   * `--full`, so a classifier that rounded it to `none` would silence the tool's only
+   * restart warning on every default run.
+   */
+  {
+    label: 'bare deny rule in a discarded file',
+    change: { kind: 'deny-rule', rules: ['Bash'], source: '/void.json', sourceValidity: 'discarded' },
+    expect: 'none',
+  },
+  {
+    label: 'bare deny rule in a field-dropped file',
+    change: { kind: 'deny-rule', rules: ['Bash'], source: '/part.json', sourceValidity: 'field-dropped' },
+    expect: 'restart',
+  },
+  {
+    label: 'bare deny rule in an unchecked file',
+    change: { kind: 'deny-rule', rules: ['Bash'], source: '/dunno.json', sourceValidity: 'not-checked' },
     expect: 'restart',
   },
 
@@ -381,6 +414,18 @@ describe('combining sub-answers', () => {
     assert.equal(worstEffect(['reload', 'unknown']), 'unknown');
     assert.equal(worstEffect(['unknown', 'restart']), 'restart');
   });
+
+  /**
+   * `none` is below `reload`, and the seed is the first element rather than `reload` --
+   * otherwise a list of nothing-but-`none` would round up to `reload` and claim a
+   * discarded file's change takes effect on the next reload.
+   */
+  test('and none is the floor, not a value the seed swallows', () => {
+    assert.equal(worstEffect(['none']), 'none');
+    assert.equal(worstEffect(['none', 'none']), 'none');
+    assert.equal(worstEffect(['none', 'reload']), 'reload');
+    assert.equal(worstEffect(['none', 'restart']), 'restart');
+  });
 });
 
 describe('the report', () => {
@@ -389,15 +434,18 @@ describe('the report', () => {
       skills: ['a', 'b'],
       plugins: ['data@m', 'ghost@m'],
       mcpServers: ['plugin:data:hex', 'claude.ai Linear'],
-      denyRules: [{ rules: ['Bash'], source: '/s.json' }],
+      denyRules: [
+        { rules: ['Bash'], source: '/s.json', sourceValidity: 'accepted' },
+        { rules: ['Bash'], source: '/void.json', sourceValidity: 'discarded' },
+      ],
     });
     const report = classifyAll(changes, input());
 
     assert.deepEqual(tally(report), [
-      { kind: 'skill', reload: 2, restart: 0, unknown: 0 },
-      { kind: 'plugin', reload: 1, restart: 0, unknown: 1 },
-      { kind: 'mcp-server', reload: 1, restart: 0, unknown: 1 },
-      { kind: 'deny-rule', reload: 0, restart: 1, unknown: 0 },
+      { kind: 'skill', none: 0, reload: 2, restart: 0, unknown: 0 },
+      { kind: 'plugin', none: 0, reload: 1, restart: 0, unknown: 1 },
+      { kind: 'mcp-server', none: 0, reload: 1, restart: 0, unknown: 1 },
+      { kind: 'deny-rule', none: 1, reload: 0, restart: 1, unknown: 0 },
     ]);
     assert.equal(report.measuredSessions, 2);
     assert.equal(report.totalSessions, 3);
@@ -519,6 +567,33 @@ const MUTATIONS: Mutation[] = [
       return stub(c, c.rules[0] && isBareDenyRule(c.rules[0]) ? 'restart' : 'reload');
     },
     names: /^mixed deny rules, one bare: expected restart, got reload$/,
+  },
+  {
+    /**
+     * DEA-147's own regression: validity read but not consulted, so a rule in a file
+     * Claude Code drops still shouts "restart". This is the state before the branch
+     * existed, and it is the direction that costs the user a restart for nothing.
+     */
+    name: 'a discarded file\'s deny rules still need a restart',
+    classifier: (c, i) => {
+      if (c.kind !== 'deny-rule') return classify(c, i);
+      return stub(c, c.rules.some(isBareDenyRule) ? 'restart' : 'reload');
+    },
+    names: /^bare deny rule in a discarded file: expected none, got restart$/,
+  },
+  {
+    /**
+     * The far more dangerous direction, and the one the whole issue is about: anything
+     * short of `accepted` is treated as void. It reads as caution and it silences the
+     * restart warning on every run without `--full`, where nothing is checked at all.
+     */
+    name: 'any file not confirmed valid is treated as discarded',
+    classifier: (c, i) => {
+      if (c.kind !== 'deny-rule') return classify(c, i);
+      if (c.sourceValidity !== 'accepted') return stub(c, 'none');
+      return stub(c, c.rules.some(isBareDenyRule) ? 'restart' : 'reload');
+    },
+    names: /^bare deny rule in (a field-dropped|an unchecked) file: expected restart, got none$/,
   },
   {
     /**
