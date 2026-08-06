@@ -49,6 +49,41 @@ export type SettingsValidity =
   /** `doctor` was not run here, is not on PATH, or its output did not parse. */
   | 'not-checked';
 
+/**
+ * One entry of `doctor`'s `Invalid settings` block, as it printed it.
+ *
+ * Lives here rather than beside the parser for the reason `SettingsValidity` does: it is
+ * a property of a settings file that only `doctor` can report, and the layer that reads
+ * files must be able to carry it without importing the layer that shells out.
+ */
+export interface SettingsError {
+  /** Absolute path of the settings file, as `doctor` printed it. */
+  path: string;
+  /** Dotted key path -- `permissions.deny`, `extraKnownMarketplaces.<id>.source`. */
+  key: string;
+  /** The message after the key, verbatim and on its own line. */
+  message: string;
+  /** Indented continuations of that entry -- `Suggested fix: ...` -- verbatim. */
+  notes: string[];
+  /** Whether `message` ends in the note. The one thing that decides the two classes. */
+  fieldIgnored: boolean;
+}
+
+/**
+ * One file's answer from the validator, kept whole (DEA-148).
+ *
+ * `validity` alone was the channel, and it threw away the only thing a finding about a
+ * voided file has to print: *which key*. The two travel together because they are one
+ * measurement -- for every file a run covered, `validity` is `validityOf(schemaErrors)` --
+ * and a report that can name a discarded file but not its cause is a report that sends
+ * the user back to `doctor` to ask what it already knew.
+ */
+export interface SettingsCheck {
+  validity: SettingsValidity;
+  /** Empty exactly when `validity` is `accepted` or `not-checked`. */
+  schemaErrors: readonly SettingsError[];
+}
+
 /** `settings.json`, `settings.local.json`, and `~/.claude/settings.json` share a shape. */
 export interface SettingsFile {
   /** Absolute path this was read from. Identity for the same-file dedup rule. */
@@ -58,6 +93,13 @@ export interface SettingsFile {
    * per consumer, because a consumer holding a `SettingsFile` has nothing left to ask.
    */
   validity: SettingsValidity;
+  /**
+   * What the validator said, if anything. Required and never optional, for the same
+   * reason `validity` has no default: an absent list and an empty one would be the same
+   * value with two meanings, and the one that matters -- "discarded, and here is the key"
+   * -- is the one that would silently lose its evidence.
+   */
+  schemaErrors: readonly SettingsError[];
   enabledPlugins?: Record<string, boolean>;
   skillOverrides?: Record<string, SkillValue>;
   enabledMcpjsonServers?: string[];

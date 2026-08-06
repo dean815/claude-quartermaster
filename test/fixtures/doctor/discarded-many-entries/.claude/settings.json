@@ -1,0 +1,17 @@
+{
+  "enabledPlugins": {
+    "context7@claude-plugins-official": true,
+    "chrome-devtools-mcp@claude-plugins-official": true
+  },
+  "skillOverrides": {
+    "gsd-help": "off"
+  },
+  "enabledMcpjsonServers": ["alpha", "beta"],
+  "disabledMcpjsonServers": ["gamma"],
+  "extraKnownMarketplaces": {
+    "karpathy-skills": {
+      "source": "github",
+      "repo": "x/y"
+    }
+  }
+}

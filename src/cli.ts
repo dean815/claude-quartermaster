@@ -20,7 +20,13 @@ import {
 } from './cost/plugins.ts';
 import { PluginCostCache, buildIdsByPath } from './cache.ts';
 import { readInventories } from './inventory.ts';
-import { runAll, rank, type AuditContext, type Finding } from './detect.ts';
+import {
+  runAll,
+  rank,
+  settingsValidityTally,
+  type AuditContext,
+  type Finding,
+} from './detect.ts';
 import { collect, groupByDetector, type DelegationReport } from './delegate/types.ts';
 import {
   projectOptimizerAdapter,
@@ -787,6 +793,12 @@ that happens.
           sessions: ctx.measurements.length,
           unreadable: problems,
           unchecked: delegated.unchecked,
+          // Beside `unchecked` and for its reason (DEA-148): a run without --full asks
+          // `claude doctor` about no settings file at all, so `discarded-settings` emits
+          // nothing and the absence has to be readable as "did not look" rather than as
+          // "nothing wrong". Not a finding -- it has no severity, and it is a property of
+          // this run rather than of the configuration.
+          settingsValidity: settingsValidityTally(ctx.ws),
           unpriced: unpricedPlugins(ctx),
           // Not a finding, and deliberately not routed through one: it has no severity
           // and says nothing about the user's configuration. It reports what this run
@@ -814,12 +826,48 @@ that happens.
 
   printFindings(findings, ctx);
   printUnpriced(unpricedPlugins(ctx));
+  printSettingsValidity(ctx, opts.full);
   printUnchecked(delegated, opts.full);
   if (problems.length) {
     console.log(`${DIM}${problems.length} file(s) could not be parsed:${RESET}`);
     for (const p of problems.slice(0, 5)) console.log(`  ${p.path}`);
     console.log();
   }
+}
+
+/**
+ * How many settings files were asked about, and how they answered (DEA-148).
+ *
+ * Prints on every audit, including one with no findings, because that is the run this
+ * line exists for: without `--full` nothing asks `claude doctor` anything, every file is
+ * `not-checked`, and `discarded-settings` is silent about a workspace it never examined.
+ * A tally rather than a finding, for the reason the disclosure field is not one -- it has
+ * no severity and describes the run.
+ */
+function printSettingsValidity(ctx: AuditContext, ranFull: boolean): void {
+  const tally = settingsValidityTally(ctx.ws);
+  const total = Object.values(tally).reduce((a, b) => a + b, 0);
+  if (!total) return;
+
+  const checked = total - tally['not-checked'];
+  const parts = [
+    `${tally.accepted} accepted`,
+    `${tally['field-dropped']} field-dropped`,
+    `${tally.discarded} discarded`,
+    `${tally['not-checked']} not checked`,
+  ];
+
+  console.log(
+    `${DIM}settings validity: ${total} file${total === 1 ? '' : 's'} — ${parts.join(' · ')}${RESET}`,
+  );
+  if (!checked) {
+    console.log(
+      `  ${DIM}nothing was validated${
+        ranFull ? ' — claude doctor did not answer here' : '; pass --full to ask claude doctor'
+      }. A file nobody checked is not a file that applies.${RESET}`,
+    );
+  }
+  console.log();
 }
 
 /**

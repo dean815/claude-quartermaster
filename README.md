@@ -112,10 +112,11 @@ largest tool-name block observed, conveying nothing to the model.
 
 ### Shipped — `qm audit`, read-only
 
-Eleven detectors over a resolved model of every extension × every project:
+Twelve detectors over a resolved model of every extension × every project:
 
 | Detector | What it catches |
 |---|---|
+| **discarded-settings** | a settings file Claude Code refuses whole, and the count of entries in it that consequently never apply — needs `--full`, which asks `claude doctor` per project |
 | **duplicate-access-paths** | one service live through several namespaces at once, ranked by the *redundant* chars |
 | **never-observed-server** | a configured, enabled MCP server absent from every session that could have loaded it — and a count of the ones where absence proves nothing |
 | **cost-without-use** | enabled, hookless, never-invoked plugins, ranked by what disabling saves |

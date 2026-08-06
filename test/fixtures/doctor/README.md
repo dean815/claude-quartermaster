@@ -1,8 +1,13 @@
 # `claude doctor` settings-validity recording
 
-Read by `test/validity.test.ts`. Both halves of every comparison in that gate are
-first-party output, recorded once against **Claude Code native 2.1.221**
-(commit `6efaf12e8b43`, darwin-arm64) on 2026-08-05:
+Read by `test/validity.test.ts` and `test/discarded-settings.test.ts`, through
+`load.ts`. Both halves of every comparison in those gates are first-party output,
+recorded against **Claude Code native 2.1.221** (commit `6efaf12e8b43`, darwin-arm64) on
+2026-08-05, and one case against **2.1.222** (commit `fbf49312c284`) on 2026-08-06 --
+`manifest.json` → `cases[].claudeVersion` names the exception. The five originals were
+*not* re-captured to tidy that up: a recording is dated by construction, and re-recording
+them would throw away the only evidence anyone has that the block's shape survived a
+release.
 
 | | |
 |---|---|
@@ -31,7 +36,15 @@ survives gives `true`; a file it discarded leaves the answer at the user scope's
 | `discarded-marketplace-source` | `extraKnownMarketplaces.<id>.source` as a string | error | `false` | the incident's own key; whole file voided |
 | `discarded-permissions-deny` | `permissions.deny` as a string | error + `Suggested fix:` | `false` | whole file voided, and the continuation line |
 | `dropped-over-discarded` | both, in two files | two errors, one run | `true` | field-dropped `settings.json` survives a discarded `settings.local.json` above it |
+| `discarded-many-entries` | `extraKnownMarketplaces.<id>.source` as a string | error | `false` | six entries over four keys, so a cost figure can be wrong in more than one way |
 | `valid-local-over-discarded` | discarded `settings.json`, valid local | error | `true` | a discarded file whose removal changes nothing — the control |
+
+`discarded-many-entries` is the only case whose reason for existing is a *number*.
+Every other file decides exactly one thing, so a detector counting only `enabledPlugins`
+would price all of them correctly; this one spends 2 plugin entries, 1 `skillOverrides`
+entry and 3 `.mcp.json` server entries, and the count is asserted as a literal. Its other
+three keys were also checked against the oracle with the bad key removed — both plugins
+resolve `true` — so the discard is the marketplace key's doing and not theirs.
 
 `field-dropped-hooks` is why the model has four states and not three. The issue this
 fixture belongs to (DEA-147) was titled *one bad key voids the whole file*, and that is
