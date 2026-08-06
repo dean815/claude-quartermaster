@@ -60,6 +60,50 @@ const SETTINGS_KNOWN = new Set([
 export const NOT_CHECKED: SettingsCheck = { validity: 'not-checked', schemaErrors: [] };
 
 /**
+ * The elements of a permission array that are actually rules (DEA-150).
+ *
+ * `permissions.deny` and its siblings are declared `string[]` and arrive from JSON, which
+ * enforces nothing. Claude Code **removes** a non-string element and keeps applying the
+ * file -- measured on 2.1.222, `doctor` prints `Non-string value in deny array was
+ * removed` and `claude plugin list --json` confirms the file's `enabledPlugins` still
+ * apply -- so an element it removed is not a rule the user has, and modelling it as one
+ * is modelling a rule that is not in force. Dropping it is the only faithful answer:
+ * `String(rule)` would invent `"1"`, which nobody wrote and which the detector would then
+ * charge the file for as a bare tool name.
+ *
+ * **Narrowed here rather than in `isBareDenyRule` because this is the layer where the
+ * type stops being true.** Two consumers read these arrays -- `bareDenyRules` directly,
+ * and `effect.ts`'s deny-rule classifier by way of `cli.ts` -- and a non-string killed
+ * both with the same `rule.includes is not a function`. One narrowing at the reader keeps
+ * the predicate shared and unforked, and makes `SettingsFile['permissions']` a promise the
+ * reader keeps rather than one every caller has to re-check.
+ *
+ * A non-array is `undefined` and not `[]`: `deny: "Bash"` is the shape that voids the
+ * whole file, so there are no rules in force there either, and saying "no such key" is
+ * nearer the truth than saying "a key with nothing in it".
+ */
+function ruleStrings(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((v): v is string => typeof v === 'string');
+}
+
+/** `permissions`, holding only what Claude Code would keep. See `ruleStrings`. */
+function readPermissions(raw: unknown): SettingsFile['permissions'] | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const p = raw as Record<string, unknown>;
+  const allow = ruleStrings(p['allow']);
+  const deny = ruleStrings(p['deny']);
+  const ask = ruleStrings(p['ask']);
+  const defaultMode = p['defaultMode'];
+  return {
+    ...(allow ? { allow } : {}),
+    ...(deny ? { deny } : {}),
+    ...(ask ? { ask } : {}),
+    ...(typeof defaultMode === 'string' ? { defaultMode } : {}),
+  };
+}
+
+/**
  * `check` is required, and deliberately has no default.
  *
  * Parsing is this function's whole competence: whether Claude Code *accepts* what it
@@ -85,7 +129,7 @@ export function readSettings(path: string, check: SettingsCheck): SettingsFile |
     ...(raw.skillOverrides ? { skillOverrides: raw.skillOverrides as Record<string, SkillValue> } : {}),
     ...(raw.enabledMcpjsonServers ? { enabledMcpjsonServers: raw.enabledMcpjsonServers } : {}),
     ...(raw.disabledMcpjsonServers ? { disabledMcpjsonServers: raw.disabledMcpjsonServers } : {}),
-    ...(raw.permissions ? { permissions: raw.permissions } : {}),
+    ...(raw.permissions ? { permissions: readPermissions(raw.permissions) ?? {} } : {}),
     rest,
   };
 }

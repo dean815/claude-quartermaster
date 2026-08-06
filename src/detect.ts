@@ -512,6 +512,12 @@ export function noPathScopedRules(ctx: AuditContext): Finding[] {
  * Exported because `effect.ts` asks the same question of a *staged* rule that this asks
  * of a written one, and two copies of the predicate drift the moment either is edited
  * -- the reasoning that keeps the Blocking/Gap/Polish rubric in one place.
+ *
+ * `rule` really is a string, and that is `readSettings`'s promise rather than this
+ * function's guess (DEA-150). JSON let a number into `permissions.deny` and killed both
+ * callers here with `rule.includes is not a function`; the narrowing went into the reader
+ * so this predicate stayed one predicate. Do not re-check the type here -- a second guard
+ * would move the invariant to two places and hide which one owns it.
  */
 export function isBareDenyRule(rule: string): boolean {
   return !rule.includes('(') && rule.trim() !== '' && !rule.startsWith('mcp__');
