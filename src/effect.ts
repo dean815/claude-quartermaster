@@ -51,6 +51,7 @@ import { normalizeServerName } from './cost/transcript.ts';
 import type { TranscriptMeasurement } from './cost/transcript.ts';
 import type { PluginInventory } from './inventory.ts';
 import { pluginServerKey } from './mcp.ts';
+import type { SettingsValidity } from './surfaces/types.ts';
 
 /**
  * What a change needs before it is live.
@@ -58,8 +59,13 @@ import { pluginServerKey } from './mcp.ts';
  * `unknown` is a first-class answer, not a polite `restart`. It says the measurement
  * that would decide this was never taken -- which is `SkillPresence`'s rule about a
  * zeroed counter, applied to a session record instead of a counter.
+ *
+ * `none` is the opposite kind of answer and arrives from DEA-147: the change lands in a
+ * settings file Claude Code discards, so nothing about the running session's inputs
+ * moves and there is nothing to reload or restart *for*. Not folded into `reload`,
+ * because "run /reload-plugins and this takes effect" would be false.
  */
-export type Effect = 'reload' | 'restart' | 'unknown';
+export type Effect = 'none' | 'reload' | 'restart' | 'unknown';
 
 /**
  * What one session transcript can say about one server's tools.
@@ -120,7 +126,22 @@ export type PendingChange =
   | { kind: 'plugin'; id: string; project?: string }
   /** `name` is the config key -- `plugin:airtable:airtable`, `claude.ai Linear`. */
   | { kind: 'mcp-server'; name: string; project?: string }
-  | { kind: 'deny-rule'; rules: readonly string[]; source: string; project?: string };
+  | {
+      kind: 'deny-rule';
+      rules: readonly string[];
+      source: string;
+      /**
+       * Whether Claude Code accepts `source`. Required, so no construction site gets an
+       * optimistic guess for free -- the `pluginServerKey` rule (DEA-145).
+       *
+       * On the change rather than in `ClassifyInput`, because it is a fact about this
+       * change's own target file and not about the observed world. The deny-rule kind is
+       * the only one naming a file today; when DEA-112 stages a real plugin or skill
+       * write, that change will name one too and will carry its validity the same way.
+       */
+      sourceValidity: SettingsValidity;
+      project?: string;
+    };
 
 export interface Classification {
   change: PendingChange;
@@ -200,10 +221,15 @@ export function deferralOf(
  * how several known answers merge, not a default. Nothing here ever turns an absence of
  * evidence into `restart`.
  */
-const RANK: Record<Effect, number> = { reload: 0, unknown: 1, restart: 2 };
+const RANK: Record<Effect, number> = { none: 0, reload: 1, unknown: 2, restart: 3 };
 
+/**
+ * The seed is the first element and not `reload`, so a list of `none` stays `none`.
+ * An empty list is still `reload` -- no sub-answers means no reason to have been asked,
+ * and the two callers below never pass one.
+ */
 export function worstEffect(effects: readonly Effect[]): Effect {
-  let worst: Effect = 'reload';
+  let worst: Effect = effects[0] ?? 'reload';
   for (const e of effects) if (RANK[e] > RANK[worst]) worst = e;
   return worst;
 }
@@ -252,6 +278,27 @@ export function classify(change: PendingChange, input: ClassifyInput): Classific
   }
 
   if (change.kind === 'deny-rule') {
+    // Before the bare/scoped question, because a rule in a file Claude Code drops is not
+    // in force whatever its shape, so nothing about it can invalidate a cache. Only
+    // `discarded`: a `field-dropped` or `not-checked` file is classified exactly as it
+    // was before DEA-147.
+    //
+    // The day it fails: validity is per file and the dropped *key* is not carried here,
+    // so a `field-dropped` file whose dropped field is `permissions` has deny rules that
+    // are equally not in force, and this says `reload` for them. Naming the key is what
+    // DEA-148 reports, and this can narrow once it does.
+    if (change.sourceValidity === 'discarded') {
+      return {
+        change,
+        effect: 'none',
+        reason:
+          'Claude Code discards this settings file, so its deny rules are not in force ' +
+          'and changing them moves nothing.',
+        sessions: 0,
+        evidence: [`${change.source} fails Claude Code's settings schema in the whole-file way`],
+      };
+    }
+
     const bare = change.rules.filter(isBareDenyRule);
     if (!bare.length) {
       return {
@@ -372,6 +419,7 @@ export interface EffectReport {
 /** Counts per change kind per effect, in the order `ChangeKind` declares them. */
 export function tally(report: EffectReport): Array<{
   kind: ChangeKind;
+  none: number;
   reload: number;
   restart: number;
   unknown: number;
@@ -388,9 +436,18 @@ export function tally(report: EffectReport): Array<{
     'mcp-server',
     'deny-rule',
   ];
-  const rows = new Map<ChangeKind, { kind: ChangeKind; reload: number; restart: number; unknown: number }>();
+  const rows = new Map<
+    ChangeKind,
+    { kind: ChangeKind; none: number; reload: number; restart: number; unknown: number }
+  >();
   for (const c of report.classifications) {
-    const row = rows.get(c.change.kind) ?? { kind: c.change.kind, reload: 0, restart: 0, unknown: 0 };
+    const row = rows.get(c.change.kind) ?? {
+      kind: c.change.kind,
+      none: 0,
+      reload: 0,
+      restart: 0,
+      unknown: 0,
+    };
     row[c.effect]++;
     rows.set(c.change.kind, row);
   }
@@ -425,7 +482,12 @@ export function candidateChanges(axes: {
   skills: readonly string[];
   plugins: readonly string[];
   mcpServers: readonly string[];
-  denyRules: ReadonlyArray<{ rules: readonly string[]; source: string; project?: string }>;
+  denyRules: ReadonlyArray<{
+    rules: readonly string[];
+    source: string;
+    sourceValidity: SettingsValidity;
+    project?: string;
+  }>;
 }): PendingChange[] {
   return [
     ...axes.skills.map((id): PendingChange => ({ kind: 'skill', id })),
@@ -436,6 +498,7 @@ export function candidateChanges(axes: {
         kind: 'deny-rule',
         rules: d.rules,
         source: d.source,
+        sourceValidity: d.sourceValidity,
         ...(d.project ? { project: d.project } : {}),
       }),
     ),

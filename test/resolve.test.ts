@@ -27,8 +27,13 @@ const inventory = (id: string): PluginInventory => ({
   enumerated: [],
 });
 
+/**
+ * `not-checked` unless a case says otherwise, because that is what resolves the way this
+ * file resolved before DEA-147 -- every assertion below predates validity and must not
+ * move. A `discarded` default would delete links from chains these cases are about.
+ */
 function settings(path: string, body: Partial<SettingsFile> = {}): SettingsFile {
-  return { path, rest: {}, ...body };
+  return { path, validity: 'not-checked', rest: {}, ...body };
 }
 
 function claudeJson(body: Partial<ClaudeJson> = {}): ClaudeJson {

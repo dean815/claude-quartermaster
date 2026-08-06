@@ -7,10 +7,57 @@
  */
 import type { SkillValue } from '../model.ts';
 
+/**
+ * Whether Claude Code accepts a settings file, as distinct from whether it parsed.
+ *
+ * A file that parses as JSON is still validated against a schema, and failing that
+ * schema costs it either one key or the whole file (DEA-147). Measured against 2.1.221,
+ * one `claude doctor` run per case, `claude plugin list --json` as the oracle:
+ *
+ * | extra key in an otherwise valid file | doctor | `enabledPlugins` applied |
+ * |---|---|---|
+ * | *(none)*                                | silent  | yes |
+ * | `hooks: 42`                             | error   | **yes -- only the field dropped** |
+ * | `extraKnownMarketplaces.<id>.source` string | error | no -- whole file voided |
+ * | `permissions.deny` string               | error   | no -- whole file voided |
+ *
+ * So "has a schema error" is not "is discarded", and the four states are not three.
+ * **Only `discarded` may remove a file's links from a precedence chain.** Reading a
+ * `field-dropped` file as void reports live overrides as dead, which is DEA-123's
+ * cry-wolf failure arriving from the opposite side, and `not-checked` is the *common*
+ * state rather than the exception: `doctor` validates per working directory, so
+ * checking N projects is N spawns and lives behind `--full`.
+ *
+ * `not-checked` is a value, not a default -- the `usageCount` / `SkillPresence` /
+ * `keyBasis` rule. It says the measurement was never taken, and it must never be
+ * rounded to either `accepted` or `discarded`.
+ *
+ * The day it fails: the only observable discriminator between the two error classes is
+ * the trailing sentence `This field was ignored.`, which is Claude Code's own prose and
+ * carries no version guarantee. It can change in any release, and the day it does every
+ * `field-dropped` file classifies `discarded` -- so `parseInvalidSettings` pins that
+ * string in one place and the fixture is a recording of first-party output, not a
+ * restatement of the rule.
+ */
+export type SettingsValidity =
+  /** `doctor` ran over this file and reported nothing against it. */
+  | 'accepted'
+  /** It reported only errors saying the field was ignored; the rest of the file applies. */
+  | 'field-dropped'
+  /** It reported an error carrying no such note; Claude Code drops the file entire. */
+  | 'discarded'
+  /** `doctor` was not run here, is not on PATH, or its output did not parse. */
+  | 'not-checked';
+
 /** `settings.json`, `settings.local.json`, and `~/.claude/settings.json` share a shape. */
 export interface SettingsFile {
   /** Absolute path this was read from. Identity for the same-file dedup rule. */
   path: string;
+  /**
+   * Whether Claude Code would apply this file. Carried on the file rather than looked up
+   * per consumer, because a consumer holding a `SettingsFile` has nothing left to ask.
+   */
+  validity: SettingsValidity;
   enabledPlugins?: Record<string, boolean>;
   skillOverrides?: Record<string, SkillValue>;
   enabledMcpjsonServers?: string[];

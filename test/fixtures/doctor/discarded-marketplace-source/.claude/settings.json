@@ -1,0 +1,11 @@
+{
+  "enabledPlugins": {
+    "context7@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "karpathy-skills": {
+      "source": "github",
+      "repo": "x/y"
+    }
+  }
+}

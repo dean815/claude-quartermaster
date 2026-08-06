@@ -11,6 +11,7 @@ import { join, resolve as resolvePath } from 'node:path';
 
 import type {
   SettingsFile,
+  SettingsValidity,
   McpJsonFile,
   ClaudeJson,
   ProjectRecord,
@@ -49,7 +50,18 @@ const SETTINGS_KNOWN = new Set([
   'permissions',
 ]);
 
-export function readSettings(path: string): SettingsFile | null {
+/**
+ * `validity` is required, and deliberately has no default.
+ *
+ * Parsing is this function's whole competence: whether Claude Code *accepts* what it
+ * parsed is a question only `claude doctor` answers, and it answers per working
+ * directory. A default would pick one of the two wrong answers for every call site that
+ * forgot -- `accepted` reports a voided file's overrides as live, `discarded` reports
+ * live overrides as void -- and it would do it silently, which is the shape DEA-145's
+ * required third parameter exists to prevent. Callers with no answer pass
+ * `'not-checked'`, which is an answer.
+ */
+export function readSettings(path: string, validity: SettingsValidity): SettingsFile | null {
   const raw = readJsonSafe(path);
   if (!raw) return null;
 
@@ -58,6 +70,7 @@ export function readSettings(path: string): SettingsFile | null {
 
   return {
     path,
+    validity,
     ...(raw.enabledPlugins ? { enabledPlugins: raw.enabledPlugins } : {}),
     ...(raw.skillOverrides ? { skillOverrides: raw.skillOverrides as Record<string, SkillValue> } : {}),
     ...(raw.enabledMcpjsonServers ? { enabledMcpjsonServers: raw.enabledMcpjsonServers } : {}),
@@ -240,16 +253,43 @@ export interface LoadOptions {
    * whole-workspace audit.
    */
   extraProjectPaths?: readonly string[];
+  /**
+   * Ask something whether Claude Code accepts the settings files in one directory.
+   *
+   * Injected rather than called, so this module keeps knowing only about disk. The one
+   * implementation shells out to `claude doctor` per project (`delegate/doctor.ts`),
+   * which is ~0.65s each and belongs behind `--full`; nothing here decides that.
+   *
+   * The returned map is keyed by absolute path and need not name every file it was
+   * asked about -- a path it omits is `'not-checked'`. It may also name files outside
+   * the directory: one `doctor` run reports every settings file in scope, so a run
+   * inside a project is how `~/.claude/settings.json` gets classified at all.
+   */
+  settingsValidity?: (projectDir: string) => ReadonlyMap<string, SettingsValidity>;
 }
+
+const NOTHING_CHECKED: ReadonlyMap<string, SettingsValidity> = new Map();
 
 export function loadWorkspace(opts: LoadOptions = {}): Workspace {
   const home = opts.home ?? homedir();
   const claudeJson = readClaudeJson(opts.claudeJsonPath ?? join(home, '.claude.json'));
-  const userSettings = readSettings(
-    opts.userSettingsPath ?? join(home, '.claude', 'settings.json'),
-  );
   const userRules = readRulesDir(join(home, '.claude', 'rules'));
   const personalSkills = readPersonalSkills(home);
+
+  // Every validity any check named, merged. Keyed by absolute path, so the user-scope
+  // file lands here when a project run happened to report on it -- and stays absent,
+  // and so `not-checked`, when none did.
+  const named = new Map<string, SettingsValidity>();
+  const settingsIn = (dir: string) => {
+    const from = opts.settingsValidity?.(dir) ?? NOTHING_CHECKED;
+    for (const [path, validity] of from) if (!named.has(path)) named.set(path, validity);
+    const settingsPath = join(dir, '.claude', 'settings.json');
+    const localPath = join(dir, '.claude', 'settings.local.json');
+    return {
+      settings: readSettings(settingsPath, from.get(settingsPath) ?? 'not-checked'),
+      localSettings: readSettings(localPath, from.get(localPath) ?? 'not-checked'),
+    };
+  };
 
   const projects: ProjectRecord[] = [];
   for (const [recordedPath, entry] of Object.entries(claudeJson.projects)) {
@@ -272,8 +312,7 @@ export function loadWorkspace(opts: LoadOptions = {}): Workspace {
       path: recordedPath,
       alive: true,
       registered: true,
-      settings: readSettings(join(dir, '.claude', 'settings.json')),
-      localSettings: readSettings(join(dir, '.claude', 'settings.local.json')),
+      ...settingsIn(dir),
       mcpJson: readMcpJson(join(dir, '.mcp.json')),
       entry,
       rules: readRulesDir(join(dir, '.claude', 'rules')),
@@ -293,8 +332,7 @@ export function loadWorkspace(opts: LoadOptions = {}): Workspace {
       path: abs,
       alive: true,
       registered: false,
-      settings: readSettings(join(abs, '.claude', 'settings.json')),
-      localSettings: readSettings(join(abs, '.claude', 'settings.local.json')),
+      ...settingsIn(abs),
       mcpJson: readMcpJson(join(abs, '.mcp.json')),
       entry: null,
       rules: readRulesDir(join(abs, '.claude', 'rules')),
@@ -302,6 +340,13 @@ export function loadWorkspace(opts: LoadOptions = {}): Workspace {
       claudeMd: readClaudeMd(join(abs, 'CLAUDE.md')),
     });
   }
+
+  // Last, so it can read whatever the per-project checks turned up about it. Whether a
+  // run in some project's directory reports on the user-scope file was never measured --
+  // establishing it would mean corrupting the live `~/.claude/settings.json` -- so this
+  // is `not-checked` unless a check named the path outright.
+  const userSettingsPath = opts.userSettingsPath ?? join(home, '.claude', 'settings.json');
+  const userSettings = readSettings(userSettingsPath, named.get(userSettingsPath) ?? 'not-checked');
 
   return { home, userSettings, userRules, personalSkills, claudeJson, projects };
 }

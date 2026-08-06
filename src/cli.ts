@@ -26,7 +26,7 @@ import {
   projectOptimizerAdapter,
   projectOptimizerJudgementAdapter,
 } from './delegate/projectOptimizer.ts';
-import { doctorAdapter } from './delegate/doctor.ts';
+import { doctorAdapter, doctorSettingsValidity } from './delegate/doctor.ts';
 import {
   checkProject,
   checkAll,
@@ -54,7 +54,7 @@ import { buildSkillCatalog, allSkillIds } from './skills.ts';
 import { buildMcpCatalog, allMcpServerNames } from './mcp.ts';
 import { allPluginIds } from './resolve.ts';
 import type { TranscriptMeasurement } from './cost/transcript.ts';
-import type { SettingsFile } from './surfaces/types.ts';
+import type { SettingsFile, SettingsValidity } from './surfaces/types.ts';
 
 const BOLD = '[1m';
 const DIM = '[2m';
@@ -265,7 +265,15 @@ function buildContext(opts: Options): AuditContext {
 
   // A brand-new project is absent from `~/.claude.json`, so it has to be named
   // explicitly or `--project` silently audits the whole workspace instead.
-  const ws = loadWorkspace(target ? { extraProjectPaths: [target] } : {});
+  //
+  // Validity is behind `--full` for the reason every other per-project scan is: `claude
+  // doctor` validates the working directory it runs in, so this is one ~0.65s spawn per
+  // live project. Without it every settings file reads `not-checked` and resolves exactly
+  // as it did before DEA-147 -- which is the designed degradation, not a gap.
+  const ws = loadWorkspace({
+    ...(target ? { extraProjectPaths: [target] } : {}),
+    ...(opts.full ? { settingsValidity: doctorSettingsValidity() } : {}),
+  });
 
   const targets = target
     ? ws.projects.filter((p) => p.path === target)
@@ -419,11 +427,23 @@ function printEffects(ctx: AuditContext): void {
       `entries · deferral measured from ${report.measuredSessions} of ${report.totalSessions} sessions${RESET}\n`,
   );
 
-  console.log(`  ${DIM}${'change kind'.padEnd(14)}${'reload'.padStart(8)}${'restart'.padStart(9)}${'unknown'.padStart(9)}${RESET}`);
+  console.log(
+    `  ${DIM}${'change kind'.padEnd(14)}${'reload'.padStart(8)}${'restart'.padStart(9)}` +
+      `${'unknown'.padStart(9)}${'none'.padStart(7)}${RESET}`,
+  );
   for (const r of rows) {
     console.log(
-      `  ${r.kind.padEnd(14)}${String(r.reload).padStart(8)}${String(r.restart).padStart(9)}${String(r.unknown).padStart(9)}`,
+      `  ${r.kind.padEnd(14)}${String(r.reload).padStart(8)}${String(r.restart).padStart(9)}` +
+        `${String(r.unknown).padStart(9)}${String(r.none).padStart(7)}`,
     );
+  }
+
+  // `none` last and named, because it is the one column that says the change would not
+  // land at all. Zero everywhere until `--full` has asked `doctor` about the files.
+  const nothing = report.classifications.filter((c) => c.effect === 'none');
+  if (nothing.length) {
+    console.log(`\n  ${BOLD}would not take effect at all${RESET}`);
+    for (const c of nothing) console.log(`    ${c.evidence[0] ?? c.reason}`);
   }
 
   const restarts = report.classifications.filter((c) => c.effect === 'restart');
@@ -452,7 +472,12 @@ function printEffects(ctx: AuditContext): void {
 
 /** The workspace's whole hypothetical change set, classified. */
 function effectReportFor(ctx: AuditContext): EffectReport {
-  const denyRules: Array<{ rules: readonly string[]; source: string; project?: string }> = [];
+  const denyRules: Array<{
+    rules: readonly string[];
+    source: string;
+    sourceValidity: SettingsValidity;
+    project?: string;
+  }> = [];
   // Deduplicated by path, for the reason `contributingFiles` gives: `~` is a registered
   // project whose `.claude/settings.json` *is* `~/.claude/settings.json`, so one file
   // arrives twice and the tally counted its rules twice.
@@ -461,7 +486,12 @@ function effectReportFor(ctx: AuditContext): EffectReport {
     const rules = file?.permissions?.deny;
     if (!file || !rules?.length || seen.has(file.path)) return;
     seen.add(file.path);
-    denyRules.push({ rules, source: file.path, ...(project ? { project } : {}) });
+    denyRules.push({
+      rules,
+      source: file.path,
+      sourceValidity: file.validity,
+      ...(project ? { project } : {}),
+    });
   };
   addDeny(ctx.ws.userSettings);
   for (const p of ctx.ws.projects) {
@@ -559,6 +589,12 @@ async function oracle(opts: Options): Promise<void> {
     file = linearFiler(cfg);
   }
 
+  // No validity check here, deliberately (DEA-147). A settings file Claude Code discards
+  // is precisely a divergence between this resolver and first-party, and that divergence
+  // is what found the bug: the gate went red with 21 mismatches and stayed red until the
+  // cause was named. Feeding the check its own answer would make the next occurrence
+  // agree with itself and say nothing, which is the one outcome an oracle must not have.
+  // It would also double the spawns -- `plugin list --json` per project, plus a `doctor`.
   const outcome = await runOracleCheck({
     ws: loadWorkspace(),
     read: liveOracle,
@@ -644,7 +680,10 @@ ${BOLD}qm${RESET} -- audit which Claude Code extensions load where, and what the
   qm serve    [--port <n>]    serve the grid on 127.0.0.1 until Ctrl-C
   qm oracle   [--status] [--file-issue]
 
-  --full    also scan git hygiene and project layout via project-optimizer
+  --full    also scan git hygiene and project layout via project-optimizer, and ask
+            claude doctor whether each project's settings files pass Claude Code's
+            schema -- one spawn per project. Without it every file reads "not checked",
+            which resolves the same way parsing alone always has.
   --no-github  skip GitHub checks in --full (for offline use or no gh CLI)
 
 \`qm oracle\` re-asks \`claude plugin list --json\` in every registered project and compares
