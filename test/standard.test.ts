@@ -29,6 +29,7 @@ const settings = (path: string, body: Partial<SettingsFile> = {}): SettingsFile 
   // Nothing here is about validity, and `not-checked` is what resolves the way this
   // file resolved before DEA-147 existed. Never `accepted` -- these files were not checked.
   validity: 'not-checked',
+  schemaErrors: [],
   rest: {},
   ...body,
 });

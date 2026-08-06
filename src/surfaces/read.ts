@@ -11,7 +11,7 @@ import { join, resolve as resolvePath } from 'node:path';
 
 import type {
   SettingsFile,
-  SettingsValidity,
+  SettingsCheck,
   McpJsonFile,
   ClaudeJson,
   ProjectRecord,
@@ -51,7 +51,16 @@ const SETTINGS_KNOWN = new Set([
 ]);
 
 /**
- * `validity` is required, and deliberately has no default.
+ * The answer a caller with nothing to ask passes. A value, not a default.
+ *
+ * `NOT_CHECKED` says the measurement was never taken, which is exactly what a run
+ * without `--full` did. It is exported so that saying so is one import rather than a
+ * literal each call site has to get right.
+ */
+export const NOT_CHECKED: SettingsCheck = { validity: 'not-checked', schemaErrors: [] };
+
+/**
+ * `check` is required, and deliberately has no default.
  *
  * Parsing is this function's whole competence: whether Claude Code *accepts* what it
  * parsed is a question only `claude doctor` answers, and it answers per working
@@ -59,9 +68,9 @@ const SETTINGS_KNOWN = new Set([
  * forgot -- `accepted` reports a voided file's overrides as live, `discarded` reports
  * live overrides as void -- and it would do it silently, which is the shape DEA-145's
  * required third parameter exists to prevent. Callers with no answer pass
- * `'not-checked'`, which is an answer.
+ * `NOT_CHECKED`, which is an answer.
  */
-export function readSettings(path: string, validity: SettingsValidity): SettingsFile | null {
+export function readSettings(path: string, check: SettingsCheck): SettingsFile | null {
   const raw = readJsonSafe(path);
   if (!raw) return null;
 
@@ -70,7 +79,8 @@ export function readSettings(path: string, validity: SettingsValidity): Settings
 
   return {
     path,
-    validity,
+    validity: check.validity,
+    schemaErrors: check.schemaErrors,
     ...(raw.enabledPlugins ? { enabledPlugins: raw.enabledPlugins } : {}),
     ...(raw.skillOverrides ? { skillOverrides: raw.skillOverrides as Record<string, SkillValue> } : {}),
     ...(raw.enabledMcpjsonServers ? { enabledMcpjsonServers: raw.enabledMcpjsonServers } : {}),
@@ -261,14 +271,14 @@ export interface LoadOptions {
    * which is ~0.65s each and belongs behind `--full`; nothing here decides that.
    *
    * The returned map is keyed by absolute path and need not name every file it was
-   * asked about -- a path it omits is `'not-checked'`. It may also name files outside
+   * asked about -- a path it omits is `NOT_CHECKED`. It may also name files outside
    * the directory: one `doctor` run reports every settings file in scope, so a run
    * inside a project is how `~/.claude/settings.json` gets classified at all.
    */
-  settingsValidity?: (projectDir: string) => ReadonlyMap<string, SettingsValidity>;
+  settingsValidity?: (projectDir: string) => ReadonlyMap<string, SettingsCheck>;
 }
 
-const NOTHING_CHECKED: ReadonlyMap<string, SettingsValidity> = new Map();
+const NOTHING_CHECKED: ReadonlyMap<string, SettingsCheck> = new Map();
 
 export function loadWorkspace(opts: LoadOptions = {}): Workspace {
   const home = opts.home ?? homedir();
@@ -279,15 +289,15 @@ export function loadWorkspace(opts: LoadOptions = {}): Workspace {
   // Every validity any check named, merged. Keyed by absolute path, so the user-scope
   // file lands here when a project run happened to report on it -- and stays absent,
   // and so `not-checked`, when none did.
-  const named = new Map<string, SettingsValidity>();
+  const named = new Map<string, SettingsCheck>();
   const settingsIn = (dir: string) => {
     const from = opts.settingsValidity?.(dir) ?? NOTHING_CHECKED;
-    for (const [path, validity] of from) if (!named.has(path)) named.set(path, validity);
+    for (const [path, check] of from) if (!named.has(path)) named.set(path, check);
     const settingsPath = join(dir, '.claude', 'settings.json');
     const localPath = join(dir, '.claude', 'settings.local.json');
     return {
-      settings: readSettings(settingsPath, from.get(settingsPath) ?? 'not-checked'),
-      localSettings: readSettings(localPath, from.get(localPath) ?? 'not-checked'),
+      settings: readSettings(settingsPath, from.get(settingsPath) ?? NOT_CHECKED),
+      localSettings: readSettings(localPath, from.get(localPath) ?? NOT_CHECKED),
     };
   };
 
@@ -346,7 +356,7 @@ export function loadWorkspace(opts: LoadOptions = {}): Workspace {
   // establishing it would mean corrupting the live `~/.claude/settings.json` -- so this
   // is `not-checked` unless a check named the path outright.
   const userSettingsPath = opts.userSettingsPath ?? join(home, '.claude', 'settings.json');
-  const userSettings = readSettings(userSettingsPath, named.get(userSettingsPath) ?? 'not-checked');
+  const userSettings = readSettings(userSettingsPath, named.get(userSettingsPath) ?? NOT_CHECKED);
 
   return { home, userSettings, userRules, personalSkills, claudeJson, projects };
 }

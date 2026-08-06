@@ -168,6 +168,39 @@ establishing it means corrupting the live user settings file — so user scope i
 `not-checked` unless a run *names* it, which on this machine happens only because `~` is
 itself a registered project and that run covers the file as its own project scope.
 
+**Only `discarded` is a finding, and the boundary is the point (DEA-148).** `qm audit`
+now names each settings file Claude Code refuses and counts what dies with it. The
+incident behind DEA-147 was 14 files and 108 `enabledPlugins` entries; the differential
+gate caught **21** of the 108, because the other 87 happened to match user scope and a
+value comparison cannot see a dead entry that agrees. A `field-dropped` file is **not**
+reported: it is live config with one key missing, so reporting it would call working
+overrides void *and* charge the whole file's entries to one dropped key — the cost unit
+differs by state, and folding them together restates the false generalisation DEA-147
+had to correct. Its sharp case is filed separately, the one the DEA-147 entry names: a
+dropped `permissions` block whose deny rules are equally not in force while `effect.ts`
+still says `reload`. So an ignored `permissions` block with no finding here is a scope
+boundary and not a miss, and `test/discarded-settings.test.ts` goes red the day this
+detector reports one. **The channel had to widen before any of it could be said.**
+`settingsFromDoctor` returned a verdict per path and dropped `SettingsError` entirely, so
+the finding could name a file and not the key — sending the reader back to run the command
+whose output was already in the argument. It now returns `SettingsCheck`
+(`validity` + `schemaErrors`) from the same single spawn, and `SettingsFile.schemaErrors`
+is required for `readSettings`'s reason: a discarded file must not be able to arrive
+without the key that discarded it. Evidence is verbatim on both halves, including
+`doctor`'s own `Suggested fix:` continuation, and the fix points back at `claude doctor`
+the way `orphanedProjectConfig` points at `claude project purge` — repair advice for a
+schema this repo does not own is a second opinion waiting to drift. **`not-checked` is
+reported, not hidden:** validity is behind `--full`, so a default run leaves all 38 files
+here unchecked and this detector silent, and the per-state tally is a top-level
+`settingsValidity` field beside `unreadable` and `unchecked` — never a finding, because it
+has no severity and describes the run (DEA-140's call). Measured under `--full` on this
+machine: **38 files, 38 accepted, 0 discarded** — the incident was repaired, so today the
+only live evidence is the recording, and a fixture case had to be *added* (six entries
+over four keys) before a counter reading one key could fail. The day it fails: the tally
+counts files and not entries, so one voided file holding 90 and one holding 1 read alike
+in the summary line; and the cost counts four keys, so a discarded file carrying only
+`permissions` and `hooks` reports that it is discarded with no number at all.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32

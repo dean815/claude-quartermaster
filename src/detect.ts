@@ -6,7 +6,13 @@
  * nothing rather than guessing, because a wrong finding costs more trust than a
  * missing one earns.
  */
-import type { Workspace, ProjectRecord, McpServerSpec } from './surfaces/types.ts';
+import type {
+  Workspace,
+  ProjectRecord,
+  McpServerSpec,
+  SettingsFile,
+  SettingsValidity,
+} from './surfaces/types.ts';
 import type { TranscriptMeasurement, ServerCost, ServerKind } from './cost/transcript.ts';
 import { classifyServer, normalizeServerName } from './cost/transcript.ts';
 import type { PluginCostIndex } from './cost/plugins.ts';
@@ -542,6 +548,150 @@ export function bareDenyRules(ctx: AuditContext): Finding[] {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// discarded-settings (DEA-148)
+// ---------------------------------------------------------------------------
+
+/**
+ * Every settings file the workspace holds, once each, with the project it speaks for.
+ *
+ * The dedup is the `~` trap in its third layer. `~` is a registered project whose
+ * `.claude/settings.json` *is* `~/.claude/settings.json`, so an undeduplicated walk
+ * yields that file twice -- which `contributingFiles` needed for `restated` and
+ * `effectReportFor` needed for its deny-rule tally, and which here would report one
+ * voided file as two and count its entries twice. User scope is pushed first so the
+ * shared file is attributed to the scope it actually is.
+ *
+ * Shared by the detector and the run's tally rather than copied into each, for the
+ * reason `isBareDenyRule` is shared with `effect.ts`: two walks over the same files
+ * disagree the moment either is edited, and the disagreement would be between the
+ * findings and the line saying how many files they were drawn from.
+ */
+export function settingsFiles(ws: Workspace): Array<{ file: SettingsFile; project?: string }> {
+  const out: Array<{ file: SettingsFile; project?: string }> = [];
+  const seen = new Set<string>();
+
+  const push = (file: SettingsFile | null, project?: string) => {
+    if (!file || seen.has(file.path)) return;
+    seen.add(file.path);
+    out.push({ file, ...(project ? { project } : {}) });
+  };
+
+  push(ws.userSettings);
+  for (const p of ws.projects) {
+    push(p.settings, p.path);
+    push(p.localSettings, p.path);
+  }
+  return out;
+}
+
+/**
+ * How many settings files are in each state, for the run to report.
+ *
+ * **Not a finding, and deliberately not routed through one** -- the same call DEA-140's
+ * `initialised` field made. It has no severity and says nothing about the configuration;
+ * it says what this run looked at. And it has to be said, because validity costs one
+ * `claude doctor` spawn per project and lives behind `--full`: on a default run every
+ * file is `not-checked`, this detector emits nothing, and nothing emitted must not read
+ * as nothing wrong.
+ */
+export function settingsValidityTally(ws: Workspace): Record<SettingsValidity, number> {
+  const tally: Record<SettingsValidity, number> = {
+    accepted: 0,
+    'field-dropped': 0,
+    discarded: 0,
+    'not-checked': 0,
+  };
+  for (const { file } of settingsFiles(ws)) tally[file.validity] += 1;
+  return tally;
+}
+
+/**
+ * The decisions a settings file carries that this audit models, by key.
+ *
+ * Four keys and not five: `permissions` is a decision too, but it is counted in rules
+ * rather than entries and `effect.ts` owns what a rule costs. Mixing the two into one
+ * number would make the headline figure -- the thing that makes the severity legible --
+ * a sum of units.
+ */
+function decisionsIn(file: SettingsFile): Array<{ key: string; entries: number }> {
+  const counts = [
+    { key: 'enabledPlugins', entries: Object.keys(file.enabledPlugins ?? {}).length },
+    { key: 'skillOverrides', entries: Object.keys(file.skillOverrides ?? {}).length },
+    { key: 'enabledMcpjsonServers', entries: (file.enabledMcpjsonServers ?? []).length },
+    { key: 'disabledMcpjsonServers', entries: (file.disabledMcpjsonServers ?? []).length },
+  ];
+  return counts.filter((c) => c.entries > 0);
+}
+
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+
+/**
+ * A settings file Claude Code refuses, and everything in it that is consequently dead.
+ *
+ * True by definition and invisible without a tool, which is the bar this audit sets: the
+ * first-party validator reported the file, and an error carrying no `This field was
+ * ignored.` note means the file is dropped whole. The project then silently runs whatever
+ * the remaining scopes say -- for a project file, the global set -- while every line in
+ * it reads as decisive to anyone opening it.
+ *
+ * **`field-dropped` is not reported here, and that is a decision rather than an
+ * oversight.** Such a file keeps every key but the one that failed, so it is live config;
+ * calling it discarded would report working overrides as void, which is the cry-wolf
+ * direction DEA-123 and DEA-147 both exist to prevent. What it costs is a different
+ * finding with a different unit -- the entries under the dropped key, not the file -- and
+ * the sharp case is a dropped `permissions` block, whose deny rules are not in force
+ * while `effect.ts` still classifies them `reload`. That case is its own issue, filed
+ * separately; a reader who finds an ignored `permissions` block and no finding here is
+ * looking at a scope boundary, not a miss. `test/discarded-settings.test.ts` fails if
+ * this detector ever starts reporting one.
+ *
+ * `not-checked` produces nothing either, for the opposite reason: nothing was measured.
+ * The run says how many files it did not look at, as a property of the run rather than
+ * as a finding -- see `settingsValidityTally`.
+ */
+export function discardedSettings(ctx: AuditContext): Finding[] {
+  const out: Finding[] = [];
+
+  for (const { file, project } of settingsFiles(ctx.ws)) {
+    if (file.validity !== 'discarded') continue;
+
+    const decisions = decisionsIn(file);
+    const entries = decisions.reduce((n, d) => n + d.entries, 0);
+    const name = file.path.split('/').at(-1)!;
+
+    out.push({
+      detector: 'discarded-settings',
+      key: `discarded-settings ${file.path}`,
+      severity: 'high',
+      title:
+        `Claude Code discards ${name}` +
+        (entries
+          ? `, so ${entries} ${plural(entries, 'entry', 'entries')} in it never apply`
+          : ' entirely'),
+      detail:
+        'The first-party validator reports this file against Claude Code\'s schema, and ' +
+        'the error carries no note saying only the field was ignored -- so the file is ' +
+        'dropped whole, not one key. Everything it decides falls back to the scopes ' +
+        'below it, which for a project file is the global set, and nothing in the file ' +
+        'says so.',
+      ...(project ? { project } : {}),
+      evidence: [
+        file.path,
+        // Verbatim, both halves. The key is what the user has to go and fix, and a
+        // paraphrase of a schema message is a second opinion about a schema we do not own.
+        ...file.schemaErrors.flatMap((e) => [`${e.key}: ${e.message}`, ...e.notes.map((n) => `  ${n}`)]),
+        ...decisions.map((d) => `${d.key}: ${d.entries} ${plural(d.entries, 'entry', 'entries')} not in effect`),
+      ],
+      fix:
+        'claude doctor — run it in that directory. It is the check that reported this, ' +
+        'it names the key, and where it has one it prints its own suggested fix (quoted above).',
+    });
+  }
+
+  return out;
+}
+
 /** Auto-memory over the load limit is silently truncated. */
 export function oversizedMemory(ctx: AuditContext): Finding[] {
   return ctx.ws.projects
@@ -978,6 +1128,7 @@ export function neverObservedServers(ctx: AuditContext): Finding[] {
 }
 
 export const DETECTORS = [
+  discardedSettings,
   duplicateAccessPaths,
   neverObservedServers,
   costWithoutUse,

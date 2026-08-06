@@ -43,7 +43,7 @@ import { join } from 'node:path';
 
 import { claudeCli } from '../disclose.ts';
 
-import type { SettingsValidity } from '../surfaces/types.ts';
+import type { SettingsCheck, SettingsError, SettingsValidity } from '../surfaces/types.ts';
 import type { Adapter, Availability } from './types.ts';
 
 /**
@@ -88,20 +88,6 @@ const SEPARATOR = ' › ';
  * as void, so `test/validity.test.ts` measures exactly that mutation.
  */
 export const FIELD_IGNORED_NOTE = 'This field was ignored.';
-
-/** One entry of the `Invalid settings` block. */
-export interface SettingsError {
-  /** Absolute path of the settings file, as `doctor` printed it. */
-  path: string;
-  /** Dotted key path -- `permissions.deny`, `extraKnownMarketplaces.<id>.source`. */
-  key: string;
-  /** The message after the key, verbatim and on its own line. */
-  message: string;
-  /** Indented continuations of that entry -- `Suggested fix: ...` -- verbatim. */
-  notes: string[];
-  /** Whether `message` ends in the note. The one thing that decides the two classes. */
-  fieldIgnored: boolean;
-}
 
 /**
  * Every entry of the `Invalid settings` block, or none when there is no block.
@@ -177,19 +163,28 @@ export function validityOf(errors: readonly SettingsError[]): SettingsValidity {
  * all. A file the run *named* is classified whether or not it was covered, which is the
  * only route by which `~/.claude/settings.json` is ever more than `not-checked`.
  * Anything else is simply absent, and the caller reads absence as `not-checked`.
+ *
+ * **The errors travel with the verdict (DEA-148).** This used to return the verdict
+ * alone, which was everything the resolver needed and nothing a *finding* needs: a
+ * report naming a discarded file without naming the key that discarded it sends the
+ * user back to run the command whose output is already in this function's argument.
+ * Widening it here rather than parsing twice keeps validity at one `doctor` spawn per
+ * project, which is the only reason it can sit behind `--full` at all.
  */
 export function settingsFromDoctor(
   text: string,
   covered: readonly string[],
-): Map<string, SettingsValidity> {
+): Map<string, SettingsCheck> {
   const byPath = new Map<string, SettingsError[]>();
   for (const e of parseInvalidSettings(text)) {
     byPath.set(e.path, [...(byPath.get(e.path) ?? []), e]);
   }
 
-  const out = new Map<string, SettingsValidity>();
-  for (const path of covered) out.set(path, 'accepted');
-  for (const [path, errors] of byPath) out.set(path, validityOf(errors));
+  const out = new Map<string, SettingsCheck>();
+  for (const path of covered) out.set(path, { validity: 'accepted', schemaErrors: [] });
+  for (const [path, errors] of byPath) {
+    out.set(path, { validity: validityOf(errors), schemaErrors: errors });
+  }
   return out;
 }
 
@@ -205,8 +200,8 @@ export function settingsFromDoctor(
  * at every project adds no project entries. It is still a `claude` spawn, so it goes
  * through the one door that reports a config file this run caused to exist (DEA-140).
  */
-export function doctorSettingsValidity(): (dir: string) => ReadonlyMap<string, SettingsValidity> {
-  const empty: ReadonlyMap<string, SettingsValidity> = new Map();
+export function doctorSettingsValidity(): (dir: string) => ReadonlyMap<string, SettingsCheck> {
+  const empty: ReadonlyMap<string, SettingsCheck> = new Map();
   let unavailable = false;
 
   return (dir) => {

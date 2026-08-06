@@ -64,58 +64,24 @@ import {
 } from '../src/delegate/doctor.ts';
 import { resolvePlugin } from '../src/resolve.ts';
 import { loadWorkspace, readSettings } from '../src/surfaces/read.ts';
-import type { ClaudeJson, SettingsValidity, Workspace } from '../src/surfaces/types.ts';
+import type {
+  ClaudeJson,
+  SettingsCheck,
+  SettingsValidity,
+  Workspace,
+} from '../src/surfaces/types.ts';
 import { project } from './factories.ts';
-
-// ---------------------------------------------------------------------------
-// The recording
-// ---------------------------------------------------------------------------
-
-const FIXTURE_ROOT = join(import.meta.dirname, 'fixtures', 'doctor');
-
-interface RecordedCase {
-  name: string;
-  note: string;
-  /** `claude plugin list --json`, run in the probe directory holding exactly these files. */
-  enabled: boolean;
-  files: string[];
-}
-
-interface Manifest {
-  capturedAt: string;
-  claudeVersion: string;
-  plugin: string;
-  /** `~/.claude/settings.json` as it stood at capture time, for the probed plugin only. */
-  userScope: Record<string, boolean>;
-  /** The cwd `doctor` printed paths against. Rebased onto each case's own directory. */
-  recordedProjectDir: string;
-  cases: RecordedCase[];
-}
-
-const MANIFEST: Manifest = JSON.parse(readFileSync(join(FIXTURE_ROOT, 'manifest.json'), 'utf8'));
-const CASES = MANIFEST.cases;
-
-const caseDir = (c: RecordedCase) => join(FIXTURE_ROOT, c.name);
-const settingsPath = (c: RecordedCase) => join(caseDir(c), '.claude', 'settings.json');
-const localPath = (c: RecordedCase) => join(caseDir(c), '.claude', 'settings.local.json');
-
-/**
- * The recorded `doctor` output, with the capture machine's probe path rebased onto this
- * case's own directory.
- *
- * The committed file is byte-verbatim; this is one substitution of one string the
- * manifest records, and it is the only thing standing between a recording made in a
- * scratch directory and a fixture that runs from any checkout. The messages themselves
- * are untouched, which is the half that matters -- the `›`, the trailing note, the
- * indented continuation.
- */
-function doctorText(c: RecordedCase): string {
-  const raw = readFileSync(join(caseDir(c), 'doctor.txt'), 'utf8');
-  return raw.replaceAll(MANIFEST.recordedProjectDir, caseDir(c));
-}
-
-/** The files a run in this case's directory speaks for -- both, whether or not they exist. */
-const covered = (c: RecordedCase) => [settingsPath(c), localPath(c)];
+import {
+  CASES,
+  FIXTURE_ROOT,
+  MANIFEST,
+  caseDir,
+  covered,
+  doctorText,
+  localPath,
+  settingsPath,
+  type RecordedCase,
+} from './fixtures/doctor/load.ts';
 
 // ---------------------------------------------------------------------------
 // Resolution
@@ -141,15 +107,17 @@ const claudeJson = (path: string): ClaudeJson => ({
  */
 function resolveWith(c: RecordedCase, validityOf_: (path: string) => SettingsValidity): boolean {
   const userPath = join(FIXTURE_ROOT, 'recorded-user-settings.json');
+  const as = (path: string) => ({ validity: validityOf_(path), schemaErrors: [] });
   const record = project(caseDir(c), {
-    settings: readSettings(settingsPath(c), validityOf_(settingsPath(c))),
-    localSettings: readSettings(localPath(c), validityOf_(localPath(c))),
+    settings: readSettings(settingsPath(c), as(settingsPath(c))),
+    localSettings: readSettings(localPath(c), as(localPath(c))),
   });
   const ws: Workspace = {
     home: FIXTURE_ROOT,
     userSettings: {
       path: userPath,
       validity: validityOf_(userPath),
+      schemaErrors: [],
       enabledPlugins: MANIFEST.userScope,
       rest: {},
     },
@@ -168,7 +136,7 @@ const IDENTITY: Mutator = (v) => v;
 /** What the real parser makes of this case, mutated on the way into the resolver. */
 function checkedValue(c: RecordedCase, mutate: Mutator): boolean {
   const real = settingsFromDoctor(doctorText(c), covered(c));
-  return resolveWith(c, (p) => mutate(real.get(p) ?? 'not-checked'));
+  return resolveWith(c, (p) => mutate(real.get(p)?.validity ?? 'not-checked'));
 }
 
 /** The same files on a run that never asked -- every default run, in other words. */
@@ -243,6 +211,9 @@ const PARSED: Record<string, Array<{ key: string; fieldIgnored: boolean; notes: 
     { key: 'extraKnownMarketplaces.karpathy-skills.source', fieldIgnored: false, notes: 0 },
   ],
   'field-dropped-hooks': [{ key: 'hooks', fieldIgnored: true, notes: 0 }],
+  'discarded-many-entries': [
+    { key: 'extraKnownMarketplaces.karpathy-skills.source', fieldIgnored: false, notes: 0 },
+  ],
   'discarded-permissions-deny': [{ key: 'permissions.deny', fieldIgnored: false, notes: 1 }],
   'dropped-over-discarded': [
     { key: 'hooks', fieldIgnored: true, notes: 0 },
@@ -325,7 +296,7 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
   test('a file the run did not cover and did not name is absent, never accepted', () => {
     const c = CASES.find((x) => x.name === 'accepted')!;
     const map = settingsFromDoctor(doctorText(c), covered(c));
-    assert.equal(map.get(settingsPath(c)), 'accepted');
+    assert.deepEqual(map.get(settingsPath(c)), { validity: 'accepted', schemaErrors: [] });
     assert.equal(map.get('/somewhere/else/.claude/settings.json'), undefined);
   });
 });
@@ -389,7 +360,7 @@ describe('resolution matches first-party once validity is consulted', () => {
     // recording that only exercised the other.
     const discardedPaths = CASES.flatMap((c) =>
       [...settingsFromDoctor(doctorText(c), covered(c))]
-        .filter(([, v]) => v === 'discarded')
+        .filter(([, check]) => check.validity === 'discarded')
         .map(([p]) => p),
     );
     assert.ok(discardedPaths.some((p) => p.endsWith('settings.json')), 'no discarded settings.json');
@@ -401,7 +372,9 @@ describe('resolution matches first-party once validity is consulted', () => {
     // And a field-dropped file exists, or the constraint that separates DEA-147 from its
     // own issue title is untested.
     const dropped = CASES.flatMap((c) =>
-      [...settingsFromDoctor(doctorText(c), covered(c))].filter(([, v]) => v === 'field-dropped'),
+      [...settingsFromDoctor(doctorText(c), covered(c))].filter(
+        ([, check]) => check.validity === 'field-dropped',
+      ),
     );
     assert.ok(dropped.length > 0, 'no case exercises field-dropped, which is the whole correction');
   });
@@ -418,8 +391,8 @@ describe('resolution matches first-party once validity is consulted', () => {
   test('a field-dropped file outlives a discarded one above it', () => {
     const c = CASES.find((x) => x.name === 'dropped-over-discarded')!;
     const real = settingsFromDoctor(doctorText(c), covered(c));
-    assert.equal(real.get(settingsPath(c)), 'field-dropped');
-    assert.equal(real.get(localPath(c)), 'discarded');
+    assert.equal(real.get(settingsPath(c))?.validity, 'field-dropped');
+    assert.equal(real.get(localPath(c))?.validity, 'discarded');
 
     assert.equal(c.enabled, true, 'the recording no longer pins this case');
     assert.equal(checkedValue(c, IDENTITY), true);
@@ -537,7 +510,7 @@ describe('the gate fails when the validity rule is wrong', () => {
  * `loadWorkspace` with no `~/.claude.json` behind it: the case directory is named
  * outright, which is the "brand-new project" route and needs no registry entry.
  */
-function load(dir: string, settingsValidity?: (d: string) => ReadonlyMap<string, SettingsValidity>) {
+function load(dir: string, settingsValidity?: (d: string) => ReadonlyMap<string, SettingsCheck>) {
   return loadWorkspace({
     home: FIXTURE_ROOT,
     claudeJsonPath: join(FIXTURE_ROOT, 'no-such-claude.json'),
@@ -565,6 +538,18 @@ describe('loadWorkspace carries validity onto the file it belongs to', () => {
     );
     assert.equal(ws.projects[0]!.settings!.validity, 'field-dropped');
     assert.equal(ws.projects[0]!.localSettings!.validity, 'discarded');
+
+    // And the key travels with the verdict (DEA-148). A file that arrives classified but
+    // with nothing to show for it can be reported and not explained, which sends the
+    // reader back to the command whose output produced the classification.
+    assert.deepEqual(
+      ws.projects[0]!.settings!.schemaErrors.map((e) => e.key),
+      ['hooks'],
+    );
+    assert.deepEqual(
+      ws.projects[0]!.localSettings!.schemaErrors.map((e) => e.key),
+      ['permissions.deny'],
+    );
   });
 
   /**
@@ -572,9 +557,16 @@ describe('loadWorkspace carries validity onto the file it belongs to', () => {
    * `not-checked`. Filling it in would be the whole defect in miniature.
    */
   test('and a file it does not answer about stays not-checked', () => {
-    const ws = load(caseDir(c), (dir) => new Map([[join(dir, '.claude', 'settings.json'), 'discarded']]));
+    const ws = load(
+      caseDir(c),
+      (dir) =>
+        new Map<string, SettingsCheck>([
+          [join(dir, '.claude', 'settings.json'), { validity: 'discarded', schemaErrors: [] }],
+        ]),
+    );
     assert.equal(ws.projects[0]!.settings!.validity, 'discarded');
     assert.equal(ws.projects[0]!.localSettings!.validity, 'not-checked');
+    assert.deepEqual(ws.projects[0]!.localSettings!.schemaErrors, []);
   });
 
   /**
@@ -589,7 +581,8 @@ describe('loadWorkspace carries validity onto the file it belongs to', () => {
       claudeJsonPath: join(FIXTURE_ROOT, 'no-such-claude.json'),
       userSettingsPath: userPath,
       extraProjectPaths: [caseDir(c)],
-      settingsValidity: () => new Map([[userPath, 'discarded']]),
+      settingsValidity: () =>
+        new Map<string, SettingsCheck>([[userPath, { validity: 'discarded', schemaErrors: [] }]]),
     });
     assert.equal(ws.userSettings!.validity, 'discarded');
     // And the project's own files, which that run said nothing about, are unaffected.

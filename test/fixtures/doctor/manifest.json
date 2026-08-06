@@ -49,6 +49,15 @@
       ]
     },
     {
+      "name": "discarded-many-entries",
+      "note": "The incident key again, in a file that decides six things: two plugins, one skill, and three .mcp.json server entries. Recorded so the cost figure a finding prints can be wrong in more than one way.",
+      "claudeVersion": "2.1.222 (Claude Code)",
+      "enabled": false,
+      "files": [
+        "settings.json"
+      ]
+    },
+    {
       "name": "valid-local-over-discarded",
       "note": "The mirror. settings.json is discarded and says false, the local file is valid and says true. Both parse, so this one passes without any validity check -- it is the control, not the catch.",
       "enabled": true,
