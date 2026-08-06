@@ -58,6 +58,24 @@
       ]
     },
     {
+      "name": "deny-nonstring-elements",
+      "note": "The second partial-acceptance message, and the one that carries no note: \"Non-string value in deny array was removed\". doctor reports it, and the file still applies. \"Bash\" is in the array so this also pins that a real rule survives the removal (DEA-150).",
+      "claudeVersion": "2.1.222 (Claude Code)",
+      "enabled": true,
+      "files": [
+        "settings.json"
+      ]
+    },
+    {
+      "name": "allow-nonstring-elements",
+      "note": "The same template on a second key, so the recogniser is reading a message shape and not the word \"deny\". Also partial acceptance, also no trailing note.",
+      "claudeVersion": "2.1.222 (Claude Code)",
+      "enabled": true,
+      "files": [
+        "settings.json"
+      ]
+    },
+    {
       "name": "valid-local-over-discarded",
       "note": "The mirror. settings.json is discarded and says false, the local file is valid and says true. Both parse, so this one passes without any validity check -- it is the control, not the catch.",
       "enabled": true,

@@ -1,0 +1,12 @@
+{
+  "enabledPlugins": {
+    "context7@claude-plugins-official": true
+  },
+  "permissions": {
+    "deny": [
+      1,
+      2,
+      "Bash"
+    ]
+  }
+}

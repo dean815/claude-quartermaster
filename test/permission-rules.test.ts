@@ -1,0 +1,385 @@
+/**
+ * The permission-array narrowing (DEA-150).
+ *
+ * `permissions.deny` is declared `string[]`, arrives from JSON, and nothing in between
+ * enforced it. `qm audit --full` died on `deny: [1, 2]` with an unhandled
+ * `TypeError: rule.includes is not a function` and exited 1 -- on a file **Claude Code
+ * accepts**. Measured on 2.1.222: `doctor` prints `Non-string value in deny array was
+ * removed`, and `claude plugin list --json` confirms the same file's `enabledPlugins`
+ * still apply. A read-only auditor that dies on input first-party tolerates has failed at
+ * the one job it has, and `qm effect` died on it too -- the same predicate, reached
+ * through `cli.ts` instead of the detector.
+ *
+ * ## Why dropping, and not coercing
+ *
+ * A non-string is a value Claude Code **removed**. It is therefore not a rule, and
+ * `String(rule)` would put `"1"` into the model -- a rule nobody wrote, which
+ * `isBareDenyRule` then reads as a bare tool name and charges the file for. The narrowing
+ * lives in the reader rather than in the predicate for the same reason: two consumers
+ * crashed on one file, and one narrowing at the layer where the type stops being true
+ * fixes both without forking a predicate CLAUDE.md keeps in one place on purpose.
+ *
+ * ## What the gate is anchored on
+ *
+ * The **inputs** here are synthetic, and deliberately so: they are arbitrary JSON, which
+ * is the whole point -- `deny: 42` needs no first-party opinion to be something a reader
+ * must survive. The **claim that Claude Code accepts them** is not asserted here; it is a
+ * recording, and it lands in `fixtures/doctor/deny-nonstring-elements` where the rest of
+ * the first-party evidence lives.
+ *
+ * Read-only, no `claude` spawn, one temp directory.
+ */
+import { test, describe, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { bareDenyRules, type AuditContext } from '../src/detect.ts';
+import { buildDeferralIndex, classify, type PendingChange } from '../src/effect.ts';
+import { NOT_CHECKED, readSettings } from '../src/surfaces/read.ts';
+import type { SettingsFile, Workspace } from '../src/surfaces/types.ts';
+
+// ---------------------------------------------------------------------------
+// The cases, as JSON on disk and expectations as literals
+// ---------------------------------------------------------------------------
+
+interface Case {
+  name: string;
+  note: string;
+  /** Written verbatim to `.claude/settings.json`. */
+  json: string;
+  /** What the reader must hand over. `null` means the key must be absent. */
+  deny: string[] | null;
+  allow?: string[] | null;
+  ask?: string[] | null;
+  /** The rules `bareDenyRules` must name, and only these. */
+  bare: string[];
+}
+
+const CASES: Case[] = [
+  {
+    name: 'mixed',
+    note: "the issue's own verify case: two removed values and one real rule",
+    json: '{ "permissions": { "deny": [1, 2, "Bash"] } }',
+    deny: ['Bash'],
+    bare: ['Bash'],
+  },
+  {
+    name: 'all-removed',
+    note: "DEA-151's repro input: every element removed, so the file has no rules",
+    json: '{ "permissions": { "deny": [1, 2] } }',
+    deny: [],
+    bare: [],
+  },
+  {
+    name: 'siblings',
+    note: 'allow and ask come from the same reader and had the same assumption',
+    json: '{ "permissions": { "allow": [1, "Read(a)"], "ask": [{}, "Bash(x)"], "deny": ["Bash"] } }',
+    deny: ['Bash'],
+    allow: ['Read(a)'],
+    ask: ['Bash(x)'],
+    bare: ['Bash'],
+  },
+  {
+    name: 'every-json-type',
+    note: 'a number is not the only thing JSON can put in an array',
+    json: '{ "permissions": { "deny": [null, true, 3.5, ["Bash"], {"tool": "Bash"}, "Bash"] } }',
+    deny: ['Bash'],
+    bare: ['Bash'],
+  },
+  {
+    name: 'clean',
+    note: 'the control: a valid array must survive the narrowing untouched',
+    json: '{ "permissions": { "deny": ["Bash", "Bash(rm *)", "mcp__x__y"] } }',
+    deny: ['Bash', 'Bash(rm *)', 'mcp__x__y'],
+    bare: ['Bash'],
+  },
+  {
+    name: 'deny-string',
+    note: 'the shape that voids the whole file -- no array, so no rules either',
+    json: '{ "permissions": { "deny": "Bash" } }',
+    deny: null,
+    bare: [],
+  },
+  {
+    name: 'permissions-number',
+    note: 'the key is there and holds nothing a rule could come from',
+    json: '{ "permissions": 42 }',
+    deny: null,
+    bare: [],
+  },
+];
+
+// ---------------------------------------------------------------------------
+// One temp directory per case, written once
+// ---------------------------------------------------------------------------
+
+const ROOT = mkdtempSync(join(tmpdir(), 'qm-permission-rules-'));
+after(() => rmSync(ROOT, { recursive: true, force: true }));
+
+const pathOf = (c: Case) => join(ROOT, c.name, '.claude', 'settings.json');
+
+for (const c of CASES) {
+  mkdirSync(join(ROOT, c.name, '.claude'), { recursive: true });
+  writeFileSync(pathOf(c), c.json);
+}
+
+/**
+ * The raw JSON, exactly as `readSettings` used to hand it over.
+ *
+ * The cast is the point: the old reader asserted this shape without checking it, and the
+ * mutations below restore that assertion so the gate can be shown to catch it.
+ */
+function rawPermissions(c: Case): NonNullable<SettingsFile['permissions']> {
+  return JSON.parse(c.json).permissions as NonNullable<SettingsFile['permissions']>;
+}
+
+// ---------------------------------------------------------------------------
+// The gate
+// ---------------------------------------------------------------------------
+
+type Mutator = (file: SettingsFile, c: Case) => SettingsFile;
+const IDENTITY: Mutator = (f) => f;
+
+function ctxFor(file: SettingsFile): AuditContext {
+  const ws = {
+    home: ROOT,
+    userSettings: file,
+    userRules: [],
+    personalSkills: [],
+    claudeJson: {
+      path: join(ROOT, 'no-such-claude.json'),
+      mcpServers: {},
+      projects: {},
+      claudeAiMcpEverConnected: [],
+      skillUsage: {},
+      pluginUsage: {},
+    },
+    projects: [],
+  } satisfies Workspace;
+  return { ws, measurements: [], pluginCosts: new Map(), inventories: new Map() };
+}
+
+/**
+ * Both consumers of the array, run over one case.
+ *
+ * `effect.ts` is here and not only the detector because it was the second crash site: the
+ * rules reach it from this same reader by way of `cli.ts`, and a narrowing that fixed the
+ * detector alone would leave `qm effect` exiting 1 on the identical file.
+ */
+function runGate(mutate: Mutator): string[] {
+  const failures: string[] = [];
+
+  for (const c of CASES) {
+    const read = readSettings(pathOf(c), NOT_CHECKED);
+    if (!read) {
+      failures.push(`${c.name}: the file did not read at all`);
+      continue;
+    }
+    const file = mutate(read, c);
+
+    // What the reader handed over, before anything consumes it.
+    const check = (key: 'deny' | 'allow' | 'ask', want: string[] | null | undefined) => {
+      if (want === undefined) return;
+      const got = file.permissions?.[key];
+      const same =
+        want === null ? got === undefined : Array.isArray(got) && got.join('\u001F') === want.join('\u001F');
+      if (!same) {
+        failures.push(
+          `${c.name}: permissions.${key} read as ${JSON.stringify(got)}; Claude Code keeps ` +
+            `${want === null ? 'no such key' : JSON.stringify(want)}`,
+        );
+      }
+    };
+    check('deny', c.deny);
+    check('allow', c.allow);
+    check('ask', c.ask);
+
+    // The detector. A throw here is the DEA-150 crash, and it is reported as one rather
+    // than allowed to abort the run -- a gate that dies cannot say what it caught.
+    let named: string[] = [];
+    try {
+      const found = bareDenyRules(ctxFor(file));
+      named = found.flatMap((f) => f.evidence.map((e) => /^"(.*)" in /.exec(e)?.[1] ?? e));
+    } catch (err) {
+      failures.push(
+        `${c.name}: bareDenyRules threw ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)} ` +
+          '— qm audit --full dies on a settings file Claude Code accepts',
+      );
+      continue;
+    }
+    if (named.join('\u001F') !== c.bare.join('\u001F')) {
+      failures.push(
+        `${c.name}: the bare-rule finding names ${JSON.stringify(named)}; the rules Claude ` +
+          `Code actually holds are ${JSON.stringify(c.bare)}`,
+      );
+    }
+
+    // The effect classifier, reached the way `cli.ts` reaches it.
+    const rules = file.permissions?.deny;
+    if (rules?.length) {
+      const change: PendingChange = {
+        kind: 'deny-rule',
+        rules,
+        source: file.path,
+        sourceValidity: file.validity,
+      };
+      try {
+        classify(change, { index: buildDeferralIndex([]), inventories: new Map() });
+      } catch (err) {
+        failures.push(
+          `${c.name}: classify threw ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)} ` +
+            '— qm effect dies on the same file, through the same shared predicate',
+        );
+      }
+    }
+  }
+
+  return failures;
+}
+
+const failureMessage = (f: readonly string[]) =>
+  `\n  ${f.length} divergence(s):\n  ${f.join('\n  ')}`;
+
+describe('a permission array holds the rules Claude Code kept, and only those', () => {
+  test('every case agrees', () => {
+    const failures = runGate(IDENTITY);
+    console.log(
+      `    permission-rules: ${CASES.length} shapes, ` +
+        `${CASES.filter((c) => c.json.includes('1,') || c.json.includes('null')).length} of them holding values Claude Code removes`,
+    );
+    assert.deepEqual(failures, [], failureMessage(failures));
+  });
+
+  /** Per-case, so a regression names the shape rather than a count. */
+  for (const c of CASES) {
+    test(`${c.name}: ${c.note}`, () => {
+      const file = readSettings(pathOf(c), NOT_CHECKED)!;
+      if (c.deny === null) assert.equal(file.permissions?.deny, undefined);
+      else assert.deepEqual(file.permissions?.deny, c.deny);
+      assert.doesNotThrow(() => bareDenyRules(ctxFor(file)));
+    });
+  }
+
+  /**
+   * The set is not vacuous: something is actually removed, something actually survives,
+   * and the two are not the same case.
+   */
+  test('and the cases can tell a narrowing from a deletion', () => {
+    const removes = CASES.filter((c) => Array.isArray(c.deny) && c.deny.length < (JSON.parse(c.json).permissions?.deny?.length ?? 0));
+    assert.ok(removes.length >= 2, 'no case removes anything, so a no-op reader would pass');
+    const keeps = CASES.filter((c) => (c.deny?.length ?? 0) > 0);
+    assert.ok(keeps.length >= 2, 'no case keeps anything, so a reader dropping the key would pass');
+    assert.ok(
+      CASES.some((c) => (c.deny?.length ?? 0) > 0 && JSON.parse(c.json).permissions.deny.length > c.deny!.length),
+      'no case both removes and keeps, so dropping the whole array on one bad element would pass',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Negative controls
+// ---------------------------------------------------------------------------
+
+interface Mutation {
+  name: string;
+  mutate: Mutator;
+  /** Every pattern must be matched by some failure, so a gate failing elsewhere shows. */
+  names: RegExp[];
+}
+
+const MUTATIONS: Mutation[] = [
+  {
+    /**
+     * **The one that matters.** The narrowing reverted: `permissions` handed over exactly
+     * as `JSON.parse` produced it, which is what `readSettings` did before DEA-150.
+     *
+     * The gate has to go red *naming the crash*. A mutation caught only by a changed
+     * count would pass just as well against a reader that quietly coerced, and the
+     * difference between those two is the whole issue.
+     */
+    name: 'the reader hands over the raw JSON array',
+    mutate: (f, c) => ({ ...f, permissions: rawPermissions(c) }),
+    names: [
+      /^mixed: bareDenyRules threw TypeError: rule\.includes is not a function — qm audit --full dies on a settings file Claude Code accepts$/,
+      /^all-removed: bareDenyRules threw TypeError: /,
+      /^every-json-type: bareDenyRules threw TypeError: /,
+    ],
+  },
+  {
+    /**
+     * The fix the issue names and rejects. It does not crash, which is exactly why it is
+     * dangerous: `String(1)` is `"1"`, `isBareDenyRule("1")` is `true`, and the audit then
+     * reports a bare deny rule the user never wrote, in a file that is otherwise fine.
+     */
+    name: 'a removed value is coerced with String() instead of dropped',
+    mutate: (f, c) => {
+      const raw = rawPermissions(c);
+      if (!Array.isArray(raw?.deny)) return f;
+      return { ...f, permissions: { ...f.permissions, deny: raw.deny.map((r) => String(r)) } };
+    },
+    names: [
+      /^mixed: the bare-rule finding names \["1","2","Bash"\]; the rules Claude Code actually holds are \["Bash"\]$/,
+      /^all-removed: the bare-rule finding names \["1","2"\]/,
+    ],
+  },
+  {
+    /**
+     * The over-correction: one bad element voids the array. It is the whole-file reading
+     * of a per-element removal -- DEA-147's own mistake, one layer down -- and it loses a
+     * real rule that is genuinely in force.
+     */
+    name: 'one removed value drops the whole array',
+    mutate: (f, c) => {
+      const raw = rawPermissions(c);
+      if (!Array.isArray(raw?.deny)) return f;
+      const clean = raw.deny.every((r) => typeof r === 'string');
+      return clean ? f : { ...f, permissions: { ...f.permissions, deny: [] } };
+    },
+    names: [
+      /^mixed: permissions\.deny read as \[\]; Claude Code keeps \["Bash"\]$/,
+      /^every-json-type: permissions\.deny read as \[\]; Claude Code keeps \["Bash"\]$/,
+    ],
+  },
+  {
+    /** And the reader forgetting the siblings, which come from the same JSON. */
+    name: 'allow and ask keep their removed values',
+    mutate: (f, c) => {
+      const raw = rawPermissions(c);
+      return {
+        ...f,
+        permissions: {
+          ...f.permissions,
+          ...(Array.isArray(raw?.allow) ? { allow: raw.allow as string[] } : {}),
+          ...(Array.isArray(raw?.ask) ? { ask: raw.ask as string[] } : {}),
+        },
+      };
+    },
+    names: [/^siblings: permissions\.allow read as \[1,"Read\(a\)"\]/, /^siblings: permissions\.ask read as /],
+  },
+];
+
+describe('the gate fails when the narrowing is wrong', () => {
+  for (const mutation of MUTATIONS) {
+    test(mutation.name, () => {
+      const failures = runGate(mutation.mutate);
+      assert.ok(
+        failures.length > 0,
+        `mutation "${mutation.name}" did not fail the gate -- that is a hole in the gate, ` +
+          'not a mutation to delete',
+      );
+      for (const pattern of mutation.names) {
+        assert.ok(
+          failures.some((f) => pattern.test(f)),
+          `the gate failed, but nothing said ${pattern}: ${failureMessage(failures)}`,
+        );
+      }
+      console.log(`    caught "${mutation.name}" (${failures.length}): ${failures[0]}`);
+    });
+  }
+
+  test('and passes when it is not', () => {
+    assert.deepEqual(runGate(IDENTITY), []);
+  });
+});
