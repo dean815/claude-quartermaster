@@ -62,11 +62,17 @@ import {
   settingsFromDoctor,
   validityOf,
 } from '../src/delegate/doctor.ts';
+import {
+  discardedSettings,
+  settingsValidityTally,
+  unclassifiedSettings,
+} from '../src/detect.ts';
 import { resolvePlugin } from '../src/resolve.ts';
 import { loadWorkspace, readSettings } from '../src/surfaces/read.ts';
 import type {
   ClaudeJson,
   SettingsCheck,
+  SettingsError,
   SettingsValidity,
   Workspace,
 } from '../src/surfaces/types.ts';
@@ -205,21 +211,24 @@ const failureMessage = (f: readonly string[]) =>
  * cases resolve correctly under that. Two of them would not -- so the gate below would
  * still fail -- but it would fail without saying that the block had stopped parsing.
  */
-const PARSED: Record<string, Array<{ key: string; fieldIgnored: boolean; notes: number }>> = {
+const PARSED: Record<string, Array<{ key: string; costs: SettingsError['costs']; notes: number }>> = {
   accepted: [],
   'discarded-marketplace-source': [
-    { key: 'extraKnownMarketplaces.karpathy-skills.source', fieldIgnored: false, notes: 0 },
+    { key: 'extraKnownMarketplaces.karpathy-skills.source', costs: 'file', notes: 0 },
   ],
-  'field-dropped-hooks': [{ key: 'hooks', fieldIgnored: true, notes: 0 }],
+  'field-dropped-hooks': [{ key: 'hooks', costs: 'field', notes: 0 }],
   'discarded-many-entries': [
-    { key: 'extraKnownMarketplaces.karpathy-skills.source', fieldIgnored: false, notes: 0 },
+    { key: 'extraKnownMarketplaces.karpathy-skills.source', costs: 'file', notes: 0 },
   ],
-  'discarded-permissions-deny': [{ key: 'permissions.deny', fieldIgnored: false, notes: 1 }],
+  'discarded-permissions-deny': [{ key: 'permissions.deny', costs: 'file', notes: 1 }],
   'dropped-over-discarded': [
-    { key: 'hooks', fieldIgnored: true, notes: 0 },
-    { key: 'permissions.deny', fieldIgnored: false, notes: 1 },
+    { key: 'hooks', costs: 'field', notes: 0 },
+    { key: 'permissions.deny', costs: 'file', notes: 1 },
   ],
-  'valid-local-over-discarded': [{ key: 'permissions.deny', fieldIgnored: false, notes: 1 }],
+  // The two DEA-151 recordings: partial acceptance said without the trailing sentence.
+  'deny-nonstring-elements': [{ key: 'permissions.deny', costs: 'field', notes: 0 }],
+  'allow-nonstring-elements': [{ key: 'permissions.allow', costs: 'field', notes: 0 }],
+  'valid-local-over-discarded': [{ key: 'permissions.deny', costs: 'file', notes: 1 }],
 };
 
 describe('the Invalid settings block, as claude doctor writes it', () => {
@@ -227,7 +236,7 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
     test(`${c.name}: ${c.note}`, () => {
       const errors = parseInvalidSettings(doctorText(c));
       assert.deepEqual(
-        errors.map((e) => ({ key: e.key, fieldIgnored: e.fieldIgnored, notes: e.notes.length })),
+        errors.map((e) => ({ key: e.key, costs: e.costs, notes: e.notes.length })),
         PARSED[c.name],
       );
 
@@ -243,10 +252,15 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
   }
 
   /**
-   * The two facts the whole four-state model rests on, asserted against the recording
-   * rather than described in prose.
+   * The facts the four-state model rests on, asserted against the recording rather than
+   * described in prose.
+   *
+   * The second half is DEA-151's whole point: `field-dropped-hooks` says the file
+   * survived *with* the trailing sentence and `deny-nonstring-elements` says it survived
+   * *without* one, so any rule keyed on that sentence alone is refuted by the recording
+   * itself rather than by an argument about it.
    */
-  test('the separator is U+203A and the discriminator is a trailing sentence', () => {
+  test('the separator is U+203A, and partial acceptance is said in more than one way', () => {
     const withErrors = CASES.filter((c) => PARSED[c.name]!.length > 0);
     assert.ok(withErrors.length >= 4, 'too few recorded failures to say anything');
 
@@ -254,13 +268,66 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
       assert.ok(doctorText(c).includes(' › '), `${c.name}: no U+203A in the block`);
     }
 
-    const dropped = parseInvalidSettings(doctorText(CASES.find((c) => c.name === 'field-dropped-hooks')!));
+    const errorsOf = (name: string) =>
+      parseInvalidSettings(doctorText(CASES.find((c) => c.name === name)!));
+
+    const dropped = errorsOf('field-dropped-hooks');
     assert.ok(dropped[0]!.message.endsWith(FIELD_IGNORED_NOTE));
-    const voided = parseInvalidSettings(doctorText(CASES.find((c) => c.name === 'discarded-permissions-deny')!));
+    assert.equal(dropped[0]!.costs, 'field');
+
+    // The file first-party keeps, saying so in words the sentence-matcher never sees.
+    for (const name of ['deny-nonstring-elements', 'allow-nonstring-elements']) {
+      const kept = errorsOf(name);
+      assert.ok(
+        !kept[0]!.message.includes(FIELD_IGNORED_NOTE),
+        `${name}: the recording carries the note after all, so it cannot pin this`,
+      );
+      assert.equal(
+        kept[0]!.costs,
+        'field',
+        `${name}: classified as anything but a kept field — first-party reports the file applies`,
+      );
+    }
+
+    const voided = errorsOf('discarded-permissions-deny');
     assert.ok(!voided[0]!.message.includes(FIELD_IGNORED_NOTE));
+    assert.equal(voided[0]!.costs, 'file');
     // And the note is not hiding in the continuation line either, which is what would
     // make `includes` over the whole entry the right test instead of `endsWith`.
     assert.ok(!voided[0]!.notes.some((n) => n.includes(FIELD_IGNORED_NOTE)));
+  });
+
+  /**
+   * The state that cannot be recorded, and is therefore constructed (DEA-151).
+   *
+   * Every message form three sessions of probing found is recognised, so there is no
+   * first-party output that produces `unknown` and no honest recording to make of it.
+   * The message below is invented on purpose, and labelled as invented: it stands for the
+   * next release's new phrasing, and the assertion is about which way this classifier
+   * errs when it meets one, not about anything Claude Code says today.
+   */
+  test('a message from no known family is not-checked, never discarded', () => {
+    const err = (message: string): SettingsError => ({
+      path: '/s.json',
+      key: 'permissions.deny',
+      message,
+      notes: [],
+      costs: 'unknown',
+    });
+    const invented = 'Rule 3 was quarantined pending review';
+    assert.deepEqual(parseInvalidSettings(`Invalid settings\n- /s.json › k: ${invented}\n`), [
+      { path: '/s.json', key: 'k', message: invented, notes: [], costs: 'unknown' },
+    ]);
+
+    assert.equal(validityOf([err(invented)]), 'not-checked');
+    // Beside a recognised kept field it still cannot say the file survived...
+    assert.equal(
+      validityOf([{ ...err('x'), costs: 'field' }, err(invented)]),
+      'not-checked',
+    );
+    // ...but a confirmed whole-file failure settles it, because the file is gone whatever
+    // else was said about it.
+    assert.equal(validityOf([{ ...err('x'), costs: 'file' }, err(invented)]), 'discarded');
   });
 
   /**
@@ -277,20 +344,20 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
     }
   });
 
-  test('an empty error list is accepted, and one note-less error voids the file', () => {
+  test('an empty error list is accepted, and one refusal voids the file', () => {
     assert.equal(validityOf([]), 'accepted');
-    const one = (fieldIgnored: boolean) => ({
+    const one = (costs: SettingsError['costs']) => ({
       path: '/s.json',
       key: 'k',
       message: 'm',
       notes: [],
-      fieldIgnored,
+      costs,
     });
-    assert.equal(validityOf([one(true)]), 'field-dropped');
-    assert.equal(validityOf([one(false)]), 'discarded');
-    // Mixed: one key survived being ignored, another did not, and the file goes with the
-    // worse of the two. A file is discarded whole or not at all.
-    assert.equal(validityOf([one(true), one(false)]), 'discarded');
+    assert.equal(validityOf([one('field')]), 'field-dropped');
+    assert.equal(validityOf([one('file')]), 'discarded');
+    // Mixed: one key survived, another did not, and the file goes with the worse of the
+    // two. A file is discarded whole or not at all.
+    assert.equal(validityOf([one('field'), one('file')]), 'discarded');
   });
 
   test('a file the run did not cover and did not name is absent, never accepted', () => {
@@ -478,6 +545,99 @@ const MUTATIONS: Mutation[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// The classifier, one layer below the validity mutations (DEA-151)
+// ---------------------------------------------------------------------------
+
+/**
+ * The mutations above move a `SettingsValidity` on its way into the resolver, which is
+ * the right place for a wrong *precedence* rule and the wrong place for a wrong *reading
+ * of doctor's prose*. This gate substitutes the message-to-cost rule instead, which is
+ * where DEA-151 lived: the file was classified from a sentence it does not contain.
+ *
+ * The anchor is the recorded `enabled`, as everywhere else here -- not the unmutated
+ * classifier's own answer, which would be a gate agreeing with itself.
+ */
+/** `null` leaves the real classifier's answer in place. */
+type CostRule = ((message: string) => SettingsError['costs']) | null;
+
+function classifierGate(rule: CostRule): string[] {
+  const failures: string[] = [];
+
+  for (const c of CASES) {
+    const reclassified = new Map<string, SettingsCheck>();
+    for (const [path, check] of settingsFromDoctor(doctorText(c), covered(c))) {
+      const errors = check.schemaErrors.map((e) => ({ ...e, ...(rule ? { costs: rule(e.message) } : {}) }));
+      reclassified.set(path, { validity: validityOf(errors), schemaErrors: errors });
+    }
+
+    const value = resolveWith(c, (p) => reclassified.get(p)?.validity ?? 'not-checked');
+    if (value === c.enabled) continue;
+
+    for (const [path, check] of reclassified) {
+      if (!check.schemaErrors.length) continue;
+      failures.push(
+        `${c.name}: doctor said "${check.schemaErrors[0]!.message}" about ` +
+          `${path.split('/').at(-1)}, this called the file ${check.validity}, and ` +
+          `first-party applies it — a file Claude Code keeps was dropped from the chain`,
+      );
+    }
+  }
+
+  return failures;
+}
+
+describe('the classifier reads doctor by message family, not by one sentence', () => {
+  test('every recorded case still resolves to the first-party answer', () => {
+    assert.deepEqual(classifierGate(null), []);
+  });
+
+  /**
+   * **DEA-151, reintroduced.** The rule as DEA-147 shipped it: partial acceptance is the
+   * trailing sentence and nothing else, so every other message voids the file.
+   *
+   * It has to go red naming *this* divergence -- a file first-party applies, classified
+   * `discarded` -- and not merely a changed count, because the count moves for a dozen
+   * reasons and only one of them is this one.
+   */
+  test('the trailing sentence alone is not the discriminator', () => {
+    const failures = classifierGate((m) => (m.endsWith(FIELD_IGNORED_NOTE) ? 'field' : 'file'));
+    assert.ok(
+      failures.length > 0,
+      'reverting to the one-sentence rule did not fail the gate -- that is a hole in the ' +
+        'gate, not a mutation to delete',
+    );
+    for (const name of ['deny-nonstring-elements', 'allow-nonstring-elements']) {
+      assert.ok(
+        failures.some((f) =>
+          new RegExp(
+            `^${name}: doctor said "Non-string value in \\w+ array was removed" about ` +
+              'settings\\.json, this called the file discarded, and first-party applies it ' +
+              '— a file Claude Code keeps was dropped from the chain$',
+          ).test(f),
+        ),
+        `the gate failed, but nothing named ${name}: ${failureMessage(failures)}`,
+      );
+    }
+    console.log(`    caught "the one-sentence rule" (${failures.length}): ${failures[0]}`);
+  });
+
+  /**
+   * And the other direction: the unrecognised message rounded back to `discarded`, which
+   * is the default DEA-151 inverted. No recording produces it -- every message form found
+   * is recognised -- so the mutation is applied to the recognised ones instead, which is
+   * the same collapse reaching the same verdict.
+   */
+  test('and an unrecognised message may not be rounded to discarded', () => {
+    const failures = classifierGate((m) => (m === '' ? 'field' : 'file'));
+    assert.ok(failures.length > 0, 'collapsing everything to a refusal did not fail the gate');
+    assert.ok(
+      failures.some((f) => /field-dropped-hooks: .*called the file discarded/.test(f)),
+      failureMessage(failures),
+    );
+  });
+});
+
 describe('the gate fails when the validity rule is wrong', () => {
   for (const mutation of MUTATIONS) {
     test(mutation.name, () => {
@@ -550,6 +710,58 @@ describe('loadWorkspace carries validity onto the file it belongs to', () => {
       ws.projects[0]!.localSettings!.schemaErrors.map((e) => e.key),
       ['permissions.deny'],
     );
+  });
+
+  /**
+   * The unrecognised message is visible, or the choice to lose a detection is unaccountable.
+   *
+   * `costOf` errs towards `not-checked` because fabricating `discarded` on a live file is
+   * the worse mistake -- but that trade is only defensible while someone can see it being
+   * made. `not-checked` **carrying schema errors** is the state nothing else produces, and
+   * it is what separates "we did not look" from "we looked and it meant nothing to us".
+   *
+   * Driven end to end from a constructed `doctor` block rather than from a hand-built
+   * `SettingsCheck`, so the parser, the classifier and the walk are all in the path. The
+   * message is invented, and has to be: every form first-party is known to emit is
+   * recognised, so there is nothing to record here.
+   */
+  test('a file doctor reported in unknown words is separable from one nobody checked', () => {
+    const valid = CASES.find((x) => x.name === 'accepted')!;
+    const path = settingsPath(valid);
+    const invented = 'Rule 3 was quarantined pending review';
+
+    const ws = loadWorkspace({
+      home: FIXTURE_ROOT,
+      claudeJsonPath: join(FIXTURE_ROOT, 'no-such-claude.json'),
+      userSettingsPath: join(FIXTURE_ROOT, 'no-such-user-settings.json'),
+      extraProjectPaths: [caseDir(valid)],
+      settingsValidity: () =>
+        settingsFromDoctor(`Invalid settings\n- ${path} › permissions.deny: ${invented}\n`, [path]),
+    });
+
+    assert.equal(ws.projects[0]!.settings!.validity, 'not-checked');
+    assert.equal(settingsValidityTally(ws)['not-checked'], 1);
+    assert.deepEqual(discardedSettings({ ws, measurements: [], pluginCosts: new Map(), inventories: new Map() }), []);
+
+    const unclassified = unclassifiedSettings(ws);
+    assert.equal(unclassified.length, 1, 'the run cannot say a new first-party message arrived');
+    assert.equal(unclassified[0]!.path, path);
+    assert.deepEqual(
+      unclassified[0]!.schemaErrors.map((e) => e.message),
+      [invented],
+    );
+
+    // And a file nothing was asked about is *not* in that list, or the signal means
+    // nothing: on a run without --full every file is not-checked and this would name
+    // all of them.
+    const blind = loadWorkspace({
+      home: FIXTURE_ROOT,
+      claudeJsonPath: join(FIXTURE_ROOT, 'no-such-claude.json'),
+      userSettingsPath: join(FIXTURE_ROOT, 'no-such-user-settings.json'),
+      extraProjectPaths: [caseDir(valid)],
+    });
+    assert.equal(blind.projects[0]!.settings!.validity, 'not-checked');
+    assert.deepEqual(unclassifiedSettings(blind), []);
   });
 
   /**

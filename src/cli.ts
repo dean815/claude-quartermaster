@@ -24,6 +24,7 @@ import {
   runAll,
   rank,
   settingsValidityTally,
+  unclassifiedSettings,
   type AuditContext,
   type Finding,
 } from './detect.ts';
@@ -799,6 +800,15 @@ that happens.
           // "nothing wrong". Not a finding -- it has no severity, and it is a property of
           // this run rather than of the configuration.
           settingsValidity: settingsValidityTally(ctx.ws),
+          // A settings file `doctor` reported on whose message this release does not
+          // recognise (DEA-151). Beside the tally rather than inside it: those four
+          // counts are validities, and this is the subset of one of them that means
+          // "first-party said something new", which is the only way the classifier's
+          // chosen failure -- lose a detection rather than invent one -- becomes visible.
+          unclassifiedSettings: unclassifiedSettings(ctx.ws).map((f) => ({
+            path: f.path,
+            messages: f.schemaErrors.map((e) => `${e.key}: ${e.message}`),
+          })),
           unpriced: unpricedPlugins(ctx),
           // Not a finding, and deliberately not routed through one: it has no severity
           // and says nothing about the user's configuration. It reports what this run
@@ -866,6 +876,22 @@ function printSettingsValidity(ctx: AuditContext, ranFull: boolean): void {
         ranFull ? ' — claude doctor did not answer here' : '; pass --full to ask claude doctor'
       }. A file nobody checked is not a file that applies.${RESET}`,
     );
+  }
+
+  // The half of `not-checked` that is news rather than absence (DEA-151). An unrecognised
+  // message costs a detection by design -- the alternative is inventing one on a live file
+  // -- and this is what stops that cost being paid silently.
+  const unclassified = unclassifiedSettings(ctx.ws);
+  if (unclassified.length) {
+    console.log(
+      `  ${DIM}${unclassified.length} file${unclassified.length === 1 ? '' : 's'} reported by ` +
+        'claude doctor in words this release does not recognise, so whether Claude Code ' +
+        `still applies ${unclassified.length === 1 ? 'it' : 'them'} was not decided:${RESET}`,
+    );
+    for (const f of unclassified.slice(0, 4)) {
+      console.log(`    ${DIM}${f.path}${RESET}`);
+      for (const e of f.schemaErrors) console.log(`      ${DIM}${e.key}: ${e.message}${RESET}`);
+    }
   }
   console.log();
 }

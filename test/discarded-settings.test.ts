@@ -85,6 +85,12 @@ const EXPECTED: Record<string, ExpectedFinding[]> = {
   ],
   // Live config. `hooks` fell out and `enabledPlugins` applies -- measured, not assumed.
   'field-dropped-hooks': [],
+  // Also live config, and the pair that used to be reported here (DEA-151). `doctor`
+  // reports both files and neither carries `This field was ignored.`, so the rule keyed
+  // on that sentence called them discarded and this detector fired high severity about
+  // entries that apply. First-party says `enabled: true` for both.
+  'deny-nonstring-elements': [],
+  'allow-nonstring-elements': [],
   'discarded-permissions-deny': [
     { file: 'settings.json', keys: ['permissions.deny'], byKey: { enabledPlugins: 1 } },
   ],
@@ -389,11 +395,18 @@ const MUTATIONS: Mutation[] = [
      * with one key missing; reporting it as discarded calls the whole file void and
      * charges it the whole file's entries. Both halves show in the message, because the
      * cost figure is the half that makes the claim look measured.
+     *
+     * The second pattern is DEA-151's half of the same boundary, and it is separate
+     * rather than folded into the first alternation on purpose: `some()` is satisfied by
+     * one match, so widening an alternation adds nothing, and the file that reached
+     * `field-dropped` *without* the trailing sentence is exactly the one that used to
+     * cross this line. Requiring it by name is what notices if it ever crosses back.
      */
     name: 'a field-dropped file is reported as discarded',
     mutate: (c) => (c.validity === 'field-dropped' ? { ...c, validity: 'discarded' } : c),
     names: [
       /^(field-dropped-hooks|dropped-over-discarded): reported .*settings\.json, which the recording leaves field-dropped, claiming 1 of its entries never apply — the rest of that file is live config$/,
+      /^deny-nonstring-elements: reported .*settings\.json, which the recording leaves field-dropped, claiming 1 of its entries never apply — the rest of that file is live config$/,
     ],
   },
   {

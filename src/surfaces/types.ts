@@ -32,21 +32,39 @@ import type { SkillValue } from '../model.ts';
  * `keyBasis` rule. It says the measurement was never taken, and it must never be
  * rounded to either `accepted` or `discarded`.
  *
- * The day it fails: the only observable discriminator between the two error classes is
- * the trailing sentence `This field was ignored.`, which is Claude Code's own prose and
- * carries no version guarantee. It can change in any release, and the day it does every
- * `field-dropped` file classifies `discarded` -- so `parseInvalidSettings` pins that
- * string in one place and the fixture is a recording of first-party output, not a
- * restatement of the rule.
+ * **Which way this errs, and why (DEA-151).** The classes are told apart by reading
+ * `doctor`'s prose, and that prose is an open set: the first cut recognised one
+ * partial-acceptance sentence and sent everything else to `discarded`, so the *second*
+ * partial-acceptance message -- `Non-string value in deny array was removed`, which was
+ * there all along -- took a live file to `discarded` and fired a high-severity finding
+ * about config that applies. The rule now recognises both families explicitly and sends
+ * anything it does not recognise to `not-checked`. That is the safe direction: an
+ * unrecognised message costs a *detection*, visibly, where the old default fabricated
+ * one. It is DEA-123's `unknown`-over-`restart` reasoning, which this axis was not
+ * following -- rounding an unmeasured case to the scarier verdict is the cry-wolf
+ * behaviour the classifier exists to prevent.
+ *
+ * The day it fails: both lists are open, and only one of them fails safe. A new
+ * *whole-file* message reads `not-checked`, the file keeps its links, and DEA-148 says
+ * nothing about a file that really is dead -- the original incident, silently. What
+ * keeps that from being invisible is that such a file is `not-checked` *carrying schema
+ * errors*, which nothing else produces, and the run prints them (`printSettingsValidity`).
+ * Measured on 2.1.222, every message form found by three sessions of probing is
+ * recognised, so this state has no live instances and its fixture is necessarily a
+ * constructed message rather than a recording.
  */
 export type SettingsValidity =
   /** `doctor` ran over this file and reported nothing against it. */
   | 'accepted'
-  /** It reported only errors saying the field was ignored; the rest of the file applies. */
+  /** Every error against it said Claude Code kept the file; the rest of it applies. */
   | 'field-dropped'
-  /** It reported an error carrying no such note; Claude Code drops the file entire. */
+  /** An error against it said Claude Code refused the file; it is dropped entire. */
   | 'discarded'
-  /** `doctor` was not run here, is not on PATH, or its output did not parse. */
+  /**
+   * Nothing was measured, or what was measured could not be placed: `doctor` was not run
+   * here, is not on PATH, its output did not parse, or it reported a message this
+   * classifier does not recognise. Never rounded to either neighbour.
+   */
   | 'not-checked';
 
 /**
@@ -65,8 +83,16 @@ export interface SettingsError {
   message: string;
   /** Indented continuations of that entry -- `Suggested fix: ...` -- verbatim. */
   notes: string[];
-  /** Whether `message` ends in the note. The one thing that decides the two classes. */
-  fieldIgnored: boolean;
+  /**
+   * What this one error cost, read off `message`. The thing that decides the classes.
+   *
+   * Three values and not a boolean (DEA-151). `field` and `file` are the two outcomes
+   * Claude Code has; `unknown` is the message this classifier has never seen, and it is a
+   * value rather than a default for the `usageCount` / `keyBasis` reason -- collapsing it
+   * into either neighbour is a guess wearing a measurement's clothes, and collapsing it
+   * into `file` is the guess that reports live config as dead.
+   */
+  costs: 'field' | 'file' | 'unknown';
 }
 
 /**
@@ -80,7 +106,14 @@ export interface SettingsError {
  */
 export interface SettingsCheck {
   validity: SettingsValidity;
-  /** Empty exactly when `validity` is `accepted` or `not-checked`. */
+  /**
+   * Empty whenever `validity` is `accepted`, and whenever nothing was measured at all.
+   *
+   * The one combination worth naming is `not-checked` **with** errors: `doctor` did
+   * report on this file and none of what it said could be placed (DEA-151). Nothing else
+   * produces it, so it is how a first-party message this classifier has never seen
+   * becomes a visible event on the next run instead of a silent loss of detection.
+   */
   schemaErrors: readonly SettingsError[];
 }
 

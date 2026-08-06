@@ -150,9 +150,9 @@ string each void the file entire. So `SettingsValidity` has four values —
 `accepted` / `field-dropped` / `discarded` / `not-checked` — and **only `discarded`
 removes a file's links from the chain.** Reading `field-dropped` as void reports live
 overrides as dead, which is DEA-123's cry-wolf failure arriving from the opposite side.
-The only observable discriminator is the trailing sentence `This field was ignored.`,
-so it is pinned as one constant and the fixture is a *recording*, never a restatement of
-the rule. **`not-checked` is the common case, not the exception:** `doctor` validates per
+The discriminator was taken to be the trailing sentence `This field was ignored.`, pinned
+as one constant, with the fixture a *recording* rather than a restatement of the rule.
+(The constant survives; treating it as *the* discriminator did not — see DEA-151.) **`not-checked` is the common case, not the exception:** `doctor` validates per
 working directory, so checking 28 projects here is 28 spawns and 15.6s, which puts it
 behind `--full`; without it every file reads `not-checked` and resolves exactly as
 parsing alone always did. `readSettings`'s second parameter is required for the
@@ -200,6 +200,45 @@ over four keys) before a counter reading one key could fail. The day it fails: t
 counts files and not entries, so one voided file holding 90 and one holding 1 read alike
 in the summary line; and the cost counts four keys, so a discarded file carrying only
 `permissions` and `hooks` reports that it is discarded with no number at all.
+
+**When both lists are open, the default is the whole decision (DEA-150, DEA-151).**
+DEA-147 said its discriminator could change in a release and take every `field-dropped`
+file to `discarded`. What arrived a day later was not a reworded sentence but a **second**
+one that had been there all along: `Non-string value in deny array was removed` carries no
+note, so a file Claude Code applies classified `discarded`, its links left the chain, and
+DEA-148 fired high severity about live config. The prediction named the right failure and
+the wrong cause, which is the tell that the *shape* was wrong rather than the string.
+Both message families are open sets of first-party prose — measured on 2.1.222, partial
+acceptance has **four** members (`This field was ignored.` plus one template over
+`deny`/`allow`/`ask`) and refusal has **five**, of which the issue's table listed neither
+fully. So enumerating either is a losing game and the only real choice is which way to be
+wrong: `costOf` recognises both families and sends anything else to `not-checked`, because
+a wrong `discarded` fabricates a high-severity finding about working config while a wrong
+`not-checked` loses a detection and leaves the file behaving as it did before any of this
+existed. That is DEA-123's `unknown`-over-`restart` rule, which this axis was not
+following. `validityOf` is a lattice, not a vote — one confirmed refusal settles the file,
+but *every* error must say it survived for it to survive.
+**Asking the oracle was the proposed fix and it does not work.** `claude plugin list
+--json` reports *resolved* plugin state, so it can only answer "did this file apply" where
+removing the file moves some plugin's resolved value: **7 of 38** settings files here, with
+22 of the other 31 naming no plugin at all. It answers one bit, the finding still needs the
+key from the same prose, and today it would have nothing to run on — all 38 files are
+`accepted`. Cheap (~260ms) and blind for four files in five is not a measurement, it is a
+coin flip with a spawn attached.
+The cost of the chosen direction is paid *visibly*: `not-checked` **carrying schema
+errors** is a state nothing else produces, and `unclassifiedSettings` puts it in the run's
+output and its JSON, because a failure mode chosen for being quiet is unaccountable unless
+someone can see it fire. Underneath all of this, `permissions.deny` was `string[]` by
+assertion only — a JSON number reached `isBareDenyRule` and killed `qm audit --full` *and*
+`qm effect` with `rule.includes is not a function`, on a file first-party accepts. Narrowed
+in `readSettings`, not in the predicate: the reader is where the type stopped being true,
+and one narrowing there keeps the predicate the single copy it is supposed to be. Dropped
+and never coerced — `String(1)` is a bare deny rule nobody wrote. The day it fails: a new
+*refusal* message reads `not-checked` and the original incident recurs silently except for
+that one printed line; the recogniser matches templates, so a release that keeps the words
+and changes the shape (`Expected object but received number`, no comma) falls out of both
+lists at once; and `unknown` has no recording and cannot have one, so its fixture is a
+constructed message and is labelled as such.
 
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`

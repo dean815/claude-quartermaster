@@ -613,6 +613,26 @@ export function settingsValidityTally(ws: Workspace): Record<SettingsValidity, n
 }
 
 /**
+ * Files `claude doctor` reported on and the classifier could not place (DEA-151).
+ *
+ * `not-checked` covers two situations that look identical in a tally and are not: nothing
+ * was measured, and something was measured that means nothing to us. Only the second
+ * carries schema errors, and only the second is *news* -- it is a first-party message
+ * that has never been seen here, which is the event that has to reach a human, because
+ * the classifier's chosen failure direction is to lose a detection rather than fabricate
+ * one and losing it silently would make that choice unaccountable.
+ *
+ * Not a finding, for `settingsValidityTally`'s reason: it has no severity and it describes
+ * what this run could interpret, not what the configuration is. Empty on every machine
+ * whose `doctor` output this release already understands -- which today is all of them.
+ */
+export function unclassifiedSettings(ws: Workspace): SettingsFile[] {
+  return settingsFiles(ws)
+    .map(({ file }) => file)
+    .filter((f) => f.validity === 'not-checked' && f.schemaErrors.length > 0);
+}
+
+/**
  * The decisions a settings file carries that this audit models, by key.
  *
  * Four keys and not five: `permissions` is a decision too, but it is counted in rules

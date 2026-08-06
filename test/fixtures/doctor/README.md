@@ -37,6 +37,8 @@ survives gives `true`; a file it discarded leaves the answer at the user scope's
 | `discarded-permissions-deny` | `permissions.deny` as a string | error + `Suggested fix:` | `false` | whole file voided, and the continuation line |
 | `dropped-over-discarded` | both, in two files | two errors, one run | `true` | field-dropped `settings.json` survives a discarded `settings.local.json` above it |
 | `discarded-many-entries` | `extraKnownMarketplaces.<id>.source` as a string | error | `false` | six entries over four keys, so a cost figure can be wrong in more than one way |
+| `deny-nonstring-elements` | `permissions.deny: [1, 2, "Bash"]` | error, **no note** | `true` | the second partial-acceptance message, in different words |
+| `allow-nonstring-elements` | `permissions.allow: [1, "Read(~/.zshrc)"]` | error, **no note** | `true` | the same template on a second key |
 | `valid-local-over-discarded` | discarded `settings.json`, valid local | error | `true` | a discarded file whose removal changes nothing — the control |
 
 `discarded-many-entries` is the only case whose reason for existing is a *number*.
@@ -50,6 +52,19 @@ resolve `true` — so the discard is the marketplace key's doing and not theirs.
 fixture belongs to (DEA-147) was titled *one bad key voids the whole file*, and that is
 false for `hooks`.
 
+`deny-nonstring-elements` and `allow-nonstring-elements` are why the discriminator is not
+one sentence (DEA-151). Both print an error with **no** trailing note and both files
+still apply, so the rule "a message without `This field was ignored.` voids the file"
+called live config dead. The `allow` case exists so that the recogniser has to read the
+message *template* — one sentence, the array's key name varying — rather than the literal
+string that the `deny` case happens to produce; `permissions.ask` was measured producing
+the third instance and is not recorded, because a third copy of one template buys nothing
+the second does not already buy.
+
+`deny-nonstring-elements` is also the seam with DEA-150. The same array holds `"Bash"`,
+so this one recording carries both halves of that fix: first-party says the file applies,
+and `test/permission-rules.test.ts` says the reader keeps `Bash` and drops `1` and `2`.
+
 `dropped-over-discarded` is the sharpest single case: two files, two validities, one
 `doctor` run, and `true` is reachable only by honouring the first and dropping the
 second. Voiding `settings.json` gives `false`; honouring the local file gives `false`.
@@ -59,9 +74,11 @@ second. Voiding `settings.json` gives `false`; honouring the local file gives `f
 - The block opens with a line reading exactly `Invalid settings`.
 - Entries are `- <abs path> › <key>: <message>`, where `›` is **U+203A**, not `>`.
 - Some entries carry an indented continuation (`Suggested fix: …`). Not one line per error.
-- The discriminator between the two failure classes is the trailing sentence
-  **`This field was ignored.`** on the message line. It is Claude Code's own prose with
-  no version guarantee behind it — see `FIELD_IGNORED_NOTE` in `src/delegate/doctor.ts`.
+- The failure classes are told apart by matching the message line against **two** lists of
+  first-party phrasings — `KEEPS_THE_FILE` and `REFUSES_THE_FILE` in
+  `src/delegate/doctor.ts`. Both are open sets of Claude Code's own prose with no version
+  guarantee behind them, so a message matching neither is `not-checked` and never
+  `discarded`; which way that errs, and why it errs that way, is argued at `costOf`.
 - `No installation issues found.` prints **anyway**, so `parseInstallationIssues` returns
   `[]` for every case here. That is asserted, because it is why the block went unread.
 

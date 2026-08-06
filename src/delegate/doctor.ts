@@ -80,14 +80,91 @@ const BLOCK_HEADER = 'Invalid settings';
 const SEPARATOR = ' › ';
 
 /**
- * The whole discriminator between "one key dropped" and "the file voided".
- *
- * First-party prose with no version guarantee behind it, pinned here so the day it
- * changes is one edit and not a hunt. When it does change, every `field-dropped` file
- * starts classifying `discarded` -- which is the direction that reports live overrides
- * as void, so `test/validity.test.ts` measures exactly that mutation.
+ * The trailing sentence DEA-147 measured. Kept as its own constant because it is the one
+ * form that is a *suffix* to an otherwise ordinary message rather than a whole message.
  */
 export const FIELD_IGNORED_NOTE = 'This field was ignored.';
+
+/**
+ * The messages that mean Claude Code **kept the file** and dropped something inside it.
+ *
+ * Measured on 2.1.222, one `claude doctor` run per case with `claude plugin list --json`
+ * as the oracle; the recordings are in `test/fixtures/doctor/`:
+ *
+ * | key | message | file applies |
+ * |---|---|---|
+ * | `hooks: 42`               | `…received number. This field was ignored.`    | yes |
+ * | `permissions.deny: [1,2]` | `Non-string value in deny array was removed`   | yes |
+ * | `permissions.allow: [1,…]`| `Non-string value in allow array was removed`  | yes |
+ * | `permissions.ask: [{},…]` | `Non-string value in ask array was removed`     | yes |
+ *
+ * The array form is written as a template because it *is* one -- three keys, one
+ * sentence, and the key name is the only thing that varies. Matching the literal three
+ * would be pinning an accident of which keys were probed.
+ */
+const KEEPS_THE_FILE: readonly RegExp[] = [
+  new RegExp(`${FIELD_IGNORED_NOTE.replace(/[.]/g, '\\.')}$`),
+  /^Non-string value in \w+ array was removed$/,
+];
+
+/**
+ * The messages that mean Claude Code **refused the file**. Same run, same oracle.
+ *
+ * | key | message | file applies |
+ * |---|---|---|
+ * | `permissions: 42`                     | `Expected object, but received number`  | no |
+ * | `permissions.deny: "Bash"`            | `Expected array, but received string`   | no |
+ * | `skillOverrides: 42`                  | `Expected record, but received number`  | no |
+ * | `extraKnownMarketplaces.<id>.source`  | `Expected object, but received string`  | no |
+ * | `permissions.defaultMode: 7`          | `Invalid value. Expected one of: …`     | no |
+ *
+ * Four of the five are one schema-validator template with the two type names varying, so
+ * again the template and not the instances.
+ */
+const REFUSES_THE_FILE: readonly RegExp[] = [
+  /^Expected \S+, but received \S+$/,
+  /^Invalid value\. Expected one of: /,
+];
+
+/**
+ * What one error cost, and `unknown` when this classifier has never seen the message.
+ *
+ * **Two open lists, and only one of them may be the default (DEA-151).** Both families
+ * are first-party prose that can grow in any release -- they already have: DEA-147
+ * recognised one member of the first list and made `discarded` the default for
+ * everything else, and the second member of that same list took a file Claude Code
+ * applies to `discarded`, dropped its links out of the resolver, and fired a
+ * high-severity finding about live config.
+ *
+ * So the question is not which list to enumerate but which way to be wrong when a new
+ * message appears, and the two are not symmetric:
+ *
+ * - defaulting to `file` fabricates a detection, on a file that is fine, and calls it high
+ *   severity -- the cry-wolf failure DEA-123 and DEA-147 both exist to prevent;
+ * - defaulting to `unknown` costs a detection on a file that really is dead, which is the
+ *   original incident -- but the file keeps behaving exactly as it did before any of this
+ *   existed, and `not-checked` carrying errors is a state nothing else produces, so the
+ *   run can and does print it.
+ *
+ * One of those is recoverable by reading the run's own output. The other tells the user
+ * their working configuration is dead.
+ *
+ * **Why not ask the oracle instead.** `claude plugin list --json` reports *resolved*
+ * plugin state for a working directory, so it can only answer "did this file apply" for a
+ * file whose removal from the chain would move some plugin's resolved value. Measured
+ * over this machine's 38 project settings files, that is **7** -- 22 of the other 31 name
+ * no plugin at all, and no number of spawns gives the oracle something to read in a file
+ * that decides only `permissions` or only `.mcp.json` servers. It also answers exactly
+ * one bit, while the finding still needs the key from this same prose. It is a real
+ * measurement where it applies and it is blind for four files in five, so it cannot
+ * replace the reading -- and today it would have nothing to run on, because all 38 files
+ * are `accepted`.
+ */
+function costOf(message: string): SettingsError['costs'] {
+  if (KEEPS_THE_FILE.some((re) => re.test(message))) return 'field';
+  if (REFUSES_THE_FILE.some((re) => re.test(message))) return 'file';
+  return 'unknown';
+}
 
 /**
  * Every entry of the `Invalid settings` block, or none when there is no block.
@@ -123,15 +200,15 @@ export function parseInvalidSettings(text: string): SettingsError[] {
         key: rest.slice(0, colon),
         message,
         notes: [],
-        fieldIgnored: message.endsWith(FIELD_IGNORED_NOTE),
+        costs: costOf(message),
       });
       continue;
     }
 
-    // An indented continuation belongs to the entry above it. `fieldIgnored` is not
-    // recomputed over it: the note was measured as the tail of the message, and letting
-    // a `Suggested fix:` line supply it would make the sentence's position irrelevant
-    // and widen the discriminator on a guess.
+    // An indented continuation belongs to the entry above it. `costs` is not recomputed
+    // over it: every form was measured on the message line, and letting a `Suggested fix:`
+    // line supply one would make position irrelevant and widen the match on a guess. Two
+    // of the recorded whole-file cases carry such a line, so this is load-bearing.
     if (/^\s/.test(line) && out.length) {
       out.at(-1)!.notes.push(line.trim());
       continue;
@@ -148,10 +225,17 @@ export function parseInvalidSettings(text: string): SettingsError[] {
  * An empty list is `accepted`, which is only true for a file the run actually covered --
  * `settingsFromDoctor` owns that distinction, and a file it did not cover never reaches
  * this function.
+ *
+ * The combination is a lattice, not a vote. One confirmed whole-file failure settles it
+ * whatever else the file collected, because the file is gone and its other errors are
+ * moot. Otherwise every error has to say the file survived for the file to count as
+ * surviving: a single unrecognised message beside a recognised `field` one leaves the
+ * question open, and open is `not-checked`.
  */
 export function validityOf(errors: readonly SettingsError[]): SettingsValidity {
   if (!errors.length) return 'accepted';
-  return errors.every((e) => e.fieldIgnored) ? 'field-dropped' : 'discarded';
+  if (errors.some((e) => e.costs === 'file')) return 'discarded';
+  return errors.every((e) => e.costs === 'field') ? 'field-dropped' : 'not-checked';
 }
 
 /**
