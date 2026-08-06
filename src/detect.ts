@@ -667,7 +667,8 @@ export function discardedSettings(ctx: AuditContext): Finding[] {
       title:
         `Claude Code discards ${name}` +
         (entries
-          ? `, so ${entries} ${plural(entries, 'entry', 'entries')} in it never apply`
+          ? `, so ${entries} ${plural(entries, 'entry', 'entries')} in it never ` +
+            `${plural(entries, 'applies', 'apply')}`
           : ' entirely'),
       detail:
         'The first-party validator reports this file against Claude Code\'s schema, and ' +
