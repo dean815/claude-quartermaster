@@ -200,6 +200,18 @@ over four keys) before a counter reading one key could fail. The day it fails: t
 counts files and not entries, so one voided file holding 90 and one holding 1 read alike
 in the summary line; and the cost counts four keys, so a discarded file carrying only
 `permissions` and `hooks` reports that it is discarded with no number at all.
+**One way it already failed was not on that list.** `plural()` inflected the noun and left
+the verb fixed, so a file deciding exactly one thing read `so 1 entry in it never apply`
+from DEA-148 until c29ef4a — with the 1-entry fixture (`discarded-marketplace-source`)
+running green the whole time, because the only assertion that reads that title reads a
+*number* out of it: `claimedEntries`'s `/(\d+) (?:entry|entries)/` stops before the verb.
+Not DEA-133's miss — the gate ran on the case that could fail and asserted on a projection
+of the output the defect was not in, which no amount of fixture coverage repairs. Routed
+through `plural()`, and both titles are now asserted **verbatim**, at one and at many: an
+expectation rebuilt with `plural()` would agree with whatever it does, which is the
+`memorySlug` defect one level removed. Verified by mutation — pinning the verb back reddens
+that assertion and no other, and the 6-entry title still passes, so the gate is specific to
+the case that shipped wrong rather than to the string having changed.
 
 **When both lists are open, the default is the whole decision (DEA-150, DEA-151).**
 DEA-147 said its discriminator could change in a release and take every `field-dropped`

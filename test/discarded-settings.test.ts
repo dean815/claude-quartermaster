@@ -357,6 +357,36 @@ describe('the detector reports the files claude doctor discards, and only those'
     assert.equal(found[0]!.project, undefined, 'the shared file belongs to user scope');
     assert.equal(settingsValidityTally(ws).discarded, 1);
   });
+
+  /**
+   * The title is a sentence, and for a day it was an ungrammatical one: `plural()`
+   * inflected the noun and left the verb fixed, so a file deciding exactly one thing read
+   * `so 1 entry in it never apply`. Nothing went red. `claimedEntries` is this suite's only
+   * other reader of the string and it reads a *number* back out -- its regex stops before
+   * the verb -- so the gate ran on the 1-entry fixture the whole time while asserting on a
+   * projection the defect was not in. More fixtures would not have caught it.
+   *
+   * Both titles are **literals**. Rebuilding the expectation with `plural()` would read the
+   * value back through the function that wrote it and agree with whatever it does, which is
+   * the `memorySlug` defect CLAUDE.md records under "a gate that cannot fail".
+   */
+  test('and the title agrees with its own count, at one and at many', () => {
+    const titleOf = (name: string) => {
+      const c = CASES.find((x) => x.name === name)!;
+      const found = discardedSettings(ctxFor(checked(c, IDENTITY)));
+      assert.equal(found.length, 1, `${name}: expected exactly one finding to read`);
+      return found[0]!.title;
+    };
+
+    assert.equal(
+      titleOf('discarded-marketplace-source'),
+      'Claude Code discards settings.json, so 1 entry in it never applies',
+    );
+    assert.equal(
+      titleOf('discarded-many-entries'),
+      'Claude Code discards settings.json, so 6 entries in it never apply',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
