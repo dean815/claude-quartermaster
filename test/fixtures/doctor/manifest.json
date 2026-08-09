@@ -85,6 +85,15 @@
       ]
     },
     {
+      "name": "mixed-known-and-unknown",
+      "note": "One recognised partial acceptance and one nobody recognises, in the same file: `hooks: 42` says \"This field was ignored.\" and 2.1.224's marketplace message says something neither family covers. `validityOf` is a lattice, so the file is `not-checked` -- and it still carries a `field` error, which is the only shape in which a detector guarding on the error alone would report a file whose fate was never established.",
+      "claudeVersion": "2.1.224 (Claude Code)",
+      "enabled": true,
+      "files": [
+        "settings.json"
+      ]
+    },
+    {
       "name": "hook-entry-ignored",
       "note": "A third partial-acceptance message, found on 2.1.224: `hooks.PreToolUse` says \"This entry was ignored.\" and the file still applies. No pattern recognises it, so it classifies `not-checked` carrying schema errors -- the failure direction DEA-151 chose, which until this recording had no first-party instance and could only be constructed.",
       "claudeVersion": "2.1.224 (Claude Code)",

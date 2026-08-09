@@ -149,6 +149,10 @@ const EXPECTED: Record<string, ExpectedFinding[]> = {
   // `This entry was ignored.` -- a partial acceptance in a phrasing neither family covers,
   // so the file is `not-checked` and nothing here may claim anything about it.
   'hook-entry-ignored': [],
+  // The case the validity guard exists for: `not-checked` **carrying a recognised `field`
+  // error**, because one of its two messages was placed and the other was not. A detector
+  // that walked the errors and never asked about the file would report `hooks` here.
+  'mixed-known-and-unknown': [],
 };
 
 /** Entries a whole-file counter would charge the dropped key with, off the committed JSON. */

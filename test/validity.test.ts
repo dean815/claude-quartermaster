@@ -238,6 +238,12 @@ const PARSED: Record<string, Array<{ key: string; costs: SettingsError['costs'];
   // A partial acceptance in a phrasing neither family covers, so `unknown` (DEA-151) --
   // recorded from 2.1.224 rather than constructed.
   'hook-entry-ignored': [{ key: 'hooks.PreToolUse', costs: 'unknown', notes: 0 }],
+  // One of each, in one file: the lattice takes it to `not-checked` while a recognised
+  // `field` error is still sitting in it.
+  'mixed-known-and-unknown': [
+    { key: 'hooks', costs: 'field', notes: 0 },
+    { key: 'extraKnownMarketplaces.karpathy-skills', costs: 'unknown', notes: 0 },
+  ],
   'valid-local-over-discarded': [{ key: 'permissions.deny', costs: 'file', notes: 1 }],
 };
 

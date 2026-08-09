@@ -97,6 +97,7 @@ const EXPECTED: Record<string, ExpectedFinding[]> = {
   // `not-checked`, because the message is a partial acceptance in words no pattern
   // covers. Nothing may be claimed about a file whose fate was not established.
   'hook-entry-ignored': [],
+  'mixed-known-and-unknown': [],
   'discarded-permissions-deny': [
     { file: 'settings.json', keys: ['permissions.deny'], byKey: { enabledPlugins: 1 } },
   ],
