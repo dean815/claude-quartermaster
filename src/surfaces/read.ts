@@ -87,20 +87,43 @@ function ruleStrings(value: unknown): string[] | undefined {
   return value.filter((v): v is string => typeof v === 'string');
 }
 
-/** `permissions`, holding only what Claude Code would keep. See `ruleStrings`. */
-function readPermissions(raw: unknown): SettingsFile['permissions'] | undefined {
-  if (typeof raw !== 'object' || raw === null) return undefined;
+/**
+ * The permission keys that hold rule arrays, and the ones `ruleStrings` narrows.
+ *
+ * Exported because `detect.ts` joins a `doctor` key back to the survivors and must use
+ * the same three: this list is what makes "every element left in one of these is a
+ * string" true, and a second copy of it would be a second thing to keep in step.
+ */
+export const RULE_ARRAYS = ['allow', 'deny', 'ask'] as const;
+
+/**
+ * `permissions`, holding only what Claude Code would keep, and how much it kept out.
+ *
+ * The count is returned rather than discarded because this is the only place it exists
+ * (DEA-149). `ruleStrings` is where a non-string element stops being visible, and no
+ * later layer can recover it: the file is read once, and `doctor` prints one entry per
+ * array however many elements it removed. A report that has to say *how many* values
+ * Claude Code threw away has one chance to count them, and it is here.
+ */
+function readPermissions(raw: unknown): {
+  value: SettingsFile['permissions'];
+  dropped: Record<string, number>;
+} {
+  const dropped: Record<string, number> = {};
+  if (typeof raw !== 'object' || raw === null) return { value: undefined, dropped };
+
   const p = raw as Record<string, unknown>;
-  const allow = ruleStrings(p['allow']);
-  const deny = ruleStrings(p['deny']);
-  const ask = ruleStrings(p['ask']);
-  const defaultMode = p['defaultMode'];
-  return {
-    ...(allow ? { allow } : {}),
-    ...(deny ? { deny } : {}),
-    ...(ask ? { ask } : {}),
-    ...(typeof defaultMode === 'string' ? { defaultMode } : {}),
-  };
+  const value: NonNullable<SettingsFile['permissions']> = {};
+  for (const key of RULE_ARRAYS) {
+    const before = p[key];
+    const kept = ruleStrings(before);
+    if (!kept) continue;
+    value[key] = kept;
+    const removed = (before as unknown[]).length - kept.length;
+    if (removed > 0) dropped[`permissions.${key}`] = removed;
+  }
+  if (typeof p['defaultMode'] === 'string') value.defaultMode = p['defaultMode'];
+  return { value, dropped };
 }
 
 /**
@@ -121,15 +144,18 @@ export function readSettings(path: string, check: SettingsCheck): SettingsFile |
   const rest: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(raw)) if (!SETTINGS_KNOWN.has(k)) rest[k] = v;
 
+  const permissions = raw.permissions ? readPermissions(raw.permissions) : null;
+
   return {
     path,
     validity: check.validity,
     schemaErrors: check.schemaErrors,
+    droppedRuleElements: permissions?.dropped ?? {},
     ...(raw.enabledPlugins ? { enabledPlugins: raw.enabledPlugins } : {}),
     ...(raw.skillOverrides ? { skillOverrides: raw.skillOverrides as Record<string, SkillValue> } : {}),
     ...(raw.enabledMcpjsonServers ? { enabledMcpjsonServers: raw.enabledMcpjsonServers } : {}),
     ...(raw.disabledMcpjsonServers ? { disabledMcpjsonServers: raw.disabledMcpjsonServers } : {}),
-    ...(raw.permissions ? { permissions: readPermissions(raw.permissions) ?? {} } : {}),
+    ...(permissions ? { permissions: permissions.value ?? {} } : {}),
     rest,
   };
 }

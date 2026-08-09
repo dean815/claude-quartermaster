@@ -124,6 +124,7 @@ function resolveWith(c: RecordedCase, validityOf_: (path: string) => SettingsVal
       path: userPath,
       validity: validityOf_(userPath),
       schemaErrors: [],
+      droppedRuleElements: {},
       enabledPlugins: MANIFEST.userScope,
       rest: {},
     },
@@ -226,11 +227,12 @@ const PARSED: Record<string, Array<{ key: string; costs: SettingsError['costs'];
     { key: 'permissions.deny', costs: 'file', notes: 1 },
   ],
   // The two DEA-151 recordings: partial acceptance said without the trailing sentence.
-  'deny-nonstring-elements': [{ key: 'permissions.deny', costs: 'field', notes: 0 }],
-  'allow-nonstring-elements': [{ key: 'permissions.allow', costs: 'field', notes: 0 }],
-  // Both partial-acceptance shapes in one file, in the order doctor printed them.
+  'deny-nonstring-elements': [{ key: 'permissions.deny', costs: 'elements', notes: 0 }],
+  'allow-nonstring-elements': [{ key: 'permissions.allow', costs: 'elements', notes: 0 }],
+  // Both partial-acceptance shapes in one file, in the order doctor printed them, and
+  // the pair that pins the two apart: same validity, different cost (DEA-149).
   'dropped-field-and-elements': [
-    { key: 'permissions.deny', costs: 'field', notes: 0 },
+    { key: 'permissions.deny', costs: 'elements', notes: 0 },
     { key: 'hooks', costs: 'field', notes: 0 },
   ],
   // A partial acceptance in a phrasing neither family covers, so `unknown` (DEA-151) --
@@ -284,6 +286,8 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
     assert.equal(dropped[0]!.costs, 'field');
 
     // The file first-party keeps, saying so in words the sentence-matcher never sees.
+    // Classified `elements` rather than `field` (DEA-149): same validity, and a different
+    // cost, because what came out was some of an array and not the key.
     for (const name of ['deny-nonstring-elements', 'allow-nonstring-elements']) {
       const kept = errorsOf(name);
       assert.ok(
@@ -292,8 +296,9 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
       );
       assert.equal(
         kept[0]!.costs,
-        'field',
-        `${name}: classified as anything but a kept field — first-party reports the file applies`,
+        'elements',
+        `${name}: classified as anything but removed elements — first-party reports the ` +
+          'file applies, and says an array lost values rather than a key being ignored',
       );
     }
 
@@ -362,6 +367,11 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
       costs,
     });
     assert.equal(validityOf([one('field')]), 'field-dropped');
+    // Both partial-acceptance costs mean the same thing to validity and different things
+    // to a report (DEA-149), so a third cost added to `costOf` and forgotten in
+    // `PARTIAL_ACCEPTANCE` would take a live file to `not-checked`.
+    assert.equal(validityOf([one('elements')]), 'field-dropped');
+    assert.equal(validityOf([one('field'), one('elements')]), 'field-dropped');
     assert.equal(validityOf([one('file')]), 'discarded');
     // Mixed: one key survived, another did not, and the file goes with the worse of the
     // two. A file is discarded whole or not at all.

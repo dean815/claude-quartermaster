@@ -33,7 +33,7 @@ const inventory = (id: string): PluginInventory => ({
  * move. A `discarded` default would delete links from chains these cases are about.
  */
 function settings(path: string, body: Partial<SettingsFile> = {}): SettingsFile {
-  return { path, validity: 'not-checked', schemaErrors: [], rest: {}, ...body };
+  return { path, validity: 'not-checked', schemaErrors: [], droppedRuleElements: {}, rest: {}, ...body };
 }
 
 function claudeJson(body: Partial<ClaudeJson> = {}): ClaudeJson {

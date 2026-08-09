@@ -41,6 +41,7 @@ const settings = (path: string, body: Partial<SettingsFile> = {}): SettingsFile 
   // file resolved before DEA-147 existed. Never `accepted` -- these files were not checked.
   validity: 'not-checked',
   schemaErrors: [],
+  droppedRuleElements: {},
   rest: {},
   ...body,
 });

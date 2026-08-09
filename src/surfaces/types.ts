@@ -86,13 +86,19 @@ export interface SettingsError {
   /**
    * What this one error cost, read off `message`. The thing that decides the classes.
    *
-   * Three values and not a boolean (DEA-151). `field` and `file` are the two outcomes
-   * Claude Code has; `unknown` is the message this classifier has never seen, and it is a
-   * value rather than a default for the `usageCount` / `keyBasis` reason -- collapsing it
-   * into either neighbour is a guess wearing a measurement's clothes, and collapsing it
-   * into `file` is the guess that reports live config as dead.
+   * Not a boolean (DEA-151). `unknown` is the message this classifier has never seen, and
+   * it is a value rather than a default for the `usageCount` / `keyBasis` reason --
+   * collapsing it into either neighbour is a guess wearing a measurement's clothes, and
+   * collapsing it into `file` is the guess that reports live config as dead.
+   *
+   * **`field` and `elements` are one class to validity and two to a report (DEA-149).**
+   * Both leave the file applying, so `validityOf` treats them alike and must; but a
+   * dropped field is gone whole where a rule array lost `n` of its elements and kept the
+   * others, and no number is recoverable from the message -- `doctor` prints one entry
+   * however many elements it removed. A detector holding one value for both would have
+   * only the file left to count, which is the generalisation DEA-147 had to correct.
    */
-  costs: 'field' | 'file' | 'unknown';
+  costs: 'field' | 'elements' | 'file' | 'unknown';
 }
 
 /**
@@ -133,6 +139,22 @@ export interface SettingsFile {
    * -- is the one that would silently lose its evidence.
    */
   schemaErrors: readonly SettingsError[];
+  /**
+   * How many elements the reader dropped from each permission array, by dotted key --
+   * `{ 'permissions.deny': 3 }`. Empty when it dropped none, which is nearly always.
+   *
+   * Required, and required for `schemaErrors`' reason: absent and empty would be the same
+   * value with two meanings, and the one that matters is "we could not tell". The count
+   * has to be carried rather than recomputed because `permissions` arrives narrowed --
+   * `ruleStrings` removes the non-strings, mirroring what Claude Code does with them --
+   * so by the time anything else holds this file, the elements are gone and nothing in it
+   * says how many there were. `doctor` cannot supply the number either: it prints one
+   * entry per array, whether it removed one element or three.
+   *
+   * The key is the dotted path `doctor` uses, so joining a `SettingsError` to its cost is
+   * a lookup and not a translation.
+   */
+  droppedRuleElements: Record<string, number>;
   enabledPlugins?: Record<string, boolean>;
   skillOverrides?: Record<string, SkillValue>;
   enabledMcpjsonServers?: string[];
