@@ -317,13 +317,14 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
   });
 
   /**
-   * The state that cannot be recorded, and is therefore constructed (DEA-151).
+   * The state that had no recording, and now has two (DEA-151, DEA-149).
    *
-   * Every message form three sessions of probing found is recognised, so there is no
-   * first-party output that produces `unknown` and no honest recording to make of it.
-   * The message below is invented on purpose, and labelled as invented: it stands for the
-   * next release's new phrasing, and the assertion is about which way this classifier
-   * errs when it meets one, not about anything Claude Code says today.
+   * When this was written every message form three sessions of probing had found was
+   * recognised, so nothing first-party produced `unknown` and the message below was
+   * invented on purpose. 2.1.224 produces it twice over -- `hook-entry-ignored` and
+   * `mixed-known-and-unknown` are recordings of it -- and this stays constructed anyway,
+   * because what it asserts is which way the classifier errs on a phrasing *nobody has
+   * seen yet*, and a recording can only ever stand for one that has been.
    */
   test('a message from no known family is not-checked, never discarded', () => {
     const err = (message: string): SettingsError => ({
@@ -746,8 +747,10 @@ describe('loadWorkspace carries validity onto the file it belongs to', () => {
    *
    * Driven end to end from a constructed `doctor` block rather than from a hand-built
    * `SettingsCheck`, so the parser, the classifier and the walk are all in the path. The
-   * message is invented, and has to be: every form first-party is known to emit is
-   * recognised, so there is nothing to record here.
+   * message is invented, which it no longer has to be -- 2.1.224 emits two this release
+   * does not recognise, and `test/dropped-field.test.ts` runs this same separation off one
+   * of the recordings. Kept invented here for that test's reason: this one is about the
+   * phrasing nobody has seen.
    */
   test('a file doctor reported in unknown words is separable from one nobody checked', () => {
     const valid = CASES.find((x) => x.name === 'accepted')!;

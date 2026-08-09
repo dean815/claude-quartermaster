@@ -49,9 +49,15 @@ import type { SkillValue } from '../model.ts';
  * nothing about a file that really is dead -- the original incident, silently. What
  * keeps that from being invisible is that such a file is `not-checked` *carrying schema
  * errors*, which nothing else produces, and the run prints them (`printSettingsValidity`).
- * Measured on 2.1.222, every message form found by three sessions of probing is
- * recognised, so this state has no live instances and its fixture is necessarily a
- * constructed message rather than a recording.
+ *
+ * **That day arrived on the safe side, two releases later.** When this was written every
+ * message form three sessions of probing had found was recognised, so `unknown` had no
+ * live instance and its fixture had to be constructed. 2.1.224 supplies two: a malformed
+ * hook *event* says `This entry was ignored.` -- one word off the sentence this rule pins
+ * -- and `extraKnownMarketplaces.<id>.source`, the key behind the original incident, no
+ * longer voids the file at all. Both are partial acceptances, both read `not-checked`, and
+ * neither produced a wrong finding, which is the whole argument for the default. Recorded
+ * as `hook-entry-ignored` and `mixed-known-and-unknown` in `test/fixtures/doctor/`.
  */
 export type SettingsValidity =
   /** `doctor` ran over this file and reported nothing against it. */
