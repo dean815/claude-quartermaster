@@ -228,6 +228,14 @@ const PARSED: Record<string, Array<{ key: string; costs: SettingsError['costs'];
   // The two DEA-151 recordings: partial acceptance said without the trailing sentence.
   'deny-nonstring-elements': [{ key: 'permissions.deny', costs: 'field', notes: 0 }],
   'allow-nonstring-elements': [{ key: 'permissions.allow', costs: 'field', notes: 0 }],
+  // Both partial-acceptance shapes in one file, in the order doctor printed them.
+  'dropped-field-and-elements': [
+    { key: 'permissions.deny', costs: 'field', notes: 0 },
+    { key: 'hooks', costs: 'field', notes: 0 },
+  ],
+  // A partial acceptance in a phrasing neither family covers, so `unknown` (DEA-151) --
+  // recorded from 2.1.224 rather than constructed.
+  'hook-entry-ignored': [{ key: 'hooks.PreToolUse', costs: 'unknown', notes: 0 }],
   'valid-local-over-discarded': [{ key: 'permissions.deny', costs: 'file', notes: 1 }],
 };
 
