@@ -763,14 +763,18 @@ function targetOnlyValidity(target: string): (dir: string) => ReadonlyMap<string
  * `readline` rather than reading the descriptor, so this works the same when a person
  * types and when a script pipes -- and the `close` handler is what stops a run with no
  * stdin at all from hanging on a question nobody can answer.
+ *
+ * The answer is settled **before** `rl.close()`, and the order is the whole of it:
+ * closing emits `close` synchronously, so closing first lets the no-stdin handler resolve
+ * the promise and a piped `y` reads as a decline. Measured that way round first.
  */
 function confirm(prompt: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   return new Promise<boolean>((done) => {
     rl.on('close', () => done(false));
     rl.question(prompt, (answer) => {
-      rl.close();
       done(/^y(es)?$/i.test(answer.trim()));
+      rl.close();
     });
   });
 }
@@ -804,7 +808,8 @@ function undo(): void {
   }
   if (record.createdTarget) {
     console.log(
-      `  ${DIM}the file did not exist before that apply; it is back to {} rather than removed${RESET}`,
+      `  ${DIM}the file did not exist before that apply; it is back to the empty settings ` +
+        `it was created as, and was not removed${RESET}`,
     );
   }
   console.log();

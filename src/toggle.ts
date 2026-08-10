@@ -63,13 +63,21 @@ export const WRITTEN_SETTINGS_KEY = 'enabledPlugins';
 /**
  * What a target that does not exist yet is created as, and what undo restores it to.
  *
- * An empty object rather than the finished file, so the create and the edit stay two
- * separable steps: the create is exclusive (`wx`) and inert, and the edit goes through
- * `stageEdits`/`applyStage` like every other write. It is also what makes undo an
- * ordinary restore -- undoing a write that created its own file returns the file to `{}`
- * rather than deleting it, because deleting a file is not something this tool does.
+ * Inert rather than finished, so the create and the edit stay two separable steps: the
+ * create is exclusive (`wx`) and decides nothing, and the edit goes through
+ * `stageEdits`/`applyStage` like every other write in this repo. It is also what makes
+ * undo an ordinary restore -- undoing a write that created its own file returns the file
+ * to this text rather than deleting it, because deleting a file is not something this
+ * tool does.
+ *
+ * It declares `enabledPlugins` **empty**, which merges to nothing and is what an absent
+ * key already means, and it is laid out over three lines on purpose. `write.ts` copies a
+ * document's own layout rather than choosing one -- indent unit, colon spacing, line
+ * ending -- so a seed of `{}` is a document with no layout to copy and the first entry
+ * would be spliced in compact, fixing that shape for every later edit. Two spaces and a
+ * key already present is the smallest seed that makes the file Claude Code writes.
  */
-export const EMPTY_SETTINGS = '{}\n';
+export const EMPTY_SETTINGS = `{\n  "${WRITTEN_SETTINGS_KEY}": {}\n}\n`;
 
 export const targetFor = (projectPath: string): string =>
   join(projectPath, '.claude', TARGET_FILENAME);
@@ -520,7 +528,7 @@ function notesFor(
     });
   }
 
-  const ignore = gitIgnoreState(input.target);
+  const ignore = gitIgnoreState(input.project, input.target);
   if (ignore === 'tracked') {
     notes.push({
       code: 'tracked-path',
@@ -565,10 +573,18 @@ function notesFor(
  *
  * Exit codes are git's: 0 ignored, 1 not ignored, 128 not a repository. Anything else,
  * and a missing binary, is "nobody asked" rather than either answer.
+ *
+ * The working directory is the **project**, never the target's parent: a target that is
+ * about to be created usually sits in a `.claude/` that does not exist yet, and spawning
+ * into a missing directory fails with the same `ENOENT` a missing `git` does -- so the
+ * check reported "git is not on PATH" on precisely the runs it exists for.
  */
-export function gitIgnoreState(target: string): 'ignored' | 'tracked' | 'not-a-repo' | 'no-git' {
+export function gitIgnoreState(
+  projectDir: string,
+  target: string,
+): 'ignored' | 'tracked' | 'not-a-repo' | 'no-git' {
   const result = spawnSync('git', ['check-ignore', '-q', '--', target], {
-    cwd: dirOf(target),
+    cwd: projectDir,
     encoding: 'utf8',
   });
   if (result.error) return 'no-git';
@@ -576,8 +592,6 @@ export function gitIgnoreState(target: string): 'ignored' | 'tracked' | 'not-a-r
   if (result.status === 1) return 'tracked';
   return 'not-a-repo';
 }
-
-const dirOf = (path: string) => resolvePath(path, '..');
 
 // ---------------------------------------------------------------------------
 // Presentation
@@ -628,8 +642,8 @@ export function planEffect(plan: TogglePlan): Effect {
  * showing too much.
  */
 export function unifiedDiff(before: string, after: string, context = 3): string[] {
-  const a = before.split('\n');
-  const b = after.split('\n');
+  const a = lines(before);
+  const b = lines(after);
 
   let head = 0;
   while (head < a.length && head < b.length && a[head] === b[head]) head++;
@@ -645,12 +659,25 @@ export function unifiedDiff(before: string, after: string, context = 3): string[
   if (head === a.length && head === b.length) return ['(no change)'];
 
   const from = Math.max(0, head - context);
-  const out: string[] = [`--- ${a.length} lines`, `+++ ${b.length} lines`];
+  const out: string[] = [`--- before (${a.length} lines)`, `+++ after (${b.length} lines)`];
   for (let i = from; i < head; i++) out.push(`  ${a[i]}`);
   for (let i = head; i < a.length - tail; i++) out.push(`- ${a[i]}`);
   for (let i = head; i < b.length - tail; i++) out.push(`+ ${b[i]}`);
   for (let i = a.length - tail; i < Math.min(a.length, a.length - tail + context); i++) {
     out.push(`  ${a[i]}`);
   }
+  return out;
+}
+
+/**
+ * Lines, without the empty one a trailing newline produces.
+ *
+ * A file ending in `\n` has as many lines as it has newlines, and a diff that prints an
+ * extra blank context line for every file is a diff that reads as if something changed
+ * at the end of both.
+ */
+function lines(text: string): string[] {
+  const out = text.split('\n');
+  if (out.at(-1) === '') out.pop();
   return out;
 }
