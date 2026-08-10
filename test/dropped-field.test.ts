@@ -14,9 +14,9 @@
  * the same `load.ts`: `claude doctor`, verbatim, against the settings files that produced
  * it, with `claude plugin list --json` recorded beside it saying the file still applies.
  * `EXPECTED` is read off the committed recording and the committed JSON **as literals** --
- * including the titles, in full. Rebuilding a title with the same `plural()` the detector
- * uses would agree with whatever it does, which is the defect c29ef4a had to fix one
- * level up.
+ * including the titles, in full, and the line accounting for what was lost. Rebuilding a
+ * title with the same `plural()` the detector uses would agree with whatever it does, which
+ * is the defect c29ef4a had to fix one level up.
  *
  * ## The four failures it is built to catch
  *
@@ -25,8 +25,12 @@
  * 2. **A `not-checked` file reported here.** `costOf` sends a message from neither family
  *    to `unknown` and `validityOf` sends the file to `not-checked`, on purpose: losing a
  *    detection beats fabricating one about live config. A detector that walked the errors
- *    without asking about the file would undo that quietly.
- * 3. **The cost figure.** Two units, and the file's own entry count is neither of them.
+ *    without asking about the file would undo that quietly. That state had a recording
+ *    until DEA-152 taught the classifier both messages that produced one; it is constructed
+ *    now, under "the two silences", and labelled there.
+ * 3. **The cost figure.** Three units, the file's own entry count is none of them, and one
+ *    of the three has no figure at all because nobody measured it (DEA-152) -- so the
+ *    failure to catch there is a number appearing, not a number being wrong.
  * 4. **The tripwire.** `effect.ts` answers `reload` for a deny rule in a `field-dropped`
  *    file, which is correct only while no partial acceptance can name a key it reasons
  *    about. That is a measurement of Claude Code's schema messages, not a property of this
