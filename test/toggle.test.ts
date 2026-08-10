@@ -210,6 +210,20 @@ const SCENARIOS: Scenario[] = [
     expect: 'home-collision',
   },
   {
+    /**
+     * A project whose *name* is the home directory's, one level down.
+     *
+     * Here because the collision is a path and not a name: a guard comparing basenames
+     * answers this one `home-collision`, and every other scenario in the table agrees
+     * with it. Added after a hand mutation that did exactly that left the suite green.
+     */
+    label: 'a project sharing the home directory\'s name but not its path',
+    guard: null,
+    build: () => world('nested/__home__'),
+    requests: on(),
+    expect: 'planned',
+  },
+  {
     label: 'a directory the workspace does not carry',
     guard: null,
     build: () => {

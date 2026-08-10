@@ -446,6 +446,13 @@ export function planToggles(
     // pre-image: `Stage.hash` is the hash of the bytes the stage was taken from, and these
     // bytes must match it or the file moved between the two reads. Compared with the
     // function that produced the hash, not a second one.
+    //
+    // **Ungated, and reported rather than removed.** Deleting this line leaves all 605
+    // tests green: the window is the microseconds between two `readFileSync` calls inside
+    // this function, and nothing outside it can open that window. What it protects is the
+    // *review* and the *backup* rather than the write -- `applyStage` decides the write on
+    // its own hash -- so its absence would show as a diff and a pre-image describing a
+    // state that never existed, which is exactly the kind of thing nobody notices.
     if (sha256(original) !== staged.stage.hash) {
       return refuseEdit(`${target} changed while it was being read`);
     }

@@ -18,6 +18,7 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -458,6 +459,31 @@ describe('undo', () => {
       `the undo gate failed, but not on both guards: ${report(mutant)}`,
     );
     console.log(`    caught the clobbering undo: ${mutant.join(' | ')}`);
+  });
+
+  /**
+   * The other half of "the restore is an apply": `applyStage`, not just `stageEdits`.
+   *
+   * A hand mutation that swapped `applyStage` for a bare write while leaving `stageEdits`
+   * in place left the whole suite green -- the UTF-8 gate below still fired, because that
+   * refusal comes from the staging half. What separates the two is that `applyStage`
+   * writes a *new* file and renames it over the target, so a read-only target is restored
+   * and keeps its mode, while a bare write to the same path is refused by the kernel.
+   * That is a real property of the design and not a contrivance: a settings file the user
+   * has locked down is a file this tool should still be able to put back.
+   */
+  test('the restore renames over the target, so a read-only one is still restored', () => {
+    const a = applied('undo-readonly');
+    chmodSync(a.target, 0o444);
+
+    const result = undoLast(opts(a.state));
+    assert.equal(result.outcome, 'restored');
+    assert.equal(readFileSync(a.target, 'utf8'), BEFORE);
+    assert.equal(statSync(a.target).mode & 0o777, 0o444, 'the restore widened the mode');
+
+    // What a bare write does at that path, which is what makes this a gate rather than
+    // a description.
+    assert.throws(() => writeFileSync(a.target, BEFORE), /EACCES/);
   });
 
   /**
