@@ -287,6 +287,7 @@ file entirely. Both read `not-checked`, both are visible through `unclassifiedSe
 and neither produced a wrong finding. Neither is taught to the recogniser here: the hook
 message drops an *entry of a record*, a third cost unit nothing has measured the
 consequences of, and widening the classifier is a decision that wants its own evidence.
+(That decision is DEA-152, and it kept the unit and dropped the count.)
 **The validity guard was untested until a mutation said so.** Widening the detector from
 `validity !== 'field-dropped'` to `validity === 'discarded'` left all 563 tests green,
 because the per-error cost guard caught every recorded case on its own. The state that
@@ -299,6 +300,52 @@ count of removed elements is ours where the removal is first-party's, so a relea
 changes which elements Claude Code strips desynchronises the two silently; and
 `FILE_ENTRIES` in the gate is a hand-copied count that agrees with the fixture JSON only
 as long as someone keeps it agreeing.
+
+**Recognising a message spends the evidence that not recognising it was safe (DEA-152).**
+2.1.224 says two partial acceptances in words this repo had never seen: `This entry was
+ignored.` on `hooks.<Event>` — one word off the sentence DEA-147 pinned — and `Invalid
+marketplace entry was ignored:` on `extraKnownMarketplaces.<id>`, which is DEA-147's **own
+incident key** behaving in the opposite direction from the release every entry above is
+written around. Both read `not-checked` and produced no finding, which is DEA-151 working
+rather than failing. Both are now `entry`, a third partial-acceptance unit, and each
+produces one medium finding naming the key: measured live on 2.1.224, one scratch project
+per message, one finding each.
+**The unit was the whole question, and the answer is that it has no number.** `field` has
+none *by construction* — `hooks: 42` had no entries to lose — where an entry drop has one
+nobody has taken: what a dropped hook event or a dropped marketplace decides is unmeasured,
+and this issue declined to measure it. So `dropCost`'s `null`-means-skip became
+report-without-a-figure, `Claude Code ignores hooks.PreToolUse in settings.json` is the
+finding entire, and the evidence line says the number was **withheld** rather than omitting
+it quietly. Any figure available here would have been the file's own entry count, pricing
+one dropped hook event at whatever unrelated plugins the file happens to enable — DEA-147's
+generalisation arriving a third time, which the issue predicted about itself.
+**The oracle is not a weak signal; it is a signal for a different question.** DEA-151
+rejected it on coverage — 7 of 38 files — and for this family that framing was too generous.
+`claude plugin list --json` answers "did this file apply", and under partial acceptance the
+file *always* applies. Measured directly on the marketplace key: two scratch projects
+differing only in it, output **byte-identical at 15,463 bytes**, because the plugin resolves
+from user scope either way. **Zero** of the four known partial-acceptance messages are
+observable through it.
+**The price is paid in the fixture set, which is where it is visible.** Teaching the
+classifier both messages consumed the only recordings of `unknown`, so the state DEA-151
+exists for — `not-checked` *carrying* a recognised error — is back to being constructed, as
+it was before 2.1.224 obliged. `mixed-known-and-unknown` keeps its recording and changes
+role: it now pins two units side by side. The guard that state was recorded for is still
+gated, verified by re-running DEA-149's own mutation: widening `droppedSettingsField` from
+`validity !== 'field-dropped'` to `validity === 'discarded'` still reddens, on the
+constructed case instead of the recording. The `qm effect` tripwire moved with the unit —
+an entry drop takes its key out of force exactly as a whole-field drop does, so
+`permissions.deny` reported as an *ignored entry* would put `classify` back to answering
+`reload` about rules that are not in force; `elements` stays out, correctly, because its
+survivors are.
+The day it fails: the marketplace pattern matches its literal noun, one key having been
+measured producing it, so a second `Invalid <thing> entry was ignored:` falls to
+`not-checked` — narrow, which is the safe direction and still a lost detection. Three
+releases in four days moved one of these strings and nothing here changes that arithmetic;
+what the entry buys is that the next one costs a detection rather than a fabrication. And
+both settings detectors fire on **0 of 30** projects here (42 files, 42 accepted, 0
+unclassified under `--full`), so like DEA-148's and DEA-149's before it, this lives entirely
+on its recordings.
 
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`

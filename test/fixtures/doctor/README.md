@@ -41,7 +41,7 @@ survives gives `true`; a file it discarded leaves the answer at the user scope's
 | `deny-nonstring-elements` | `permissions.deny: [1, 2, "Bash"]` | error, **no note** | `true` | the second partial-acceptance message, in different words |
 | `allow-nonstring-elements` | `permissions.allow: [1, "Read(~/.zshrc)"]` | error, **no note** | `true` | the same template on a second key |
 | `dropped-field-and-elements` | `hooks: 42` **and** `permissions.deny: [1, 2, 3, "Bash"]` | two errors | `true` | both partial-acceptance shapes at once, and they cost different units |
-| `hook-entry-ignored` | `hooks: { PreToolUse: 42 }` | error, `This entry was ignored.` | `true` | a partial acceptance **no pattern here recognises**, so `not-checked` |
+| `hook-entry-ignored` | `hooks: { PreToolUse: 42 }` | error, `This entry was ignored.` | `true` | the third partial-acceptance unit: one **entry of a record** |
 | `valid-local-over-discarded` | discarded `settings.json`, valid local | error | `true` | a discarded file whose removal changes nothing — the control |
 
 `discarded-many-entries` is the only case whose reason for existing is a *number*.
@@ -79,15 +79,25 @@ count of what was removed can only come from the file. The file decides two entr
 elsewhere (one plugin, one skill), so 2 is a number a whole-file counter would print and
 neither correct answer is 2.
 
-`hook-entry-ignored` is the state that could not be recorded until it could. DEA-151
-argued `unknown` is the safe default for a message from neither family and noted it had no
-first-party instance, so its fixture had to be constructed. 2.1.224 supplies one: a
-malformed hook *event* prints `This entry was ignored.` — one word off the sentence
-`FIELD_IGNORED_NOTE` pins — and `enabled: true` says Claude Code applied the file anyway.
-Nothing here matches it, so it lands in `not-checked` **carrying schema errors**, which is
-the visible half of that trade. Teaching the classifier this message is a decision with its
-own cost unit (an entry of a record, which is neither of the two DEA-149 models), so it is
-deliberately not taken here; the recording is what makes it arguable from evidence.
+`hook-entry-ignored` is the state that could not be recorded until it could, and then
+stopped being that state. DEA-151 argued `unknown` is the safe default for a message from
+neither family and noted it had no first-party instance, so its fixture had to be
+constructed. 2.1.224 supplied one: a malformed hook *event* prints `This entry was
+ignored.` — one word off the sentence `FIELD_IGNORED_NOTE` pins — and `enabled: true` says
+Claude Code applied the file anyway. It landed in `not-checked` **carrying schema errors**,
+which was the visible half of that trade.
+
+**DEA-152 took the decision the recording made arguable**, and it is the cost unit that
+took the work: an entry of a record is neither of DEA-149's two models. So `costs` has a
+third value, `entry`, and the finding names the key and prints **no number** — what a
+dropped hook event or a dropped marketplace decides has never been measured, and a figure
+whose unit nobody established is the generalisation DEA-147 had to correct. The recording
+is unchanged; this release's reading of it is what moved.
+
+The cost of that is paid on this same fixture set: **no recording produces `unknown` any
+more**, so the state DEA-151 exists for is back to being constructed, in
+`test/dropped-field.test.ts`. Teaching the classifier a message is also spending the only
+live evidence that its default works.
 
 ## What moved between releases
 
@@ -98,24 +108,29 @@ re-running the probe on 2.1.224 rather than by anything going red:
   the whole file on 2.1.221/2.1.222 (`Expected object, but received string`, `enabled:
   false`). On 2.1.224 it prints `Invalid marketplace entry was ignored: source: Invalid
   input: expected object, received string` and `enabled` is **`true`**: partial acceptance,
-  in a third phrasing, which nothing here recognises either. `discarded-marketplace-source`
-  and `discarded-many-entries` remain honest recordings of the release named on them.
+  in a third phrasing. `discarded-marketplace-source` and `discarded-many-entries` remain
+  honest recordings of the release named on them — the same key, refused, on the release
+  that refused it.
 - `hooks.PreToolUse` gained the `This entry was ignored.` phrasing, recorded above.
 
-Both changes land in `not-checked`, which is the direction DEA-151 chose and the reason
-neither one produced a wrong finding. Both are also why the gates run against recordings
-rather than against the live binary.
+Both landed in `not-checked` when recorded, which is the direction DEA-151 chose and the
+reason neither one produced a wrong finding — and both are recognised as of DEA-152, as
+`entry`. So one key in this set is recorded twice with **opposite** verdicts, two releases
+apart, and both recordings are correct. That is the argument for recording rather than
+re-probing, stated by the fixture set itself.
 
 ## What the parser depends on
 
 - The block opens with a line reading exactly `Invalid settings`.
 - Entries are `- <abs path> › <key>: <message>`, where `›` is **U+203A**, not `>`.
 - Some entries carry an indented continuation (`Suggested fix: …`). Not one line per error.
-- The failure classes are told apart by matching the message line against **two** lists of
-  first-party phrasings — `KEEPS_THE_FILE` and `REFUSES_THE_FILE` in
-  `src/delegate/doctor.ts`. Both are open sets of Claude Code's own prose with no version
-  guarantee behind them, so a message matching neither is `not-checked` and never
-  `discarded`; which way that errs, and why it errs that way, is argued at `costOf`.
+- The failure classes are told apart by matching the message line against lists of
+  first-party phrasings in `src/delegate/doctor.ts` — three that keep the file
+  (`IGNORES_THE_FIELD`, `IGNORES_THE_ENTRY`, `REMOVES_ARRAY_ELEMENTS`, which differ by what
+  the error *cost*) and one that refuses it (`REFUSES_THE_FILE`). All are open sets of
+  Claude Code's own prose with no version guarantee behind them, so a message matching none
+  is `not-checked` and never `discarded`; which way that errs, and why it errs that way, is
+  argued at `costOf`.
 - `No installation issues found.` prints **anyway**, so `parseInstallationIssues` returns
   `[]` for every case here. That is asserted, because it is why the block went unread.
 
