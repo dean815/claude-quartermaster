@@ -101,6 +101,52 @@ const IGNORES_THE_FIELD: readonly RegExp[] = [
 ];
 
 /**
+ * The sentence's sibling, one word off it: `entry` where the other says `field`.
+ *
+ * Its own constant rather than a widened character class over the two, because the two
+ * words are the whole distinction between the units below and a pattern reading
+ * `This (field|entry) was ignored.` would erase it in the one place it is written down.
+ */
+export const ENTRY_IGNORED_NOTE = 'This entry was ignored.';
+
+/**
+ * The messages that mean Claude Code kept the file **and dropped one named entry of a
+ * record inside it**, leaving that record's other entries -- and the file -- in force.
+ *
+ * Measured on 2.1.224, one `claude doctor` run per case with `claude plugin list --json`
+ * as the oracle; both recordings are in `test/fixtures/doctor/`:
+ *
+ * | key | message | file applies |
+ * |---|---|---|
+ * | `hooks.PreToolUse: 42` | `Hook event "PreToolUse" must be an array of matchers; received number. This entry was ignored.` | yes |
+ * | `extraKnownMarketplaces.<id>.source: "github"` | `Invalid marketplace entry was ignored: source: Invalid input: expected object, received string` | yes |
+ *
+ * **A third unit, and it is added without a number (DEA-152).** `field` and `elements`
+ * each know what they cost -- the value that failed the schema, or `n` array elements the
+ * reader can still count. What a dropped hook event or a dropped marketplace costs is
+ * *unmeasured*: nothing here establishes what depends on either, and a plugin whose
+ * marketplace entry died is not something this repo has looked for. So the finding names
+ * the key and prints no figure. Shipping one would price the entry at whatever else the
+ * file happens to hold, which is DEA-147's generalisation arriving a third time -- and the
+ * issue that added these patterns says so in its own description.
+ *
+ * The marketplace message is matched on its literal noun rather than as a template over
+ * one. `REMOVES_ARRAY_ELEMENTS` generalises because three keys were measured producing one
+ * sentence; here one key was, so `Invalid \w+ entry was ignored` would be a guess about
+ * prose nobody has seen. Narrow errs towards `not-checked`, which is the direction this
+ * classifier already errs in.
+ *
+ * The failing sub-path is inside the message (`source:`) and not in the key, and it stays
+ * there: `doctor` names the key as `extraKnownMarketplaces.<id>` and that is what the
+ * finding reports. Parsing the sub-path back out would be a second schema-shaped guess
+ * about a schema this repo does not own.
+ */
+const IGNORES_THE_ENTRY: readonly RegExp[] = [
+  new RegExp(`${ENTRY_IGNORED_NOTE.replace(/[.]/g, '\\.')}$`),
+  /^Invalid marketplace entry was ignored: /,
+];
+
+/**
  * The messages that mean Claude Code kept the file **and removed elements from an array
  * inside it**, leaving the rest of that array in force.
  *
@@ -168,19 +214,35 @@ const REFUSES_THE_FILE: readonly RegExp[] = [
  * One of those is recoverable by reading the run's own output. The other tells the user
  * their working configuration is dead.
  *
+ * **The lists grow, and growing them is the maintenance this buys (DEA-152).** Three
+ * releases in four days moved one of these strings, and two partial acceptances arrived
+ * that this recognised as neither: `This entry was ignored.` and 2.1.224's marketplace
+ * message. They cost nothing while unrecognised -- both files stayed `not-checked` and
+ * both were named in the run's own output -- which is the default working, and they were
+ * added on evidence, one recording each, rather than by widening a pattern to cover a
+ * shape nobody had seen.
+ *
  * **Why not ask the oracle instead.** `claude plugin list --json` reports *resolved*
  * plugin state for a working directory, so it can only answer "did this file apply" for a
  * file whose removal from the chain would move some plugin's resolved value. Measured
  * over this machine's 38 project settings files, that is **7** -- 22 of the other 31 name
  * no plugin at all, and no number of spawns gives the oracle something to read in a file
- * that decides only `permissions` or only `.mcp.json` servers. It also answers exactly
- * one bit, while the finding still needs the key from this same prose. It is a real
- * measurement where it applies and it is blind for four files in five, so it cannot
- * replace the reading -- and today it would have nothing to run on, because all 38 files
- * are `accepted`.
+ * that decides only `permissions` or only `.mcp.json` servers.
+ *
+ * That was the coverage argument, and DEA-152 measured it too generous: for *this* family
+ * the oracle is not a weak signal, it is a signal for a different question. **Under partial
+ * acceptance the file always applies**, so "did this file apply" is `true` for every member
+ * and can never say which part died. Checked against all four known partial-acceptance
+ * messages -- `hooks` whole-field, `hooks.<Event>`, `permissions.{deny,allow,ask}`
+ * elements, `extraKnownMarketplaces.<id>` -- **none** is observable through it; the last was
+ * measured directly, two scratch projects differing only in that key, and the output was
+ * byte-identical at 15,463 bytes both ways because the plugin resolves from user scope
+ * regardless. So the reading is not a cheap stand-in for a measurement anyone could take.
+ * It is the only thing that answers this question at all.
  */
 function costOf(message: string): SettingsError['costs'] {
   if (IGNORES_THE_FIELD.some((re) => re.test(message))) return 'field';
+  if (IGNORES_THE_ENTRY.some((re) => re.test(message))) return 'entry';
   if (REMOVES_ARRAY_ELEMENTS.some((re) => re.test(message))) return 'elements';
   if (REFUSES_THE_FILE.some((re) => re.test(message))) return 'file';
   return 'unknown';
@@ -189,10 +251,15 @@ function costOf(message: string): SettingsError['costs'] {
 /**
  * The costs that leave the file applying. Named once, because `validityOf` asks "did the
  * file survive" and must keep answering yes for every member of the partial-acceptance
- * family -- a third member added to `costOf` and forgotten here would take a live file to
- * `not-checked`, which is quiet but still a lost detection.
+ * family -- a member added to `costOf` and forgotten here would take a live file to
+ * `not-checked`, which is quiet but still a lost detection. `entry` is the third, and
+ * `test/validity.test.ts` asserts each of them separately for that reason.
  */
-const PARTIAL_ACCEPTANCE: ReadonlySet<SettingsError['costs']> = new Set(['field', 'elements']);
+const PARTIAL_ACCEPTANCE: ReadonlySet<SettingsError['costs']> = new Set([
+  'field',
+  'entry',
+  'elements',
+]);
 
 /**
  * Every entry of the `Invalid settings` block, or none when there is no block.

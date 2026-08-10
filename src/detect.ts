@@ -724,18 +724,28 @@ export function discardedSettings(ctx: AuditContext): Finding[] {
 /**
  * What one partial acceptance cost, in the unit that error is measured in (DEA-149).
  *
- * Two units, because Claude Code has two ways of keeping a file and dropping part of it,
- * and they are not one thing counted differently. `field` is the whole key: it is gone,
- * and there is no number, because `hooks: 42` had no entries to lose -- the value that
- * failed the schema *is* the thing that went. `elements` is `n` values out of an array
- * whose survivors are still in force, so the number is the finding.
+ * Three units, because Claude Code has three ways of keeping a file and dropping part of
+ * it, and they are not one thing counted differently. `field` is the whole key: it is
+ * gone, and there is no number, because `hooks: 42` had no entries to lose -- the value
+ * that failed the schema *is* the thing that went. `elements` is `n` values out of an
+ * array whose survivors are still in force, so the number is the finding.
  *
- * Folding them into one figure leaves only the file to count, which prices a dropped
- * `hooks` at whatever unrelated plugins the file happens to enable. That is the
+ * `entry` is one named entry of a record -- `hooks.PreToolUse`,
+ * `extraKnownMarketplaces.<id>` -- and it carries **no number, because none was measured**
+ * (DEA-152). That is not `field`'s reason, and collapsing the two would lose the
+ * difference: a field drop has no number *by construction*, an entry drop has one nobody
+ * has taken. Nothing here establishes what a dropped hook event or a dropped marketplace
+ * decides, so the finding names the key and stops -- `Claude Code ignores hooks.PreToolUse
+ * in settings.json` is true and complete without a figure, and a figure whose unit nobody
+ * measured is worse than none.
+ *
+ * Folding any two of them into one figure leaves only the file to count, which prices a
+ * dropped `hooks` at whatever unrelated plugins the file happens to enable. That is the
  * generalisation DEA-147 had to correct, arriving one layer down.
  */
 type DropCost =
   | { unit: 'field' }
+  | { unit: 'entry' }
   | { unit: 'elements'; removed: number; kept: number };
 
 /**
@@ -752,6 +762,7 @@ type DropCost =
  */
 function dropCost(file: SettingsFile, error: SettingsError): DropCost | null {
   if (error.costs === 'field') return { unit: 'field' };
+  if (error.costs === 'entry') return { unit: 'entry' };
   if (error.costs !== 'elements') return null;
 
   // The survivors, by the same dotted key. `RULE_ARRAYS` is imported rather than
@@ -790,6 +801,12 @@ function dropCost(file: SettingsFile, error: SettingsError): DropCost | null {
  * ranking over a set of size one is a rubric invented to look principled, which is the
  * thing this repo delegates rather than writes.
  *
+ * DEA-152 added two keys to that set -- `hooks.<Event>` and `extraKnownMarketplaces.<id>`,
+ * both entry drops -- and the conclusion is unchanged for the reason that produced it
+ * rather than by inheritance: neither is a security control, and `permissions` still
+ * refuses the file whole in every shape measured, so there is still nothing here to rank
+ * *by*. A ranking would be reporting how alarming this repo finds a key.
+ *
  * **The two silences are not the same silence.** This says nothing when no field was
  * dropped, and it says nothing when a dropped field's message matched neither family --
  * `costOf` returns `unknown`, `validityOf` returns `not-checked`, and the file never
@@ -812,14 +829,19 @@ export function droppedSettingsField(ctx: AuditContext): Finding[] {
         detector: 'dropped-settings-field',
         key: `dropped-settings-field ${file.path} ${error.key}`,
         severity: 'medium',
+        // `field` and `entry` share a sentence, and the key is what tells them apart --
+        // `hooks` against `hooks.PreToolUse`. Both say the same true thing about the file
+        // and neither carries a figure, so a second phrasing would only be a second
+        // sentence to keep true. Where they differ is what was *lost*, and that is the
+        // evidence line below.
         title:
-          cost.unit === 'field'
-            ? `Claude Code ignores ${error.key} in ${name}, and applies the rest of the file`
-            : `Claude Code removes ${cost.removed} ${plural(cost.removed, 'value', 'values')} ` +
+          cost.unit === 'elements'
+            ? `Claude Code removes ${cost.removed} ${plural(cost.removed, 'value', 'values')} ` +
               `from ${error.key} in ${name}, ` +
               (cost.kept
                 ? `leaving ${cost.kept} ${plural(cost.kept, 'rule', 'rules')} in force`
-                : 'leaving none in force'),
+                : 'leaving none in force')
+            : `Claude Code ignores ${error.key} in ${name}, and applies the rest of the file`,
         detail:
           'The first-party validator reports this key, and says the file survived it -- so ' +
           'everything else in the file applies and this one part does not. Nothing at the ' +
@@ -834,9 +856,15 @@ export function droppedSettingsField(ctx: AuditContext): Finding[] {
           ...error.notes.map((n) => `  ${n}`),
           cost.unit === 'field'
             ? `${error.key}: the whole field is not in effect`
-            : `${error.key}: ${cost.removed} of ${cost.removed + cost.kept} ` +
-              `${plural(cost.removed + cost.kept, 'value', 'values')} removed, ` +
-              `${cost.kept} still in force`,
+            : cost.unit === 'entry'
+              ? // The unit that carries no number, saying so rather than omitting it
+                // quietly. What a dropped hook event or marketplace decides is unmeasured
+                // (DEA-152), and a reader who cannot see that a figure was withheld cannot
+                // tell it apart from one that was zero.
+                `${error.key}: this entry is not in effect, and what it cost is not measured`
+              : `${error.key}: ${cost.removed} of ${cost.removed + cost.kept} ` +
+                `${plural(cost.removed + cost.kept, 'value', 'values')} removed, ` +
+                `${cost.kept} still in force`,
         ],
         fix:
           'claude doctor — run it in that directory. It is the check that reported this, ' +

@@ -52,12 +52,20 @@ import type { SkillValue } from '../model.ts';
  *
  * **That day arrived on the safe side, two releases later.** When this was written every
  * message form three sessions of probing had found was recognised, so `unknown` had no
- * live instance and its fixture had to be constructed. 2.1.224 supplies two: a malformed
+ * live instance and its fixture had to be constructed. 2.1.224 supplied two: a malformed
  * hook *event* says `This entry was ignored.` -- one word off the sentence this rule pins
  * -- and `extraKnownMarketplaces.<id>.source`, the key behind the original incident, no
- * longer voids the file at all. Both are partial acceptances, both read `not-checked`, and
+ * longer voids the file at all. Both were partial acceptances, both read `not-checked`, and
  * neither produced a wrong finding, which is the whole argument for the default. Recorded
  * as `hook-entry-ignored` and `mixed-known-and-unknown` in `test/fixtures/doctor/`.
+ *
+ * **Both are recognised as of DEA-152, and `unknown` is back to having no live instance.**
+ * The recordings are unchanged and still say what they said; what changed is that this
+ * release places them, as `entry` -- a third partial-acceptance unit. So the two files read
+ * `field-dropped` and `droppedSettingsField` names the key in each. The state that has no
+ * recording again is `not-checked` *carrying* a recognised error, and its fixture is
+ * constructed and labelled as such in `test/dropped-field.test.ts`, exactly as DEA-151
+ * had to construct one before 2.1.224 obliged.
  */
 export type SettingsValidity =
   /** `doctor` ran over this file and reported nothing against it. */
@@ -97,14 +105,18 @@ export interface SettingsError {
    * collapsing it into either neighbour is a guess wearing a measurement's clothes, and
    * collapsing it into `file` is the guess that reports live config as dead.
    *
-   * **`field` and `elements` are one class to validity and two to a report (DEA-149).**
-   * Both leave the file applying, so `validityOf` treats them alike and must; but a
-   * dropped field is gone whole where a rule array lost `n` of its elements and kept the
-   * others, and no number is recoverable from the message -- `doctor` prints one entry
-   * however many elements it removed. A detector holding one value for both would have
-   * only the file left to count, which is the generalisation DEA-147 had to correct.
+   * **`field`, `entry` and `elements` are one class to validity and three to a report
+   * (DEA-149, DEA-152).** All three leave the file applying, so `validityOf` treats them
+   * alike and must; what differs is the unit the loss is measured in, and they are not one
+   * thing counted three ways. A field is gone whole. An array lost `n` of its elements and
+   * kept the others, with no number recoverable from the message -- `doctor` prints one
+   * entry however many elements it removed. An entry of a record -- one hook event, one
+   * marketplace -- is gone while its siblings and the file apply, and **what that cost has
+   * never been measured**: nothing here establishes what a dropped hook event or a dropped
+   * marketplace decides. A detector holding one value for all three would have only the
+   * file left to count, which is the generalisation DEA-147 had to correct.
    */
-  costs: 'field' | 'elements' | 'file' | 'unknown';
+  costs: 'field' | 'entry' | 'elements' | 'file' | 'unknown';
 }
 
 /**

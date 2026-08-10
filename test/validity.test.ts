@@ -56,6 +56,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
+  ENTRY_IGNORED_NOTE,
   FIELD_IGNORED_NOTE,
   parseInstallationIssues,
   parseInvalidSettings,
@@ -235,14 +236,15 @@ const PARSED: Record<string, Array<{ key: string; costs: SettingsError['costs'];
     { key: 'permissions.deny', costs: 'elements', notes: 0 },
     { key: 'hooks', costs: 'field', notes: 0 },
   ],
-  // A partial acceptance in a phrasing neither family covers, so `unknown` (DEA-151) --
-  // recorded from 2.1.224 rather than constructed.
-  'hook-entry-ignored': [{ key: 'hooks.PreToolUse', costs: 'unknown', notes: 0 }],
-  // One of each, in one file: the lattice takes it to `not-checked` while a recognised
-  // `field` error is still sitting in it.
+  // An entry of a record, not a field and not array elements: `hooks` keeps its other
+  // events and the file applies (DEA-152). It read `unknown` until this release placed it.
+  'hook-entry-ignored': [{ key: 'hooks.PreToolUse', costs: 'entry', notes: 0 }],
+  // The other entry drop, on the incident's own key, beside a whole-field one. Two
+  // partial-acceptance units in one file that first-party applies -- and the case that
+  // read `not-checked` while carrying a recognised `field` error until DEA-152.
   'mixed-known-and-unknown': [
     { key: 'hooks', costs: 'field', notes: 0 },
-    { key: 'extraKnownMarketplaces.karpathy-skills', costs: 'unknown', notes: 0 },
+    { key: 'extraKnownMarketplaces.karpathy-skills', costs: 'entry', notes: 0 },
   ],
   'valid-local-over-discarded': [{ key: 'permissions.deny', costs: 'file', notes: 1 }],
 };
@@ -308,6 +310,30 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
       );
     }
 
+    // And the third unit, in the two phrasings 2.1.224 says it in (DEA-152). One is the
+    // `field` sentence with a single word changed, which is why the two notes are separate
+    // constants rather than one alternation: at that distance an alternation reads as a
+    // typo tolerance and erases the only place the distinction is written down.
+    assert.equal(ENTRY_IGNORED_NOTE, 'This entry was ignored.');
+    assert.notEqual(ENTRY_IGNORED_NOTE, FIELD_IGNORED_NOTE);
+
+    const hookEntry = errorsOf('hook-entry-ignored');
+    assert.ok(hookEntry[0]!.message.endsWith(ENTRY_IGNORED_NOTE));
+    assert.ok(
+      !hookEntry[0]!.message.endsWith(FIELD_IGNORED_NOTE),
+      'the recording ends in the field sentence after all, so the two are not separable here',
+    );
+    assert.equal(hookEntry[0]!.costs, 'entry');
+
+    // The other one carries no trailing note at all and names its failing sub-path inside
+    // the message, which stays there: `doctor` gives the key as the entry, and that is
+    // what the finding reports.
+    const marketplace = errorsOf('mixed-known-and-unknown')[1]!;
+    assert.equal(marketplace.key, 'extraKnownMarketplaces.karpathy-skills');
+    assert.ok(!marketplace.message.endsWith(ENTRY_IGNORED_NOTE));
+    assert.ok(!marketplace.message.endsWith(FIELD_IGNORED_NOTE));
+    assert.equal(marketplace.costs, 'entry');
+
     const voided = errorsOf('discarded-permissions-deny');
     assert.ok(!voided[0]!.message.includes(FIELD_IGNORED_NOTE));
     assert.equal(voided[0]!.costs, 'file');
@@ -317,14 +343,15 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
   });
 
   /**
-   * The state that had no recording, and now has two (DEA-151, DEA-149).
+   * The state that had no recording, then had two, and has none again (DEA-151, DEA-152).
    *
    * When this was written every message form three sessions of probing had found was
    * recognised, so nothing first-party produced `unknown` and the message below was
-   * invented on purpose. 2.1.224 produces it twice over -- `hook-entry-ignored` and
-   * `mixed-known-and-unknown` are recordings of it -- and this stays constructed anyway,
-   * because what it asserts is which way the classifier errs on a phrasing *nobody has
-   * seen yet*, and a recording can only ever stand for one that has been.
+   * invented on purpose. 2.1.224 produced it twice over; DEA-152 taught the classifier
+   * both, so the recordings now classify `entry` and `unknown` is back to having no live
+   * instance. This was constructed through all of that and stays constructed, because what
+   * it asserts is which way the classifier errs on a phrasing *nobody has seen yet*, and a
+   * recording can only ever stand for one that has been.
    */
   test('a message from no known family is not-checked, never discarded', () => {
     const err = (message: string): SettingsError => ({
@@ -374,11 +401,16 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
       costs,
     });
     assert.equal(validityOf([one('field')]), 'field-dropped');
-    // Both partial-acceptance costs mean the same thing to validity and different things
-    // to a report (DEA-149), so a third cost added to `costOf` and forgotten in
-    // `PARTIAL_ACCEPTANCE` would take a live file to `not-checked`.
+    // All three partial-acceptance costs mean the same thing to validity and different
+    // things to a report (DEA-149, DEA-152), so a cost added to `costOf` and forgotten in
+    // `PARTIAL_ACCEPTANCE` would take a live file to `not-checked`. Asserted one at a
+    // time: a set missing `entry` still passes every mixed case below.
     assert.equal(validityOf([one('elements')]), 'field-dropped');
+    assert.equal(validityOf([one('entry')]), 'field-dropped');
     assert.equal(validityOf([one('field'), one('elements')]), 'field-dropped');
+    assert.equal(validityOf([one('field'), one('entry')]), 'field-dropped');
+    // And a partial acceptance beside a refusal is still the refusal: the file is gone.
+    assert.equal(validityOf([one('entry'), one('file')]), 'discarded');
     assert.equal(validityOf([one('file')]), 'discarded');
     // Mixed: one key survived, another did not, and the file goes with the worse of the
     // two. A file is discarded whole or not at all.
@@ -747,10 +779,11 @@ describe('loadWorkspace carries validity onto the file it belongs to', () => {
    *
    * Driven end to end from a constructed `doctor` block rather than from a hand-built
    * `SettingsCheck`, so the parser, the classifier and the walk are all in the path. The
-   * message is invented, which it no longer has to be -- 2.1.224 emits two this release
-   * does not recognise, and `test/dropped-field.test.ts` runs this same separation off one
-   * of the recordings. Kept invented here for that test's reason: this one is about the
-   * phrasing nobody has seen.
+   * message is invented, and has to be again: the two 2.1.224 phrasings this release did
+   * not recognise are recognised as of DEA-152, so no recording produces `unknown` any
+   * more. That is the shape of the trade -- teaching the classifier a message is also
+   * spending the only live evidence that the default works -- and it is why this assertion
+   * was never rebuilt on a recording when one briefly existed.
    */
   test('a file doctor reported in unknown words is separable from one nobody checked', () => {
     const valid = CASES.find((x) => x.name === 'accepted')!;
