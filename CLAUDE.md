@@ -78,3 +78,5 @@ breaks both — update the `${CLAUDE_PLUGIN_ROOT}/references/…` pointers in ea
   broadly acceptable.
 - Never put `die`/`exit` in a function called from a command substitution — it
   kills only the subshell and the caller continues with an empty value.
+
+@.claude/dean-guidelines.md
