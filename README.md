@@ -19,6 +19,9 @@ qm effect         # what toggling each extension needs: a reload, or a restart
 qm baseline       # record today's findings
 qm audit --drift  # what changed since
 qm oracle         # re-ask the live binary whether the resolver is still right
+
+qm set --project . pdf-viewer@dean815=off   # the one command that writes
+qm undo                                     # put the last apply back
 ```
 
 ---
@@ -212,14 +215,56 @@ a dead one look identical — so every run leaves a timestamp behind and `qm ora
 > semantics, and MCP tool-name loading can all change without this noticing. "The oracle
 > agrees" is not "drift is handled," and every place this reports says so.
 
+### `qm set` — the one command that writes
+
+Everything above is read-only. `qm set` is not, and it is deliberately narrow: **plugin
+toggles, one project, one file** — `<project>/.claude/settings.local.json`. It never
+writes `~/.claude.json`, and it never writes a tracked `settings.json`; both are named in
+the last guard before any byte lands, so breaking that promise fails loudly rather than
+silently.
+
+```
+qm set --project <path> <plugin-id>=on|off [...] [--yes]
+qm undo
+```
+
+One invocation, several targets, one diff, one confirmation, one write. There is no
+stage-to-disk / apply-later mode — that is a state machine with its own staleness and
+abandonment problems, and nothing here needs one.
+
+It **refuses** rather than write when:
+
+| | why |
+|---|---|
+| Claude Code discards the target file | the write parses, reports success and changes nothing |
+| `claude doctor` reported on it in words this release cannot place | it *might* be discarded, and a write that might not land is worse than no write |
+| a schema error names `enabledPlugins` | the key would be ignored even though the rest of the file applies |
+| the plugin already resolves to the value you asked for | the entry would do nothing, and `restated-entries` would then report it |
+| the project *is* `~` | the home directory's project-scope local file **is** the user-scope one |
+
+It **warns and proceeds** when `git check-ignore` says the target is not ignored. Measured
+across the 17 repositories under `~/claude`: 6 name `settings.local.json` in their own
+`.gitignore`, and 11 rely on `~/.config/git/ignore` — a rule that exists on one machine.
+In a cloud session or a fresh clone, those 11 would commit local configuration on the next
+`git add -A`.
+
+After applying, it prints `qm effect`'s verdict for the change — `reload`, `restart`,
+`unknown` or `none` — and not a blanket "takes effect next session", which is false for a
+toggle `/reload-plugins` picks up.
+
+Backups are timestamped pre-images in `${XDG_STATE_HOME:-~/.local/state}/claude-quartermaster/backups/`,
+beside `baseline.json` and `oracle-run.json`. `qm undo` restores the last one, once, and
+refuses if the file has changed since — restoring over someone else's edit would be this
+tool silently reverting a change it did not make. Nothing is ever deleted: a target `qm set`
+created is undone back to the empty settings file it was created as.
+
 ### Not yet
 
-No writes. The tool reads, models, and reports.
-
-Correctly modeling three tiers × four values across eight config surfaces is the hard
-part, and it's worth proving before anything is trusted to write. Writes are Phase 2:
-staged edits, reviewed diff, atomic apply, timestamped backups, surgical JSON edits,
-concurrent-write detection on `~/.claude.json`.
+Skills (`skillOverrides`) and MCP servers (`disabledMcpServers`) are separate issues, and
+so is the grid's add/remove — wiring those controls means the loopback server accepting
+`POST` for the first time, which brings CSRF, origin checks and the fact that any local
+process can reach it. That is a real security surface for a tool whose identity is
+read-only, and it is orthogonal to the write logic. The grid's controls stay disabled.
 
 The two-view grid UI is Phase 1b — presentation over a model that had to be correct
 first.
@@ -322,7 +367,7 @@ And scanning it walks the entire home tree, which made every full run take exact
 | **0** | Research, config-surface mapping, repo setup | ✅ done |
 | **1** | Resolver, cost engine, detectors, `qm audit` | ✅ done |
 | **1b** | The two-view grid UI over the same model | next |
-| **2** | Staged writes, diff review, backups, undo | designed |
+| **2** | Staged writes, diff review, backups, undo | ✅ v1: plugins, CLI |
 | **3** | Mechanism decision framework — plugin vs bare MCP vs CLI vs SDK | researched |
 | **4** | Product database — capability gaps from services you already use | deferred |
 

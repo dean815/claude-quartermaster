@@ -1,10 +1,14 @@
 # Claude Quartermaster
 
-Read-only CLI that audits which Claude Code extensions (plugins, MCP servers, skills)
-load in which projects, and what they cost. `qm audit`, `qm cost`, `qm baseline` /
-`--drift`, and `qm serve` for the two-view grid on loopback. Phase 1b is built; writes
-are Phase 2 and are **not**, so nothing here writes to any Claude Code config. The
-grid's add/remove controls render disabled for that reason.
+CLI that audits which Claude Code extensions (plugins, MCP servers, skills) load in which
+projects, and what they cost. `qm audit`, `qm cost`, `qm baseline` / `--drift`, and
+`qm serve` for the two-view grid on loopback. Every one of those is read-only.
+
+**`qm set` and `qm undo` are not** (DEA-112). They are the whole of Phase 2 v1: a plugin
+toggle written into `<proj>/.claude/settings.local.json`, one file, after a printed diff
+and a confirmation. Nothing else here writes any Claude Code config, and v1 never writes
+`~/.claude.json`. The grid's add/remove controls stay disabled — wiring them means the
+loopback server accepting `POST` for the first time, which is a separate issue.
 
 ## Architecture
 
@@ -27,8 +31,15 @@ tracked `settings.json` and its local override.
 
 ## Conventions
 
-- Writes go to `<proj>/.claude/settings.local.json` (gitignored in 13/13 of Dean's
-  repos). Never write `settings.json` without an explicit promote action.
+- Writes go to `<proj>/.claude/settings.local.json`. Never write `settings.json` without
+  an explicit promote action. **The parenthetical this line used to carry — "gitignored
+  in 13/13 of Dean's repos" — was a property of this machine, not of the repos.** Measured
+  2026-08-10 over the 17 repositories under `~/claude`: **6** name `settings.local.json`
+  in their own `.gitignore`; the other **11** are covered only by
+  `~/.config/git/ignore`, which holds `**/.claude/settings.local.json`. On a cloud
+  session, in CI, or in anyone else's clone, 11 of 17 would commit the file on the next
+  `git add -A`. So `qm set` asks `git check-ignore` and says so when the answer is no —
+  a note and not a refusal, because a tracked settings file is a thing someone may want.
 - Edits stage in memory and apply as one reviewed batch, never on click.
 - JSON edits are surgical: change only target keys, never rewrite a file.
 
@@ -346,6 +357,56 @@ what the entry buys is that the next one costs a detection rather than a fabrica
 both settings detectors fire on **0 of 30** projects here (42 files, 42 accepted, 0
 unclassified under `--full`), so like DEA-148's and DEA-149's before it, this lives entirely
 on its recordings.
+
+**The safe direction is a property of the consumer, not of the classifier (DEA-112).**
+The first phase that writes. `qm set <plugin>=on|off --project <p>` plans a toggle into
+`<p>/.claude/settings.local.json`, prints the whole file's diff and `classify`'s verdict,
+asks, and applies through DEA-139's `stageEdits`/`applyStage` — which nothing in `src/`
+had consumed. Three refusals stop a write that would *look* like it worked, and the third
+is the one nobody asked for. DEA-151 sends a `doctor` message it cannot place to
+`not-checked`, because for a **reporting** tool a wrong `discarded` fabricates a
+high-severity finding about live config while a wrong `not-checked` only loses a
+detection. Invert the consumer and the asymmetry inverts with it: a file that *might* be
+discarded is a write that might not land, silently, and the user has no way to notice. So
+`targetValidity` refuses on `discarded` **and** on `not-checked` carrying schema errors.
+That is not a hypothetical hedge. Measured on 2.1.224, `enabledPlugins.<id>: 42` makes
+`doctor` print the bare `Invalid input` — a fifth message family, in neither recognised
+list — and `claude plugin list --json` in the same directory reports the file's *other*
+entries as **not applied**: two scratch projects differing only in the malformed sibling,
+`context7@claude-plugins-official` resolving `true` without it and `false` with it. A
+refusal keyed on `discarded` alone would have written into it. `costOf` is **not** taught
+the message, deliberately — `Invalid input` is a schema validator's generic fallback and
+one key is not evidence about a family (DEA-152's own standard) — so `unknown` has a live
+recording again (`test/fixtures/doctor/unplaced-plugin-entry/`) and the *reporting* gap it
+represents is filed rather than guessed at.
+**The brief's restate rule was wrong, and refusing on it would refuse the write people
+want.** "An entry setting a value it would have inherited does nothing" holds only while
+nothing at project scope overrides. `resolveCell` computes `restated` against the chain
+with **both** project-scope links removed, so a local entry that overrides the repo's own
+tracked `settings.json` back to the user-scope value reads `restated` while doing the
+work — without it the plugin resolves the other way. So the refusal is *the resolved value
+does not move*, and `restated` is a **note**: it names the finding the entry will produce
+and says why the entry is load-bearing anyway. `restated-entries` has the corresponding
+false positive today; that is reported, not fixed here.
+**Nothing is deleted, and the seed carries a layout.** A target that does not exist is
+created exclusively (`wx`) as `{\n  "enabledPlugins": {}\n}\n` and then edited through the
+same staging path, so undo restores *that* rather than removing a file. The three lines
+are load-bearing: `write.ts` copies a document's own indent, colon spacing and line ending
+rather than choosing them, so a seed of `{}` is a document with no layout to copy and the
+first entry splices in compact — fixing that shape for every later edit. Backups are
+timestamped pre-images beside `baseline.json` and `oracle-run.json`; `undo` is one step,
+guarded twice — the target must still hash to what this tool left there (an `applyStage`
+check cannot see a deliberate edit made minutes ago and perfectly quiescent), and the
+restore itself goes through `stageEdits`/`applyStage` like any other write.
+The day it fails: the write path fires on nothing in this repo's fixtures the way DEA-148's
+and DEA-152's detectors do — it is exercised end to end only against scratch projects, so
+the CLI wiring has no gate that a wrong `--project` would redden. The `Invalid input`
+refusal is keyed on a *state* rather than a message, which is why it survives the next
+release, but the reporting side still classifies such a file `not-checked` and
+`discarded-settings` stays silent about a file that really is dead. And the pre-image
+guard in `planToggles` — `sha256(original) !== stage.hash` — is **ungated**: deleting it
+leaves all 605 tests green, because the window it covers is between two `readFileSync`
+calls inside one function and nothing outside can open it.
 
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`

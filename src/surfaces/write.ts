@@ -534,6 +534,33 @@ export interface Edit {
   value: unknown;
 }
 
+/**
+ * The batch, applied in order, in memory.
+ *
+ * Split out of `stageEdits` rather than copied beside it (DEA-112). A caller planning a
+ * write to a file that does not exist yet has no bytes to stage against, so it needs the
+ * same batch applied to the text it would create -- and the text it shows the user for
+ * review has to be the text that later lands. Two loops would be two chances for a
+ * preview to disagree with the write it previewed.
+ *
+ * The index in the refusal is the caller's own edit number, which is what makes an
+ * eight-edit batch's failure locatable.
+ */
+export function applyEdits(text: string, edits: readonly Edit[]): EditResult {
+  let next = text;
+  for (const [n, edit] of edits.entries()) {
+    const result = setJsonValue(next, edit.path, edit.value);
+    if (result.outcome === 'refused') {
+      return {
+        outcome: 'refused',
+        refusal: { reason: result.refusal.reason, detail: `edit ${n}: ${result.refusal.detail}` },
+      };
+    }
+    next = result.text;
+  }
+  return { outcome: 'edited', text: next };
+}
+
 export interface Stage {
   path: string;
   /** SHA-256 of the bytes read. Half of what proves nothing moved. */
@@ -543,7 +570,15 @@ export interface Stage {
   text: string;
 }
 
-const sha256 = (buf: Buffer): string => createHash('sha256').update(buf).digest('hex');
+/**
+ * The hash half of the concurrency check.
+ *
+ * Exported so a caller holding the bytes it thinks a `Stage` was taken from can prove it
+ * against `Stage.hash` with the same function that produced it (DEA-112). Recomputing
+ * that agreement with a second hash implementation would be comparing two things neither
+ * of which is the one on the stage.
+ */
+export const sha256 = (buf: Buffer): string => createHash('sha256').update(buf).digest('hex');
 
 /**
  * Read, apply the batch in memory, and hold what it produced.
@@ -567,19 +602,10 @@ export function stageEdits(path: string, edits: readonly Edit[]): StageResult {
   }
   const mtimeMs = statSync(path).mtimeMs;
 
-  let next = text;
-  for (const [n, edit] of edits.entries()) {
-    const result = setJsonValue(next, edit.path, edit.value);
-    if (result.outcome === 'refused') {
-      return {
-        outcome: 'refused',
-        refusal: { reason: result.refusal.reason, detail: `edit ${n}: ${result.refusal.detail}` },
-      };
-    }
-    next = result.text;
-  }
+  const applied = applyEdits(text, edits);
+  if (applied.outcome === 'refused') return { outcome: 'refused', refusal: applied.refusal };
 
-  return { outcome: 'staged', stage: { path, hash: sha256(buf), mtimeMs, text: next } };
+  return { outcome: 'staged', stage: { path, hash: sha256(buf), mtimeMs, text: applied.text } };
 }
 
 /**

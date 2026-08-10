@@ -225,6 +225,49 @@ const CASES: Array<{ label: string; change: PendingChange; expect: Effect }> = [
   { label: 'plugin whose server was not', change: { kind: 'plugin', id: 'ghost@m' }, expect: 'unknown' },
   { label: 'plugin declaring no server', change: { kind: 'plugin', id: 'plain@m' }, expect: 'reload' },
   { label: 'plugin no source covers', change: { kind: 'plugin', id: 'uncatalogued@m' }, expect: 'unknown' },
+
+  /**
+   * The seam DEA-112 was promised, in the same three rows the deny-rule half has.
+   *
+   * The boundary is the claim: only `discarded` may answer `none`. `plain@m` is the row
+   * that makes the first case say something -- it would be `reload` on its own merits, so
+   * `none` can only have come from the target's validity -- and the two rows below it are
+   * what a guard written as "the validity is not accepted" would get wrong. `not-checked`
+   * matters most: it is what every file reads until something asks `doctor`, so rounding
+   * it to `none` would make `qm set` refuse every write on a machine without the CLI.
+   *
+   * The fourth row is the state that has no file at all. `candidateChanges` classifies
+   * the toggles the grid *could* stage, and a hypothetical names no path -- which is not
+   * `not-checked` and must not read as `discarded` either.
+   */
+  {
+    label: 'plugin written into a discarded file',
+    change: {
+      kind: 'plugin',
+      id: 'plain@m',
+      target: { source: '/void.json', sourceValidity: 'discarded' },
+    },
+    expect: 'none',
+  },
+  {
+    label: 'plugin written into a field-dropped file',
+    change: {
+      kind: 'plugin',
+      id: 'plain@m',
+      target: { source: '/part.json', sourceValidity: 'field-dropped' },
+    },
+    expect: 'reload',
+  },
+  {
+    label: 'plugin written into an unchecked file',
+    change: {
+      kind: 'plugin',
+      id: 'plain@m',
+      target: { source: '/dunno.json', sourceValidity: 'not-checked' },
+    },
+    expect: 'reload',
+  },
+  { label: 'plugin naming no target at all', change: { kind: 'plugin', id: 'plain@m' }, expect: 'reload' },
 ];
 
 type Classifier = (change: PendingChange, input: ClassifyInput) => Classification;
@@ -594,6 +637,28 @@ const MUTATIONS: Mutation[] = [
       return stub(c, c.rules.some(isBareDenyRule) ? 'restart' : 'reload');
     },
     names: /^bare deny rule in (a field-dropped|an unchecked) file: expected restart, got none$/,
+  },
+  {
+    /**
+     * The plugin half of the same pair (DEA-112): the target's validity read and not
+     * consulted, so a write into a file Claude Code refuses reports what it would have
+     * cost had it landed. `qm set` refuses precisely when this branch says `none`, so
+     * deleting it does not merely mislabel a row -- it lets the write through.
+     */
+    name: "a discarded target still costs what the plugin costs",
+    classifier: (c, i) =>
+      c.kind === 'plugin' ? classify({ kind: 'plugin', id: c.id }, i) : classify(c, i),
+    names: /^plugin written into a discarded file: expected none, got reload$/,
+  },
+  {
+    /** And the dangerous direction, as above: anything short of `accepted` reads as void. */
+    name: 'any plugin target not confirmed valid is treated as discarded',
+    classifier: (c, i) => {
+      if (c.kind !== 'plugin') return classify(c, i);
+      if (c.target && c.target.sourceValidity !== 'accepted') return stub(c, 'none');
+      return classify(c, i);
+    },
+    names: /^plugin written into (a field-dropped|an unchecked) file: expected reload, got none$/,
   },
   {
     /**

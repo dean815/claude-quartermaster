@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "bogus@nowhere": 42
+  }
+}

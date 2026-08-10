@@ -123,7 +123,23 @@ const CACHE_SAFE_KINDS: ReadonlySet<ChangeKind> = new Set<ChangeKind>([
 /** One staged change, as DEA-112's apply step will describe it. */
 export type PendingChange =
   | { kind: Exclude<ChangeKind, 'plugin' | 'mcp-server' | 'deny-rule'>; id: string; project?: string }
-  | { kind: 'plugin'; id: string; project?: string }
+  | {
+      kind: 'plugin';
+      id: string;
+      /**
+       * The settings file this change would be written to, and whether Claude Code
+       * applies it (DEA-112). The seam the `deny-rule` note below promised.
+       *
+       * Optional, and the absence is a third state rather than a missing measurement:
+       * `candidateChanges` classifies the toggles the grid *could* stage, and a
+       * hypothetical toggle names no file at all. That is not `not-checked`, which says
+       * a file was named and nobody validated it. Making this required would force the
+       * hypothetical set to invent a path -- the `pluginServerKey` failure, arriving as
+       * a fabricated filename instead of a fabricated key.
+       */
+      target?: { source: string; sourceValidity: SettingsValidity };
+      project?: string;
+    }
   /** `name` is the config key -- `plugin:airtable:airtable`, `claude.ai Linear`. */
   | { kind: 'mcp-server'; name: string; project?: string }
   | {
@@ -330,6 +346,26 @@ export function classify(change: PendingChange, input: ClassifyInput): Classific
 
   if (change.kind === 'mcp-server') {
     return fromServers(change, [change.name], input.index);
+  }
+
+  // A change written into a file Claude Code refuses is not a change (DEA-112). Before
+  // the inventory, for the reason the deny-rule branch checks validity first: what a
+  // toggle would cost is a question about a toggle that happens, and this one does not.
+  //
+  // The one mechanism, not two. `qm set` refuses precisely when this returns `none`, so
+  // the rule that a discarded file cannot be written to and the rule that a change to one
+  // takes effect on nothing are the same sentence in the same place -- rather than an
+  // ad-hoc guard in the CLI that agrees with this until someone edits one of them.
+  if (change.kind === 'plugin' && change.target?.sourceValidity === 'discarded') {
+    return {
+      change,
+      effect: 'none',
+      reason:
+        'Claude Code discards this settings file, so an entry written into it decides ' +
+        'nothing and the plugin keeps resolving as it does today.',
+      sessions: 0,
+      evidence: [`${change.target.source} fails Claude Code's settings schema in the whole-file way`],
+    };
   }
 
   // A plugin toggle is only ever as costly as the MCP servers it brings with it.

@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 /**
- * `qm` -- read-only. Nothing here writes to any Claude Code config; the first-party
- * subcommands it invokes do initialise `~/.claude.json` on a machine that has none,
- * and the run discloses it. See `disclose.ts`.
+ * `qm` -- read-only everywhere except `qm set` and `qm undo`.
+ *
+ * Every reporting command reads and reports; the first-party subcommands they invoke do
+ * initialise `~/.claude.json` on a machine that has none, and the run discloses it (see
+ * `disclose.ts`). `qm set` is the one command that changes a user's configuration, and it
+ * changes exactly one file -- `<project>/.claude/settings.local.json` -- after showing the
+ * whole diff and asking. `qm undo` puts the last one back. Neither ever touches
+ * `~/.claude.json` or a tracked `settings.json`; `apply.ts` names both and refuses.
  */
 import { homedir } from 'node:os';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { resolve, join, dirname } from 'node:path';
 
 import { loadWorkspace, problems } from './surfaces/read.ts';
@@ -60,8 +66,15 @@ import { linearConfigFromEnv, linearFiler } from './linear.ts';
 import { buildSkillCatalog, allSkillIds } from './skills.ts';
 import { buildMcpCatalog, allMcpServerNames } from './mcp.ts';
 import { allPluginIds } from './resolve.ts';
+import {
+  describePlan,
+  planEffect,
+  planToggles,
+  type ToggleRequest,
+} from './toggle.ts';
+import { applyPlan, stateDir, undoLast } from './apply.ts';
 import type { TranscriptMeasurement } from './cost/transcript.ts';
-import type { SettingsFile, SettingsValidity } from './surfaces/types.ts';
+import type { SettingsCheck, SettingsFile, SettingsValidity } from './surfaces/types.ts';
 
 const BOLD = '[1m';
 const DIM = '[2m';
@@ -90,6 +103,8 @@ interface Options {
   status: boolean;
   /** `qm oracle --file-issue`: the one flag in this tool with an outward side effect. */
   fileIssue: boolean;
+  /** `qm set --yes`: apply without the prompt. The diff still prints. */
+  yes: boolean;
   project: string | null;
   port: number;
 }
@@ -105,7 +120,7 @@ function parsePort(raw: string | null): number {
   return n;
 }
 
-function parseArgs(argv: string[]): { command: string; opts: Options } {
+function parseArgs(argv: string[]): { command: string; args: string[]; opts: Options } {
   // Guard the -1 case: `idx + 1` would be 0 and drop the command itself, so every
   // invocation without a value flag silently fell back to `audit`.
   const valueIdxOf = (flag: string) => {
@@ -119,6 +134,9 @@ function parseArgs(argv: string[]): { command: string; opts: Options } {
   );
   return {
     command: positional[0] ?? 'audit',
+    // Everything after the command. `qm set` reads its targets from here; nothing else
+    // uses them, and a command that ignores them is not made to care.
+    args: positional.slice(1),
     opts: {
       json: argv.includes('--json'),
       withPluginCost: !argv.includes('--no-plugin-cost'),
@@ -127,6 +145,7 @@ function parseArgs(argv: string[]): { command: string; opts: Options } {
       drift: argv.includes('--drift'),
       status: argv.includes('--status'),
       fileIssue: argv.includes('--file-issue'),
+      yes: argv.includes('--yes'),
       project: projectIdx === -1 ? null : (argv[projectIdx] ?? null),
       port: parsePort(portIdx === -1 ? null : (argv[portIdx] ?? null)),
     },
@@ -261,7 +280,19 @@ function flushPrices(): void {
   priced?.flush();
 }
 
-function buildContext(opts: Options): AuditContext {
+/**
+ * `settingsValidity` overrides the `--full` rule for one directory (DEA-112).
+ *
+ * `qm set` needs its own target's validity on every run -- writing into a file Claude
+ * Code discards is the failure the whole command exists to avoid -- and cannot pay
+ * `--full`'s price for it, because `loadWorkspace` asks per registered project and there
+ * are 30 of them here. One spawn, for the directory being written to, and every other
+ * project stays `not-checked` exactly as it is on any run without `--full`.
+ */
+function buildContext(
+  opts: Options,
+  settingsValidity?: (dir: string) => ReadonlyMap<string, SettingsCheck>,
+): AuditContext {
   const home = homedir();
   const target = opts.project ? resolve(opts.project) : null;
 
@@ -279,7 +310,11 @@ function buildContext(opts: Options): AuditContext {
   // as it did before DEA-147 -- which is the designed degradation, not a gap.
   const ws = loadWorkspace({
     ...(target ? { extraProjectPaths: [target] } : {}),
-    ...(opts.full ? { settingsValidity: doctorSettingsValidity() } : {}),
+    ...(settingsValidity
+      ? { settingsValidity }
+      : opts.full
+        ? { settingsValidity: doctorSettingsValidity() }
+        : {}),
   });
 
   const targets = target
@@ -519,11 +554,6 @@ function effectReportFor(ctx: AuditContext): EffectReport {
   });
 }
 
-function stateDir(): string {
-  const base = process.env['XDG_STATE_HOME'] ?? join(homedir(), '.local', 'state');
-  return join(base, 'claude-quartermaster');
-}
-
 function baselinePath(): string {
   return join(stateDir(), 'baseline.json');
 }
@@ -631,6 +661,160 @@ async function oracle(opts: Options): Promise<void> {
   process.exitCode = 1;
 }
 
+// ---------------------------------------------------------------------------
+// The write path
+// ---------------------------------------------------------------------------
+
+/**
+ * `qm set <plugin>=on|off ...` -- one project, one diff, one confirmation, one write.
+ *
+ * **Several targets in one invocation, and no state between invocations.** CLAUDE.md's
+ * convention is that edits stage in memory and apply as one reviewed batch; a CLI meets
+ * that by taking every target on one command line, showing one diff and applying once.
+ * Staging to disk and applying in a later run would be a state machine with its own
+ * staleness and abandonment problems, and nothing here needs one.
+ *
+ * **`--project` is required rather than defaulting to the working directory.** Every
+ * other command defaults to the whole workspace and this one writes, so the difference
+ * between auditing the wrong project and writing into it is the whole reason to make the
+ * caller say which.
+ */
+async function set(args: string[], opts: Options): Promise<void> {
+  if (!opts.project) {
+    console.error(
+      'qm: set needs --project <path>. It writes, so the target is never inferred from the ' +
+        'working directory.',
+    );
+    process.exit(2);
+  }
+
+  const requests = parseToggles(args);
+  const target = resolve(opts.project);
+  const ctx = buildContext(opts, targetOnlyValidity(target));
+
+  const result = planToggles(ctx, target, requests);
+  if (result.outcome === 'refused') {
+    console.log(`\n${BOLD}qm set${RESET} ${DIM}· nothing was written${RESET}\n`);
+    for (const r of result.refusals) {
+      console.log(`  ${paint(r.code, COLOR['high'] ?? '')} ${r.message}`);
+      for (const e of r.evidence) console.log(`      ${DIM}·${RESET} ${e}`);
+      if (r.fix) console.log(`      ${DIM}fix:${RESET} ${r.fix}`);
+      console.log();
+    }
+    process.exitCode = 1;
+    return;
+  }
+
+  const { plan } = result;
+  console.log(`\n${BOLD}qm set${RESET} ${DIM}· ${plan.project}${RESET}\n`);
+  for (const line of describePlan(plan)) console.log(line);
+  console.log();
+
+  if (!opts.yes && !(await confirm('Apply this change? [y/N] '))) {
+    console.log('\nNothing was written.\n');
+    return;
+  }
+
+  const applied = applyPlan(plan, { now: new Date(), state: stateDir() });
+  if (applied.outcome === 'refused') {
+    console.log(`\n  ${paint(applied.code, COLOR['high'] ?? '')} ${applied.message}`);
+    for (const e of applied.evidence) console.log(`      ${DIM}·${RESET} ${e}`);
+    console.log();
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`\n  wrote ${num(applied.bytes)} bytes to ${plan.target}`);
+  console.log(`  ${DIM}backup${RESET} ${applied.backup}`);
+  // The classifier's verdict, not a sentence about sessions. A blanket "takes effect next
+  // session" is false for a toggle that /reload-plugins picks up, and this project does
+  // not ship a confidently wrong statement (DEA-123).
+  console.log(`  ${DIM}effect${RESET} ${planEffect(plan)}`);
+  console.log(`  ${DIM}undo with${RESET} qm undo\n`);
+}
+
+/** `<plugin id>=on|off`. Split on the last `=`, because a plugin id may not contain one. */
+function parseToggles(args: readonly string[]): ToggleRequest[] {
+  if (!args.length) {
+    console.error('qm: set needs at least one <plugin-id>=on|off');
+    process.exit(2);
+  }
+  return args.map((spec) => {
+    const at = spec.lastIndexOf('=');
+    const value = at === -1 ? '' : spec.slice(at + 1).toLowerCase();
+    if (at <= 0 || !['on', 'off', 'true', 'false'].includes(value)) {
+      console.error(`qm: expected <plugin-id>=on|off, got ${JSON.stringify(spec)}`);
+      process.exit(2);
+    }
+    return { pluginId: spec.slice(0, at), enable: value === 'on' || value === 'true' };
+  });
+}
+
+/** One `claude doctor` spawn, for the directory being written to and no other. */
+function targetOnlyValidity(target: string): (dir: string) => ReadonlyMap<string, SettingsCheck> {
+  const live = doctorSettingsValidity();
+  const none: ReadonlyMap<string, SettingsCheck> = new Map();
+  return (dir) => (dir === target ? live(dir) : none);
+}
+
+/**
+ * The consent. Anything but `y`/`yes` is a no, including a closed stdin.
+ *
+ * `readline` rather than reading the descriptor, so this works the same when a person
+ * types and when a script pipes -- and the `close` handler is what stops a run with no
+ * stdin at all from hanging on a question nobody can answer.
+ *
+ * The answer is settled **before** `rl.close()`, and the order is the whole of it:
+ * closing emits `close` synchronously, so closing first lets the no-stdin handler resolve
+ * the promise and a piped `y` reads as a decline. Measured that way round first.
+ */
+function confirm(prompt: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise<boolean>((done) => {
+    rl.on('close', () => done(false));
+    rl.question(prompt, (answer) => {
+      done(/^y(es)?$/i.test(answer.trim()));
+      rl.close();
+    });
+  });
+}
+
+/**
+ * `qm undo` -- put the last apply back, once.
+ *
+ * Loads no workspace: the record names the file, and re-reading 30 projects to restore
+ * one of them would be paying `audit`'s price for a two-file operation.
+ */
+function undo(): void {
+  const result = undoLast({ now: new Date(), state: stateDir() });
+
+  if (result.outcome === 'nothing') {
+    console.log(`\n${result.message}\n`);
+    return;
+  }
+  if (result.outcome === 'refused') {
+    console.log(`\n  ${paint(result.code, COLOR['high'] ?? '')} ${result.message}`);
+    for (const e of result.evidence) console.log(`      ${DIM}·${RESET} ${e}`);
+    console.log();
+    process.exitCode = 1;
+    return;
+  }
+
+  const { record } = result;
+  console.log(`\n  restored ${num(result.bytes)} bytes to ${record.target}`);
+  console.log(`  ${DIM}from${RESET} ${record.backup}`);
+  for (const c of record.changes) {
+    console.log(`  ${DIM}·${RESET} ${c.pluginId}: ${c.to} -> ${c.from}`);
+  }
+  if (record.createdTarget) {
+    console.log(
+      `  ${DIM}the file did not exist before that apply; it is back to the empty settings ` +
+        `it was created as, and was not removed${RESET}`,
+    );
+  }
+  console.log();
+}
+
 /**
  * A foreground server, and no daemon behind it.
  *
@@ -674,7 +858,7 @@ async function serve(ctx: AuditContext, port: number): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const { command, opts } = parseArgs(process.argv.slice(2));
+  const { command, args, opts } = parseArgs(process.argv.slice(2));
 
   if (command === 'help' || process.argv.includes('--help')) {
     console.log(`
@@ -686,6 +870,8 @@ ${BOLD}qm${RESET} -- audit which Claude Code extensions load where, and what the
   qm baseline [--full]        record today's findings, so --drift can diff against them
   qm serve    [--port <n>]    serve the grid on 127.0.0.1 until Ctrl-C
   qm oracle   [--status] [--file-issue]
+  qm set      --project <path> <plugin-id>=on|off [...] [--yes]
+  qm undo
 
   --full    also scan git hygiene and project layout via project-optimizer, and ask
             claude doctor whether each project's settings files pass Claude Code's
@@ -701,9 +887,16 @@ this tool that reaches outside the machine; without it the run is a dry run. It 
 per-directory \`enabled\` resolution and nothing else. Schedule it weekly with
 scripts/install-oracle-schedule.sh.
 
-Read-only: qm writes no Claude Code config. The first-party \`claude\` subcommands it
-invokes do create ~/.claude.json on a machine that has none, and the run says so when
-that happens.
+\`qm set\` is the only command that writes, and it writes exactly one file:
+<project>/.claude/settings.local.json. It prints the whole diff, says what the change
+needs before it is live, and asks before applying. It refuses rather than write when
+Claude Code would discard the target, when claude doctor reported on it in words this
+release cannot place, or when the plugin already resolves to the value you asked for.
+\`qm undo\` restores the last apply, once, and refuses if the file has changed since.
+Backups live beside the baseline in \${XDG_STATE_HOME:-~/.local/state}/claude-quartermaster.
+
+Every other command is read-only. The first-party \`claude\` subcommands they invoke do
+create ~/.claude.json on a machine that has none, and the run says so when that happens.
 `);
     return;
   }
@@ -712,6 +905,17 @@ that happens.
   // command reads none of that, and a weekly job should not pay for it.
   if (command === 'oracle') {
     await oracle(opts);
+    return;
+  }
+
+  // Likewise: the undo record names its own file, so nothing about the workspace is read.
+  if (command === 'undo') {
+    undo();
+    return;
+  }
+
+  if (command === 'set') {
+    await set(args, opts);
     return;
   }
 
