@@ -246,6 +246,13 @@ const PARSED: Record<string, Array<{ key: string; costs: SettingsError['costs'];
     { key: 'hooks', costs: 'field', notes: 0 },
     { key: 'extraKnownMarketplaces.karpathy-skills', costs: 'entry', notes: 0 },
   ],
+  // `unknown` with a live instance again (DEA-112). `Invalid input` is what 2.1.224 says
+  // about a malformed entry of `enabledPlugins`, and it belongs to neither recognised
+  // family -- so the file reads `not-checked` while carrying an error, which is the state
+  // DEA-151 built the default around. It is left unrecognised on purpose: the same message
+  // is zod's generic fallback and could mean either thing under a key nobody has probed,
+  // and `qm set` does not need it placed to be safe -- it refuses on the state itself.
+  'unplaced-plugin-entry': [{ key: 'enabledPlugins.bogus@nowhere', costs: 'unknown', notes: 0 }],
   'valid-local-over-discarded': [{ key: 'permissions.deny', costs: 'file', notes: 1 }],
 };
 

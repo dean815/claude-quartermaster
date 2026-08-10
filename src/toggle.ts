@@ -221,20 +221,6 @@ const homeCollision: PlanCheck = {
         ],
 };
 
-const projectKnown: PlanCheck = {
-  name: 'project-known',
-  run: ({ project, record }) =>
-    record
-      ? []
-      : [
-          {
-            code: 'no-such-project',
-            message: 'Nothing in the workspace covers this directory, so there is nothing to write into.',
-            evidence: [project],
-          },
-        ],
-};
-
 const line = (path: string, key: string, message: string) => `${path} › ${key}: ${message}`;
 
 /**
@@ -358,8 +344,14 @@ function describeChain(cell: Cell<boolean>, value: boolean): string[] {
   return cell.chain.map((l) => `${l.scope}: ${l.value} — ${l.source}`);
 }
 
-/** The checks, in the order they are asked. */
-export const CHECKS: readonly PlanCheck[] = [projectKnown, homeCollision, targetValidity, noChange];
+/**
+ * The checks, in the order they are asked.
+ *
+ * A missing project record is not among them. It is a precondition rather than a policy:
+ * with no record there is nothing to resolve against, so every check below would be
+ * asking about a world that was not built. `planToggles` answers it before any of this.
+ */
+export const CHECKS: readonly PlanCheck[] = [homeCollision, targetValidity, noChange];
 
 // ---------------------------------------------------------------------------
 // Planning
@@ -380,18 +372,28 @@ export function planToggles(
   const project = resolvePath(projectPath);
   const target = targetFor(project);
   const record = ctx.ws.projects.find((p) => p.path === project) ?? null;
-  const targetFile = record?.localSettings ?? null;
+  if (!record) {
+    return {
+      outcome: 'refused',
+      refusals: [
+        {
+          code: 'no-such-project',
+          message: 'Nothing in the workspace covers this directory, so there is nothing to write into.',
+          evidence: [project],
+        },
+      ],
+    };
+  }
+  const targetFile = record.localSettings;
 
   const resolved = new Map<string, { now: Cell<boolean>; after: Cell<boolean> }>();
-  if (record) {
-    for (const req of requests) {
-      const now = resolvePlugin(ctx.ws, record, req.pluginId);
-      // The chain this write produces: the target's own link replaced, everything else
-      // left alone, and the answer taken from the real algebra rather than restated here.
-      const link: ChainLink<boolean> = { scope: 'local', value: req.enable, source: target };
-      const after = resolveCell([...now.chain.filter((l) => l.source !== target), link], false);
-      resolved.set(req.pluginId, { now, after });
-    }
+  for (const req of requests) {
+    const now = resolvePlugin(ctx.ws, record, req.pluginId);
+    // The chain this write produces: the target's own link replaced, everything else left
+    // alone, and the answer taken from the real algebra rather than restated here.
+    const link: ChainLink<boolean> = { scope: 'local', value: req.enable, source: target };
+    const after = resolveCell([...now.chain.filter((l) => l.source !== target), link], false);
+    resolved.set(req.pluginId, { now, after });
   }
 
   const input: CheckInput = {

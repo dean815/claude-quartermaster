@@ -103,6 +103,15 @@
       ]
     },
     {
+      "name": "unplaced-plugin-entry",
+      "note": "A message no release of this repo has recognised, on the key qm set writes: `enabledPlugins.<id>: 42` prints the bare `Invalid input`, which costOf places as neither partial acceptance nor refusal, so the file reads not-checked while carrying a schema error. That is DEA-151's chosen failure direction, and DEA-112 is the consumer for which it is the wrong direction -- so `qm set` refuses on this state rather than writing. Recorded with only the malformed entry in it, so the case says what it can prove: the probed plugin is untouched either way. Measured separately on 2.1.224 and NOT recorded here, because a recording of it would assert an agreement this release does not have: a file carrying this message alongside `context7@claude-plugins-official: true` has that entry NOT applied -- the file is refused whole, and validityOf says not-checked.",
+      "claudeVersion": "2.1.224 (Claude Code)",
+      "enabled": false,
+      "files": [
+        "settings.local.json"
+      ]
+    },
+    {
       "name": "valid-local-over-discarded",
       "note": "The mirror. settings.json is discarded and says false, the local file is valid and says true. Both parse, so this one passes without any validity check -- it is the control, not the catch.",
       "enabled": true,
