@@ -252,6 +252,54 @@ and changes the shape (`Expected object but received number`, no comma) falls ou
 lists at once; and `unknown` has no recording and cannot have one, so its fixture is a
 constructed message and is labelled as such.
 
+**The unit is the finding, and the sharp case was not reachable (DEA-149).** A file
+Claude Code *keeps* while dropping part of it is live config with a hole in it, which
+`discardedSettings` must not report and nothing else did. `droppedSettingsField` does,
+and the whole design turns on there being **two** reachable shapes with different cost
+units: `hooks: 42` loses the field entire and has no number — the value that failed the
+schema *is* what went — while `permissions.deny: [1,2,3,"Bash"]` loses three elements and
+keeps `"Bash"` in force. Fold them and only the file is left to count, which prices a
+dropped `hooks` at whatever unrelated plugins the file happens to enable: DEA-147's
+correction arriving one layer down. So `SettingsError.costs` splits `field` from
+`elements` — one class to `validityOf`, two to a report — and the number can only come
+from the *file*, because `doctor` prints one entry per array however many elements it
+removed and `ruleStrings` is where those elements stop being visible (DEA-150). Hence
+`SettingsFile.droppedRuleElements`, keyed by `doctor`'s own dotted path so the join is a
+lookup: first-party says an array lost something, the reader says how much.
+**The issue's second defect does not exist, and deleting the claim would have been the
+wrong repair.** It said `qm effect` wrongly answers `reload` for a deny rule under a
+dropped `permissions` key. Measured over thirteen malformed shapes on 2.1.222 and
+re-measured on 2.1.224: `permissions` never drops as a *field*. Every malformed shape of
+it refuses the file whole, and its one partial acceptance removes non-string elements
+whose survivors **are** in force — so `reload` is correct and `effect.ts` narrowing on
+`discarded` alone is right. That makes `EFFECT_SETTINGS_KEYS` the deliverable rather than
+a narrowing: a tripwire that reddens the day a *whole-field* drop names a key the
+classifier reasons about, which is the day the premise becomes true. Deliberately silent
+about `elements`, which names `permissions.deny` today and correctly. The same evidence
+settles severity: with `hooks` the only reachable whole-field key and nothing
+security-relevant droppable at all, the issue's per-key ranking has a set of size one to
+rank, so severity is **flat** with the key in the evidence.
+**Two first-party messages moved under it, and the safe default absorbed both.** DEA-151
+said `unknown` had no recording and could not have one. 2.1.224 supplies two: a malformed
+hook *event* prints `This entry was ignored.` (one word off the pinned sentence), and
+`extraKnownMarketplaces.<id>.source` — DEA-147's own incident key — stopped voiding the
+file entirely. Both read `not-checked`, both are visible through `unclassifiedSettings`,
+and neither produced a wrong finding. Neither is taught to the recogniser here: the hook
+message drops an *entry of a record*, a third cost unit nothing has measured the
+consequences of, and widening the classifier is a decision that wants its own evidence.
+**The validity guard was untested until a mutation said so.** Widening the detector from
+`validity !== 'field-dropped'` to `validity === 'discarded'` left all 563 tests green,
+because the per-error cost guard caught every recorded case on its own. The state that
+separates them is a file that is `not-checked` while *carrying* a recognised `field`
+error — one message placed, one not — which 2.1.224 emits and which is now recorded as
+`mixed-known-and-unknown`. Eight source mutations were run by hand; that is the only one
+the suite did not already catch. The day it fails: the detector fires on **0 of 28**
+projects here, like DEA-148's before it, so both live only on their recordings; the
+count of removed elements is ours where the removal is first-party's, so a release that
+changes which elements Claude Code strips desynchronises the two silently; and
+`FILE_ENTRIES` in the gate is a hand-copied count that agrees with the fixture JSON only
+as long as someone keeps it agreeing.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32

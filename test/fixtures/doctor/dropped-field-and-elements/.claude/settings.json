@@ -1,0 +1,17 @@
+{
+  "enabledPlugins": {
+    "context7@claude-plugins-official": true
+  },
+  "skillOverrides": {
+    "context-audit": "off"
+  },
+  "hooks": 42,
+  "permissions": {
+    "deny": [
+      1,
+      2,
+      3,
+      "Bash"
+    ]
+  }
+}

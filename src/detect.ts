@@ -10,6 +10,7 @@ import type {
   Workspace,
   ProjectRecord,
   McpServerSpec,
+  SettingsError,
   SettingsFile,
   SettingsValidity,
 } from './surfaces/types.ts';
@@ -20,6 +21,7 @@ import type { PluginInventory } from './inventory.ts';
 import type { McpEntry } from './mcp.ts';
 import { buildMcpCatalog } from './mcp.ts';
 import { resolveMcpServer, resolvePlugin, allPluginIds } from './resolve.ts';
+import { RULE_ARRAYS } from './surfaces/read.ts';
 import { pluginUsage, isDemonstrablyUnused } from './usage.ts';
 
 export type Severity = 'high' | 'medium' | 'low' | 'info';
@@ -719,6 +721,133 @@ export function discardedSettings(ctx: AuditContext): Finding[] {
   return out;
 }
 
+/**
+ * What one partial acceptance cost, in the unit that error is measured in (DEA-149).
+ *
+ * Two units, because Claude Code has two ways of keeping a file and dropping part of it,
+ * and they are not one thing counted differently. `field` is the whole key: it is gone,
+ * and there is no number, because `hooks: 42` had no entries to lose -- the value that
+ * failed the schema *is* the thing that went. `elements` is `n` values out of an array
+ * whose survivors are still in force, so the number is the finding.
+ *
+ * Folding them into one figure leaves only the file to count, which prices a dropped
+ * `hooks` at whatever unrelated plugins the file happens to enable. That is the
+ * generalisation DEA-147 had to correct, arriving one layer down.
+ */
+type DropCost =
+  | { unit: 'field' }
+  | { unit: 'elements'; removed: number; kept: number };
+
+/**
+ * The cost of one error against a file Claude Code kept.
+ *
+ * `null` for anything else -- a `file` error belongs to `discardedSettings`, and an
+ * `unknown` one belongs to nobody, which is `unclassifiedSettings`' whole subject.
+ *
+ * The unit comes from the *message family* and the number from the *file*, and it has to
+ * be that way round: `doctor` prints one entry per array however many elements it removed,
+ * and the reader is the only layer that still sees the elements at all (`ruleStrings`
+ * removes them). So this is a join, not a reading -- first-party says an array lost
+ * something, `droppedRuleElements` says how much.
+ */
+function dropCost(file: SettingsFile, error: SettingsError): DropCost | null {
+  if (error.costs === 'field') return { unit: 'field' };
+  if (error.costs !== 'elements') return null;
+
+  // The survivors, by the same dotted key. `RULE_ARRAYS` is imported rather than
+  // respelled: the reader is what makes "everything left in this array is a string" true,
+  // and a second list of which arrays those are would be a second thing to keep in step.
+  const array = RULE_ARRAYS.find((k) => error.key === `permissions.${k}`);
+  return {
+    unit: 'elements',
+    removed: file.droppedRuleElements[error.key] ?? 0,
+    kept: array ? (file.permissions?.[array] ?? []).length : 0,
+  };
+}
+
+/**
+ * A field Claude Code read, rejected, and dropped, in a file it otherwise applies.
+ *
+ * True by definition and invisible without a tool, which is the bar: the first-party
+ * validator reported the key, and the message says the file survived. Nothing else says
+ * so. The file reads as decisive to anyone opening it, `claude doctor` mentions it once at
+ * startup-adjacent moments nobody is watching, and the dropped key goes on looking like
+ * configuration.
+ *
+ * **Its own detector, not a branch of `discardedSettings` (DEA-148).** That one reports a
+ * file that is gone; this one reports live config with a hole in it, and the two cannot
+ * share a cost unit, a severity or a sentence. `test/discarded-settings.test.ts` goes red
+ * if a `field-dropped` file ever appears there, and `test/dropped-field.test.ts` goes red
+ * if a `discarded` one appears here. The seam is asserted from both sides.
+ *
+ * **Flat severity, with the key in the evidence, and the evidence settles it (DEA-149).**
+ * The issue offered a small per-key ranking -- `permissions` high because a deny rule is a
+ * security control, everything else medium -- or flat severity. Measured across thirteen
+ * malformed shapes on 2.1.222 and again on 2.1.224, `permissions` never drops as a *field*:
+ * every malformed shape of it refuses the file whole, and the one partial acceptance it has
+ * removes non-string elements whose survivors stay in force. So the whole-field drop has
+ * exactly one reachable key, `hooks`, and nothing security-relevant is droppable at all. A
+ * ranking over a set of size one is a rubric invented to look principled, which is the
+ * thing this repo delegates rather than writes.
+ *
+ * **The two silences are not the same silence.** This says nothing when no field was
+ * dropped, and it says nothing when a dropped field's message matched neither family --
+ * `costOf` returns `unknown`, `validityOf` returns `not-checked`, and the file never
+ * reaches here. Only the second is a failure, and it is `unclassifiedSettings` that reports
+ * it, in the run's text and its JSON. A second recogniser here would be a second thing to
+ * keep in step with first-party prose that has already moved twice.
+ */
+export function droppedSettingsField(ctx: AuditContext): Finding[] {
+  const out: Finding[] = [];
+
+  for (const { file, project } of settingsFiles(ctx.ws)) {
+    if (file.validity !== 'field-dropped') continue;
+    const name = file.path.split('/').at(-1)!;
+
+    for (const error of file.schemaErrors) {
+      const cost = dropCost(file, error);
+      if (!cost) continue;
+
+      out.push({
+        detector: 'dropped-settings-field',
+        key: `dropped-settings-field ${file.path} ${error.key}`,
+        severity: 'medium',
+        title:
+          cost.unit === 'field'
+            ? `Claude Code ignores ${error.key} in ${name}, and applies the rest of the file`
+            : `Claude Code removes ${cost.removed} ${plural(cost.removed, 'value', 'values')} ` +
+              `from ${error.key} in ${name}, ` +
+              (cost.kept
+                ? `leaving ${cost.kept} ${plural(cost.kept, 'rule', 'rules')} in force`
+                : 'leaving none in force'),
+        detail:
+          'The first-party validator reports this key, and says the file survived it -- so ' +
+          'everything else in the file applies and this one part does not. Nothing at the ' +
+          'point of use says so: the key is still written down, and the only place it is ' +
+          'reported is the command that was asked here.',
+        ...(project ? { project } : {}),
+        evidence: [
+          file.path,
+          // Verbatim, both halves, for `discardedSettings`' reason: a paraphrase of a
+          // schema message is a second opinion about a schema this repo does not own.
+          `${error.key}: ${error.message}`,
+          ...error.notes.map((n) => `  ${n}`),
+          cost.unit === 'field'
+            ? `${error.key}: the whole field is not in effect`
+            : `${error.key}: ${cost.removed} of ${cost.removed + cost.kept} ` +
+              `${plural(cost.removed + cost.kept, 'value', 'values')} removed, ` +
+              `${cost.kept} still in force`,
+        ],
+        fix:
+          'claude doctor — run it in that directory. It is the check that reported this, ' +
+          'and it names the key and what it rejected.',
+      });
+    }
+  }
+
+  return out;
+}
+
 /** Auto-memory over the load limit is silently truncated. */
 export function oversizedMemory(ctx: AuditContext): Finding[] {
   return ctx.ws.projects
@@ -1156,6 +1285,7 @@ export function neverObservedServers(ctx: AuditContext): Finding[] {
 
 export const DETECTORS = [
   discardedSettings,
+  droppedSettingsField,
   duplicateAccessPaths,
   neverObservedServers,
   costWithoutUse,

@@ -283,10 +283,16 @@ export function classify(change: PendingChange, input: ClassifyInput): Classific
     // `discarded`: a `field-dropped` or `not-checked` file is classified exactly as it
     // was before DEA-147.
     //
-    // The day it fails: validity is per file and the dropped *key* is not carried here,
-    // so a `field-dropped` file whose dropped field is `permissions` has deny rules that
-    // are equally not in force, and this says `reload` for them. Naming the key is what
-    // DEA-148 reports, and this can narrow once it does.
+    // **The narrowing DEA-149 was filed to add is not one this release needs, and the
+    // test is where that is kept honest.** The premise was a `field-dropped` file whose
+    // dropped field is `permissions`, whose deny rules would then not be in force while
+    // this branch still answered `reload`. Measured across thirteen malformed shapes on
+    // 2.1.222 and re-measured on 2.1.224, there is no such file: every malformed
+    // `permissions` shape refuses the file *whole*, and the one partial acceptance it has
+    // removes non-string elements and leaves the surviving rules in force -- which
+    // `readSettings` already drops, so `reload` is the right answer for what is left. A
+    // narrowing here would fire on nothing and read as if it fired on something.
+    // `EFFECT_SETTINGS_KEYS` below is how that stops being a claim in a comment.
     if (change.sourceValidity === 'discarded') {
       return {
         change,
@@ -351,6 +357,40 @@ export function classify(change: PendingChange, input: ClassifyInput): Classific
     };
   }
   return fromServers(change, keys, input.index);
+}
+
+/**
+ * The settings keys whose *contents* a verdict here depends on (DEA-149).
+ *
+ * One entry, because one branch reads a settings key at all: `deny-rule` classifies the
+ * rules in `permissions.deny`, and `none` versus `reload` versus `restart` turns on
+ * whether those rules are in force. Nothing else in this file reads a settings key --
+ * a plugin toggle resolves through the inventory and a server toggle through the
+ * deferral index.
+ *
+ * It exists to be read by a test, and that is the whole point rather than an apology for
+ * it. `classify` narrows on `discarded` alone and is right to, *because* no partial
+ * acceptance names a key in this list -- a fact about Claude Code's schema messages, not
+ * about this code, and one that can therefore change in a release nobody here is
+ * consulted about. The tripwire in `test/dropped-field.test.ts` reads this list against
+ * every recorded `doctor` message and goes red the day one of them names a key in it,
+ * which is the day `sourceValidity === 'discarded'` stops being sufficient. Keeping the
+ * list next to the branch it guards is what makes it move when the branch does.
+ */
+export const EFFECT_SETTINGS_KEYS: readonly string[] = ['permissions.deny'];
+
+/**
+ * Whether a `doctor` key path and a key this classifier reasons about are the same
+ * configuration, in either direction.
+ *
+ * Both directions, because a dotted path is a tree: `permissions` dropped whole takes
+ * `permissions.deny` with it, and `permissions.deny` dropped takes only itself. An
+ * equality test would miss the first, which is the exact shape of the case this guards.
+ */
+export function effectDependsOn(key: string): boolean {
+  return EFFECT_SETTINGS_KEYS.some(
+    (k) => k === key || k.startsWith(`${key}.`) || key.startsWith(`${k}.`),
+  );
 }
 
 /**

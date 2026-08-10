@@ -86,24 +86,43 @@ const SEPARATOR = ' › ';
 export const FIELD_IGNORED_NOTE = 'This field was ignored.';
 
 /**
- * The messages that mean Claude Code **kept the file** and dropped something inside it.
+ * The messages that mean Claude Code kept the file and **ignored one field of it whole**.
  *
- * Measured on 2.1.222, one `claude doctor` run per case with `claude plugin list --json`
- * as the oracle; the recordings are in `test/fixtures/doctor/`:
+ * Measured on 2.1.222 and re-measured on 2.1.224, one `claude doctor` run per case with
+ * `claude plugin list --json` as the oracle; the recordings are in `test/fixtures/doctor/`:
  *
  * | key | message | file applies |
  * |---|---|---|
- * | `hooks: 42`               | `…received number. This field was ignored.`    | yes |
- * | `permissions.deny: [1,2]` | `Non-string value in deny array was removed`   | yes |
- * | `permissions.allow: [1,…]`| `Non-string value in allow array was removed`  | yes |
- * | `permissions.ask: [{},…]` | `Non-string value in ask array was removed`     | yes |
- *
- * The array form is written as a template because it *is* one -- three keys, one
- * sentence, and the key name is the only thing that varies. Matching the literal three
- * would be pinning an accident of which keys were probed.
+ * | `hooks: 42`      | `…received number. This field was ignored.` | yes |
+ * | `hooks: "nope"`  | `…received string. This field was ignored.` | yes |
  */
-const KEEPS_THE_FILE: readonly RegExp[] = [
+const IGNORES_THE_FIELD: readonly RegExp[] = [
   new RegExp(`${FIELD_IGNORED_NOTE.replace(/[.]/g, '\\.')}$`),
+];
+
+/**
+ * The messages that mean Claude Code kept the file **and removed elements from an array
+ * inside it**, leaving the rest of that array in force.
+ *
+ * | key | message | file applies |
+ * |---|---|---|
+ * | `permissions.deny: [1,2,"Bash"]` | `Non-string value in deny array was removed`  | yes |
+ * | `permissions.allow: [1,…]`       | `Non-string value in allow array was removed` | yes |
+ * | `permissions.ask: [{},…]`        | `Non-string value in ask array was removed`   | yes |
+ *
+ * Written as a template because it *is* one -- three keys, one sentence, and the key name
+ * is the only thing that varies. Matching the literal three would be pinning an accident
+ * of which keys were probed.
+ *
+ * **Split from the sentence above rather than listed beside it (DEA-149).** Both mean the
+ * file applies, so validity cannot tell them apart and does not need to; what differs is
+ * what the error *cost*, and the two units are not the same thing counted differently. A
+ * field is gone; an array lost `n` of its elements and kept the rest. One `doctor` entry
+ * covers however many elements were removed -- three removals print one line -- so nothing
+ * downstream can recover the number from the message, and a detector that reported one
+ * unit for both would have to charge the whole file for either.
+ */
+const REMOVES_ARRAY_ELEMENTS: readonly RegExp[] = [
   /^Non-string value in \w+ array was removed$/,
 ];
 
@@ -161,10 +180,19 @@ const REFUSES_THE_FILE: readonly RegExp[] = [
  * are `accepted`.
  */
 function costOf(message: string): SettingsError['costs'] {
-  if (KEEPS_THE_FILE.some((re) => re.test(message))) return 'field';
+  if (IGNORES_THE_FIELD.some((re) => re.test(message))) return 'field';
+  if (REMOVES_ARRAY_ELEMENTS.some((re) => re.test(message))) return 'elements';
   if (REFUSES_THE_FILE.some((re) => re.test(message))) return 'file';
   return 'unknown';
 }
+
+/**
+ * The costs that leave the file applying. Named once, because `validityOf` asks "did the
+ * file survive" and must keep answering yes for every member of the partial-acceptance
+ * family -- a third member added to `costOf` and forgotten here would take a live file to
+ * `not-checked`, which is quiet but still a lost detection.
+ */
+const PARTIAL_ACCEPTANCE: ReadonlySet<SettingsError['costs']> = new Set(['field', 'elements']);
 
 /**
  * Every entry of the `Invalid settings` block, or none when there is no block.
@@ -235,7 +263,7 @@ export function parseInvalidSettings(text: string): SettingsError[] {
 export function validityOf(errors: readonly SettingsError[]): SettingsValidity {
   if (!errors.length) return 'accepted';
   if (errors.some((e) => e.costs === 'file')) return 'discarded';
-  return errors.every((e) => e.costs === 'field') ? 'field-dropped' : 'not-checked';
+  return errors.every((e) => PARTIAL_ACCEPTANCE.has(e.costs)) ? 'field-dropped' : 'not-checked';
 }
 
 /**

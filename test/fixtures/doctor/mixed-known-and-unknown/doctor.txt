@@ -1,0 +1,22 @@
+Claude Code doctor
+
+Running: native (2.1.224)
+Commit: 8a2a469b68f9
+Platform: darwin-arm64
+Path: /Users/deanhicks/.local/share/claude/versions/2.1.224
+Config install method: native
+Search: OK (bundled)
+Auto-updates: disabled (set by env: DISABLE_AUTOUPDATER)
+Auto-update channel: latest
+Last update attempt: success → 2.1.222 (2026-08-05)
+
+Invalid settings
+- /private/tmp/claude-501/-Users-deanhicks-claude-claude-quartermaster/cf24f1e7-7602-44e0-bdfb-57c680cb4dcd/scratchpad/dea147-probe/.claude/settings.json › hooks: "hooks" must be an object mapping event names to matcher arrays; received number. This field was ignored.
+- /private/tmp/claude-501/-Users-deanhicks-claude-claude-quartermaster/cf24f1e7-7602-44e0-bdfb-57c680cb4dcd/scratchpad/dea147-probe/.claude/settings.json › extraKnownMarketplaces.karpathy-skills: Invalid marketplace entry was ignored: source: Invalid input: expected object, received string
+
+Remote Control
+Control this session from claude.ai/code or the Claude mobile app
+
+No installation issues found.
+
+For a full setup checkup that can also fix issues, run /doctor in a Claude Code session.

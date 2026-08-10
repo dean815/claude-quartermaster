@@ -91,6 +91,13 @@ const EXPECTED: Record<string, ExpectedFinding[]> = {
   // entries that apply. First-party says `enabled: true` for both.
   'deny-nonstring-elements': [],
   'allow-nonstring-elements': [],
+  // Live config twice over: a whole field ignored and three array elements removed, in
+  // one file Claude Code applies. DEA-149's detector reports it; this one must not.
+  'dropped-field-and-elements': [],
+  // `not-checked`, because the message is a partial acceptance in words no pattern
+  // covers. Nothing may be claimed about a file whose fate was not established.
+  'hook-entry-ignored': [],
+  'mixed-known-and-unknown': [],
   'discarded-permissions-deny': [
     { file: 'settings.json', keys: ['permissions.deny'], byKey: { enabledPlugins: 1 } },
   ],
