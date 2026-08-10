@@ -86,7 +86,7 @@
     },
     {
       "name": "mixed-known-and-unknown",
-      "note": "One recognised partial acceptance and one nobody recognises, in the same file: `hooks: 42` says \"This field was ignored.\" and 2.1.224's marketplace message says something neither family covers. `validityOf` is a lattice, so the file is `not-checked` -- and it still carries a `field` error, which is the only shape in which a detector guarding on the error alone would report a file whose fate was never established.",
+      "note": "Two partial-acceptance units in one file first-party applies: `hooks: 42` goes whole and says \"This field was ignored.\", and 2.1.224's marketplace message drops one entry of `extraKnownMarketplaces` -- DEA-147's own incident key, which voided the file entire on 2.1.221. Recorded when the second was recognised by nothing, which made this the only instance of `not-checked` carrying a recognised `field` error; DEA-152 taught the classifier that message, so what it pins now is two units side by side and the state it used to hold is constructed in test/dropped-field.test.ts.",
       "claudeVersion": "2.1.224 (Claude Code)",
       "enabled": true,
       "files": [
@@ -95,7 +95,7 @@
     },
     {
       "name": "hook-entry-ignored",
-      "note": "A third partial-acceptance message, found on 2.1.224: `hooks.PreToolUse` says \"This entry was ignored.\" and the file still applies. No pattern recognises it, so it classifies `not-checked` carrying schema errors -- the failure direction DEA-151 chose, which until this recording had no first-party instance and could only be constructed.",
+      "note": "A third partial-acceptance message, found on 2.1.224: `hooks.PreToolUse` says \"This entry was ignored.\" -- one word off the sentence FIELD_IGNORED_NOTE pins -- and the file still applies. It classified `not-checked` when recorded, which was DEA-151's chosen failure direction getting its first first-party instance; DEA-152 recognises it as the `entry` unit, one event of the `hooks` record, reported by key with no count because what it costs is unmeasured.",
       "claudeVersion": "2.1.224 (Claude Code)",
       "enabled": true,
       "files": [
