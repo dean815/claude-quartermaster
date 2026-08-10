@@ -124,6 +124,21 @@ const EXPECTED: Record<string, ExpectedFinding[]> = {
   'valid-local-over-discarded': [
     { file: 'settings.json', keys: ['permissions.deny'], byKey: { enabledPlugins: 1 } },
   ],
+  // Silent here until DEA-153, and the silence was the bug this file exists to prevent.
+  // `Invalid input` refuses the file whole -- measured on 2.1.224 across four malformations
+  // of an `enabledPlugins` value, `plugin list --json` as the oracle -- but it matched no
+  // pattern, so the file read `not-checked` and nothing could be claimed about it. The
+  // entry it names is dead and this now says so. Placed by its key rather than its message,
+  // which is why `hook-entry-ignored` above is still correctly silent: that one is a
+  // partial acceptance whose message no pattern covers either, and the two states are only
+  // distinguishable because neither was guessed at.
+  'unplaced-plugin-entry': [
+    {
+      file: 'settings.local.json',
+      keys: ['enabledPlugins.bogus@nowhere'],
+      byKey: { enabledPlugins: 1 },
+    },
+  ],
 };
 
 const total = (e: ExpectedFinding) => Object.values(e.byKey).reduce((a, b) => a + b, 0);

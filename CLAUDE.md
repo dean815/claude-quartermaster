@@ -408,6 +408,35 @@ guard in `planToggles` — `sha256(original) !== stage.hash` — is **ungated**:
 leaves all 605 tests green, because the window it covers is between two `readFileSync`
 calls inside one function and nothing outside can open it.
 
+**Evidence about a key is not evidence about a message (DEA-153).** DEA-112 met a fifth
+`doctor` message — the bare `Invalid input`, zod's generic fallback with no noun in it —
+and left it unplaced, so the file read `not-checked`, `discardedSettings` said nothing,
+and `qm audit --full` reported dead `enabledPlugins` entries as live. That is DEA-147's
+own incident arriving through the door DEA-151 opened on purpose. **The fix was two words
+away and taking it would have been wrong**: these same words already sit on the *partial
+acceptance* side of this classifier, inside 2.1.224's `Invalid marketplace entry was
+ignored: source: Invalid input: expected object, received string`, on a file that applies.
+Only `^…$` anchoring keeps them apart, and anchoring is a property of our pattern rather
+than of first-party prose. So the message was measured before it was placed: **27 malformed
+shapes on 2.1.224, one scratch project each, `claude plugin list --json` as the oracle.**
+The whole message is exactly `Invalid input` under `enabledPlugins.<id>` and **no other
+key** — across four malformations of the value (`42`, `"true"`, `{}`, `null`) — and every
+one refuses the file whole. Nothing produced it on a file that survived. That is evidence
+about one key, so `REFUSES_UNDER_KEY` is scoped to one key; a keyless pattern would place
+it under keys nobody has probed, and a wrong `file` fabricates a high-severity finding
+about working config. The prefix is `enabledPlugins.` and not an equality, because the
+printed key carries a plugin id holding its own `@` and `.`.
+**The scope is invisible to every recording, and that was measured too.** Dropping
+`key.startsWith(r.keyPrefix)` left all 605 tests green — every recording of the message is
+under the one key, so a keyless match agrees with all of them. The case that separates them
+is *constructed* and says so, for the reason the invented-message test does: it asserts
+which way the classifier errs on a key it has no evidence about, and a recording can only
+stand for a key first-party has already spoken about. The day it fails: `Invalid input`
+under a **second** refusing key reads `not-checked` until someone probes it — narrow, the
+safe direction, still a lost detection. And this spent the last recording of both `unknown`
+and `not-checked`-carrying-errors: all 13 fixtures now classify into a known family, so
+DEA-149's validity guard is gated only by constructed cases — re-verified, it still reddens.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32

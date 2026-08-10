@@ -246,13 +246,16 @@ const PARSED: Record<string, Array<{ key: string; costs: SettingsError['costs'];
     { key: 'hooks', costs: 'field', notes: 0 },
     { key: 'extraKnownMarketplaces.karpathy-skills', costs: 'entry', notes: 0 },
   ],
-  // `unknown` with a live instance again (DEA-112). `Invalid input` is what 2.1.224 says
-  // about a malformed entry of `enabledPlugins`, and it belongs to neither recognised
-  // family -- so the file reads `not-checked` while carrying an error, which is the state
-  // DEA-151 built the default around. It is left unrecognised on purpose: the same message
-  // is zod's generic fallback and could mean either thing under a key nobody has probed,
-  // and `qm set` does not need it placed to be safe -- it refuses on the state itself.
-  'unplaced-plugin-entry': [{ key: 'enabledPlugins.bogus@nowhere', costs: 'unknown', notes: 0 }],
+  // Placed by its key, not its message (DEA-153). DEA-112 recorded this reading `unknown`
+  // and left it there: `Invalid input` is zod's generic fallback and one key is not
+  // evidence about a family. 27 malformed shapes on 2.1.224, one scratch project each with
+  // `plugin list --json` as the oracle, supplied the evidence that was missing -- the whole
+  // message is exactly `Invalid input` under `enabledPlugins.<id>` and no other key, across
+  // four malformations of the value, and every one refuses the file. So it is `file`, and
+  // the pattern is scoped to the key it was measured under rather than widened to the
+  // message, which still appears inside a *partial acceptance* on the other side of this
+  // classifier.
+  'unplaced-plugin-entry': [{ key: 'enabledPlugins.bogus@nowhere', costs: 'file', notes: 0 }],
   'valid-local-over-discarded': [{ key: 'permissions.deny', costs: 'file', notes: 1 }],
 };
 
@@ -382,6 +385,41 @@ describe('the Invalid settings block, as claude doctor writes it', () => {
     // ...but a confirmed whole-file failure settles it, because the file is gone whatever
     // else was said about it.
     assert.equal(validityOf([{ ...err('x'), costs: 'file' }, err(invented)]), 'discarded');
+  });
+
+  /**
+   * The key scope on `Invalid input` is the whole judgement of DEA-153, and the fixture set
+   * cannot see it.
+   *
+   * Measured: dropping `key.startsWith(r.keyPrefix)` from `costOf` leaves all 605 tests
+   * green. Every recording of that message is under `enabledPlugins.`, so a keyless match
+   * agrees with all of them -- the classifier would then place it as a refusal under keys
+   * nobody has probed, which is the fabricated-finding failure DEA-151 made the default to
+   * prevent, and nothing would say so.
+   *
+   * The case that separates them has to be **constructed**, and no probing can change that:
+   * 27 malformed shapes on 2.1.224 produced the bare message under exactly one key, so a
+   * recording of it under a second key is a recording of something first-party does not
+   * currently do. What this asserts is which way the classifier errs on a key it has no
+   * evidence about -- the same reason the invented-message test above stays invented.
+   */
+  test('the same message under another key is not placed', () => {
+    const block = (key: string) => `Invalid settings\n- /s.json › ${key}: Invalid input\n`;
+    const costsFor = (key: string) => parseInvalidSettings(block(key))[0]?.costs;
+
+    // The measured key, and the id-carrying form it actually prints in.
+    assert.equal(costsFor('enabledPlugins.bogus@nowhere'), 'file');
+    assert.equal(costsFor('enabledPlugins.a.b@c'), 'file');
+
+    // Everything else: no evidence, so no placement. A keyless pattern returns `file` here
+    // and this is the only thing that notices.
+    for (const key of ['skillOverrides.some-skill', 'hooks.PreToolUse', 'env.VAR', 'permissions.deny', 'model']) {
+      assert.equal(costsFor(key), 'unknown', `${key} was placed on no evidence`);
+    }
+
+    // The prefix is a prefix of the *dotted path*, not a substring of the key: a key that
+    // merely mentions the word must not inherit the scope.
+    assert.equal(costsFor('nested.enabledPlugins.x'), 'unknown');
   });
 
   /**

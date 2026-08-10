@@ -192,6 +192,46 @@ const REFUSES_THE_FILE: readonly RegExp[] = [
 ];
 
 /**
+ * Refusals recognised **only under a named key** (DEA-153).
+ *
+ * `Invalid input` is a schema validator's generic fallback with no noun in it, so unlike
+ * every pattern above it says nothing about what failed or what happened next. Measured on
+ * 2.1.224 across 27 malformed shapes, one scratch project each, `claude plugin list --json`
+ * as the oracle: the whole message is exactly `Invalid input` under `enabledPlugins.<id>`
+ * and **nowhere else**, for four different malformations of the value -- `42`, `"true"`,
+ * `{}`, `null` -- and every one refuses the file whole. No key produced it on a file that
+ * survived.
+ *
+ * **Keyed rather than added to `REFUSES_THE_FILE`, because 27 shapes is evidence about one
+ * key and not about the message.** That is DEA-152's own standard, applied to the case that
+ * tempts hardest: the fix is two words away and the bug it closes is live. A bare pattern
+ * would classify `file` under keys nobody has probed, and if any of those partially accepts
+ * the result is a fabricated high-severity finding about working config -- DEA-147's
+ * failure, which DEA-151 made the default to prevent.
+ *
+ * It is not a hypothetical collision either. These two words already appear on the *other*
+ * side of this classifier, inside 2.1.224's marketplace message:
+ *
+ *     Invalid marketplace entry was ignored: source: Invalid input: expected object, received string
+ *
+ * That file applies. Only the `^...$` anchoring keeps the two apart, and anchoring is a
+ * property of this pattern rather than of the prose -- first-party is free to print the
+ * bare form under a key that survives, and on that day a keyless match is wrong in the
+ * expensive direction while this one merely goes back to `unknown`.
+ *
+ * The cost is the one DEA-152 weighed and accepted: a fourth open set, and a patch per key
+ * rather than per message. The day it fails: a release that emits `Invalid input` under a
+ * *second* refusing key reads `not-checked` until someone probes it -- narrow, which is the
+ * safe direction, and still a lost detection.
+ *
+ * The prefix is `enabledPlugins.` and not an equality: the printed key carries the plugin
+ * id, which holds `@` and `.` of its own (`enabledPlugins.bogus@nowhere`).
+ */
+const REFUSES_UNDER_KEY: readonly { readonly keyPrefix: string; readonly message: RegExp }[] = [
+  { keyPrefix: 'enabledPlugins.', message: /^Invalid input$/ },
+];
+
+/**
  * What one error cost, and `unknown` when this classifier has never seen the message.
  *
  * **Two open lists, and only one of them may be the default (DEA-151).** Both families
@@ -240,11 +280,18 @@ const REFUSES_THE_FILE: readonly RegExp[] = [
  * regardless. So the reading is not a cheap stand-in for a measurement anyone could take.
  * It is the only thing that answers this question at all.
  */
-function costOf(message: string): SettingsError['costs'] {
+function costOf(key: string, message: string): SettingsError['costs'] {
   if (IGNORES_THE_FIELD.some((re) => re.test(message))) return 'field';
   if (IGNORES_THE_ENTRY.some((re) => re.test(message))) return 'entry';
   if (REMOVES_ARRAY_ELEMENTS.some((re) => re.test(message))) return 'elements';
   if (REFUSES_THE_FILE.some((re) => re.test(message))) return 'file';
+  // Last, and keyed. A message this specific carries no noun of its own, so it is placed
+  // by where it appeared rather than by what it says -- see `REFUSES_UNDER_KEY`. Tested
+  // after the keyless families so a future release that gives it a real sentence is
+  // matched on the sentence, not on the key it happened to be measured under.
+  if (REFUSES_UNDER_KEY.some((r) => key.startsWith(r.keyPrefix) && r.message.test(message))) {
+    return 'file';
+  }
   return 'unknown';
 }
 
@@ -290,12 +337,13 @@ export function parseInvalidSettings(text: string): SettingsError[] {
       const colon = rest.indexOf(': ');
       if (colon === -1) break;
       const message = rest.slice(colon + 2).trim();
+      const key = rest.slice(0, colon);
       out.push({
         path,
-        key: rest.slice(0, colon),
+        key,
         message,
         notes: [],
-        costs: costOf(message),
+        costs: costOf(key, message),
       });
       continue;
     }

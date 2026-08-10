@@ -382,15 +382,22 @@ describe('what stops a write', () => {
  *
  * The scenarios above construct their validity, which is what makes them table-driven and
  * what makes them a restatement of the rule. These two are the recordings: the real parser
- * over the real output, and the refusal that follows. `unplaced-plugin-entry` is the one
- * that matters -- `Invalid input` is a message no release of this repo recognises, so the
- * file reads `not-checked` and `discarded`-only would have written into it. Measured on
- * 2.1.224 with `claude plugin list --json`: a file carrying that message does not apply.
+ * over the real output, and the refusal that follows.
+ *
+ * **`unplaced-plugin-entry` changed branch and not outcome (DEA-153), which is the point of
+ * having it here.** It read `not-checked` when DEA-112 recorded it, and refused because
+ * `targetValidity` keys on the *state* -- `not-checked` carrying schema errors -- rather
+ * than on any message. DEA-153 then placed `Invalid input` under `enabledPlugins.` as a
+ * refusal, so the same bytes now read `discarded` and refuse one branch earlier. A write
+ * tool that only refused on `discarded` would have written into this file for the whole
+ * window between those two issues; one that only refused on `not-checked`-with-errors would
+ * start writing into it today. Both branches are load-bearing, and this case has now been
+ * on each side of that line.
  */
 describe('and the same refusals from a recorded doctor run', () => {
   for (const [name, expected] of [
     ['discarded-permissions-deny', 'target-discarded'],
-    ['unplaced-plugin-entry', 'target-unplaced'],
+    ['unplaced-plugin-entry', 'target-discarded'],
   ] as const) {
     test(`${name} refuses with ${expected}`, () => {
       const recorded = { name, note: '', enabled: false, files: [] };
