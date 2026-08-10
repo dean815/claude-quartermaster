@@ -212,15 +212,17 @@ export function applyPlan(plan: TogglePlan, opts: ApplyOptions): ApplyResult {
  *
  * The target path is slugged into the filename the way `memorySlug` slugs one for Claude
  * Code's own layout, so two projects' backups never collide and a directory listing is
- * readable without opening anything. Kept to a tail of 150 characters: a filename has a
- * length limit and an absolute path does not.
+ * readable without opening anything. A filename has a length limit and an absolute path
+ * does not, so a long one keeps its tail -- the project and the filename, which is the
+ * half worth reading -- cut back to a segment boundary rather than mid-word.
  */
 function writeBackup(plan: TogglePlan, opts: ApplyOptions): string {
   const dir = backupsDir(opts.state);
   mkdirSync(dir, { recursive: true });
   const stamp = opts.now.toISOString().replaceAll(':', '-').replace('.', '-');
   const slug = plan.target.replaceAll('/', '-');
-  const path = join(dir, `${stamp}${slug.slice(-150)}`);
+  const cut = slug.slice(-150);
+  const path = join(dir, `${stamp}${cut === slug ? cut : cut.slice(Math.max(0, cut.indexOf('-')))}`);
   writeFileSync(path, plan.before);
   return path;
 }
