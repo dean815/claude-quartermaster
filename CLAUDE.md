@@ -437,6 +437,34 @@ safe direction, still a lost detection. And this spent the last recording of bot
 and `not-checked`-carrying-errors: all 13 fixtures now classify into a known family, so
 DEA-149's validity guard is gated only by constructed cases — re-verified, it still reddens.
 
+**Two entries can be jointly redundant while neither is redundant alone (QM-43).**
+`resolveCell` decided `origin` by removing **all** project-scope links at once, so a cell
+whose project files *disagree* and land back on the inherited value read `restated` — and
+`restated-entries` reported it under *"These change nothing"*, advising a delete that flips
+the plugin. `origin` was right as a cell property and wrong as a price for an *entry*:
+removing both project links really does inherit that value, but removing the winner alone
+moves it to what the loser says. DEA-149's unit confusion, arriving on the resolver axis.
+So `Origin` gains a fourth value, `round-trip`, discriminated on the chain rather than the
+value: **every project-scope link carrying the winner means inert; links that disagree mean
+the winner is working.** Asked of the links, never by re-resolving a shortened chain, which
+would agree with whatever the classifier does.
+**It is a fourth `Origin` and not a second opinion inside the detector that noticed**,
+because `resolveMcpServer` pushes two links at `project` scope *by construction* —
+`.mcp.json` declaring, the per-project deny-list refusing — so the shape is reachable with
+no settings file involved, `restated-entries` is plugins-only, and `qm serve` renders MCP
+cells through this same field. A detector-only repair cannot reach that cell and leaves two
+definitions of the word in the tree.
+**The corpus already had one, which is how much this was not hypothetical.** `skill-04` in
+the differential fixture's `probe-skill-chain` is `project = off`, `local = on`, no user
+link: captured to probe exactly this chain and mislabelled `restated` ever since. It is the
+only cell in 2,565 that moves. On the live machine **nothing** moves — 14 findings over 87
+entries before and after — which is the check that the discriminator did not overreach.
+The day it fails: `PROJECT_SCOPES` has two members, so "the links disagree" is today "the
+two files disagree", and any future surface pushing two links at one scope inherits the new
+value without anyone deciding it should. Widening `restated-entries` back to include
+`round-trip` left all 606 tests green until a **plugin-axis** case existed — the fixture
+carried the shape only on the skill axis, and that detector never looks there.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32

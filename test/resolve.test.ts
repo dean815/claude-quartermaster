@@ -193,6 +193,44 @@ describe('MCP servers', () => {
     assert.equal(cell.value, false);
     assert.equal(cell.chain.length, 0);
   });
+
+  /**
+   * `round-trip` reached with no settings file in it at all (QM-43).
+   *
+   * This axis pushes **two links at `project` scope by construction** — `.mcp.json`
+   * declaring a server, and `~/.claude.json`'s per-project deny-list refusing it — so it
+   * reaches the fourth origin through a different chain-building path than the plugin
+   * axis, where the two links come from two different files at two different scopes.
+   *
+   * The cell resolves `false` with nothing inherited, which is also what it would resolve
+   * to if the project said nothing — so the old comparison called it `restated`. The deny
+   * entry is the entire reason the server is off. No detector covers the MCP axis, but
+   * `qm serve` renders these cells through the same `origin`, which is why the repair had
+   * to live in `resolveCell` rather than inside the one detector that noticed.
+   */
+  test('a declared-then-denied server is in force, not restating', () => {
+    const p = project('/p', {
+      mcpJson: { path: '/p/.mcp.json', mcpServers: { docs: { type: 'http', url: 'https://d' } } },
+      entry: { disabledMcpServers: ['docs'] },
+    });
+    const cell = resolveMcpServer(workspace(null, [p]), p, 'docs');
+
+    assert.equal(cell.value, false, 'the deny-list wins');
+    assert.deepEqual(
+      cell.chain.map((l) => `${l.scope}=${String(l.value)}`),
+      ['project=true', 'project=false'],
+      'both links land at project scope — that is what makes this path different',
+    );
+    assert.equal(cell.origin, 'round-trip');
+
+    // Independent of the classifier: without the deny entry the server is on.
+    const declaredOnly = project('/p', { mcpJson: p.mcpJson });
+    assert.equal(
+      resolveMcpServer(workspace(null, [declaredOnly]), declaredOnly, 'docs').value,
+      true,
+      'removing the deny entry must turn the server on, or this is not the shape',
+    );
+  });
 });
 
 describe('enumeration', () => {

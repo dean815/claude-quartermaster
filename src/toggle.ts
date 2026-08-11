@@ -556,13 +556,20 @@ function notesFor(
   }
 
   for (const [pluginId, state] of resolved) {
-    if (state.after.origin !== 'restated') continue;
+    // `round-trip` and not `restated` (QM-43). This note exists for the write whose value
+    // moves while landing on what the project would have inherited, and that shape is
+    // `round-trip` by definition now: a `restated` result means every project-scope entry
+    // agrees with the winner, which is a write whose value did not move, which `noChange`
+    // refused before reaching here. The sentence explaining why the old label was not to
+    // be believed is gone with the label.
+    if (state.after.origin !== 'round-trip') continue;
     notes.push({
       code: 'would-restate',
       message:
-        `${pluginId} will read as a restated entry: with both project-scope files taken out, ` +
-        `this project would inherit ${state.after.value} anyway. It is still doing work here — ` +
-        `without it the plugin resolves ${state.now.value} — so this is a note and not a refusal.`,
+        `${pluginId} will resolve to ${state.after.value}, which is what this project would ` +
+        `inherit with its own settings files taken out — but the entry is in force, not ` +
+        `redundant: without it the plugin resolves ${state.now.value}, because the repo's ` +
+        `tracked settings.json says so.`,
     });
   }
 

@@ -134,6 +134,14 @@ td.c[data-o=restated]{font-weight:700;background:rgba(232,179,57,.13);
   box-shadow:inset 0 0 0 1px rgba(232,179,57,.35)}
 td.c[data-o=restated]::before{content:"\\25B3";position:absolute;left:1px;top:-2px;
   font-size:8px;line-height:1;color:var(--warn)}
+/* round-trip is bold like overridden and carries no warning tint, because the entry is in
+   force -- it must not read as the redundant state it resolves alongside (QM-43). Its own
+   glyph, a filled triangle against restated's hollow one, so the two are distinguishable
+   in one glance without reading the tooltip. (No backticks in here: this whole page is a
+   template literal, and one closes it.) */
+td.c[data-o=round-trip]{font-weight:700}
+td.c[data-o=round-trip]::before{content:"\\25B2";position:absolute;left:1px;top:-2px;
+  font-size:8px;line-height:1;color:var(--part)}
 td.c[data-s]::after{content:"";position:absolute;right:1px;top:1px;width:8px;height:8px;
   opacity:.85;background-repeat:no-repeat;background-size:8px 8px}
 td.c[data-s=user]::after{background-image:var(--i-user)}
@@ -200,6 +208,7 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
   <span><i style="opacity:.45;font-style:italic">glyph</i> inherited</span>
   <span><b>glyph</b> overridden</span>
   <span><i style="color:var(--warn)">&#9651;</i> restated &#8212; redundant</span>
+  <span><i style="color:var(--part)">&#9650;</i> round-trip &#8212; in force</span>
   <span class="bar">|</span>
   <span>decided at
     <span class="lgi" data-s="user"></span> user
@@ -258,10 +267,18 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
     'true': 'enabled', 'false': 'disabled', 'on': 'on', 'name-only': 'name-only',
     'user-invocable-only': 'user-invocable-only', 'off': 'off'
   };
-  /** Most interesting first: the grouping answers "what is anyone actually scoping". */
-  var RANK = { overridden: 0, restated: 1, inherited: 2 };
+  /**
+   * Most interesting first: the grouping answers "what is anyone actually scoping".
+   *
+   * round-trip sits above restated and below overridden because it is a project deciding
+   * something -- its entry is in force -- that happens to land on the inherited value.
+   * Ranking it with restated would file a live decision under "changes nothing", which is
+   * the confusion QM-43 exists to undo.
+   */
+  var RANK = { overridden: 0, 'round-trip': 1, restated: 2, inherited: 3 };
   var GROUPS = [
     ['overridden', 'overridden in at least one project'],
+    ['round-trip', 'set twice and back again \\u2014 in force, and not redundant'],
     ['restated', 'restated in at least one project \\u2014 changes nothing today'],
     ['inherited', 'inherited everywhere \\u2014 no project has an opinion']
   ];
@@ -482,7 +499,7 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
 
   function tableHtml(sec) {
     var rows = S[sec.list];
-    var buckets = { overridden: [], restated: [], inherited: [] };
+    var buckets = { overridden: [], 'round-trip': [], restated: [], inherited: [] };
     for (var i = 0; i < rows.length; i++) buckets[groupOf(rows[i])].push(i);
 
     var h = ['<table class="g"><thead><tr><th class="rh">', esc(sec.title), '</th>'];
@@ -768,6 +785,9 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
     var won = cell.chain.length ? cell.chain[cell.chain.length - 1] : null;
     var why = cell.origin === 'restated'
       ? 'set to the value it would have inherited anyway'
+      : cell.origin === 'round-trip'
+      ? 'set more than once here, the entries disagree, and the winner lands back on the '
+        + 'inherited value \u2014 it is in force, and removing it flips this cell'
       : cell.origin === 'inherited' ? 'this project set nothing'
       : 'this project disagrees with what it would inherit';
 
@@ -800,7 +820,7 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
 
   function showRow(kind, i) {
     var row = rowOf(kind, i);
-    var counts = { overridden: 0, restated: 0, inherited: 0 };
+    var counts = { overridden: 0, 'round-trip': 0, restated: 0, inherited: 0 };
     row.cells.forEach(function (c) { counts[c.origin]++; });
     var cat = kind === 'plugin' ? ((CATS && CATS[row.id]) || UNCAT) : null;
     el('detail-body').innerHTML =
@@ -808,6 +828,7 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
       '<tr><td class="k">kind</td><td>' + esc(row.kind) + '</td></tr>' +
       (cat ? '<tr><td class="k">category</td><td>' + esc(cat) + '</td></tr>' : '') +
       '<tr><td class="k">across</td><td>' + counts.overridden + ' overridden \\u00b7 ' +
+      counts['round-trip'] + ' round-trip \\u00b7 ' +
       counts.restated + ' restated \\u00b7 ' + counts.inherited + ' inherited</td></tr>' +
       '</table>' + costDetail(kind, row.id);
     el('detail').hidden = false;

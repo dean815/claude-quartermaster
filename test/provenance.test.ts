@@ -143,7 +143,12 @@ const SKILL_CENSUS: Record<string, number> = {
   'off/overridden': 1,
   'off/restated': 1,
   'on/inherited': 79,
-  'on/restated': 1,
+  // `on/restated` until QM-43, and the corpus had the bug in it the whole time. This is
+  // `skill-04` in `probe-skill-chain`: `project = off`, `local = on`, and no user link, so
+  // removing *both* project links leaves the `on` fallback and the old comparison called
+  // the cell inert. Removing the winning link alone leaves `off`. The fixture was captured
+  // to probe this exact chain shape and the model had been mislabelling it since.
+  'on/round-trip': 1,
   'user-invocable-only/overridden': 2,
 };
 
@@ -577,7 +582,7 @@ describe('the served grid is the resolved model', () => {
    * domain itself, and importing them means a fifth value added upstream fails here until
    * the fixture carries one. A restated list would let it in silently.
    */
-  test('the skill axis carries all four values and all three origins', () => {
+  test('the skill axis carries all four values and all four origins', () => {
     const cells = served.skills.flatMap((r) => r.cells);
 
     const census: Record<string, number> = {};
@@ -594,7 +599,28 @@ describe('the served grid is the resolved model', () => {
     );
     assert.deepEqual(
       [...new Set(cells.map((c) => c.origin))].sort(),
-      ['inherited', 'overridden', 'restated'],
+      ['inherited', 'overridden', 'restated', 'round-trip'],
+    );
+
+    // The `round-trip` cell, asserted on the chain rather than on the classification that
+    // produced it (QM-43). Reading the origin back through `resolveCell` and calling that a
+    // check is the `memorySlug` defect -- it agrees with whatever the classifier does. What
+    // makes this cell load-bearing is a fact about the served links: its project-scope
+    // entries disagree, and the loser is what the cell falls back to.
+    const roundTrip = cells.filter((c) => c.origin === 'round-trip');
+    assert.equal(roundTrip.length, 1, 'the fixture no longer carries the round-trip shape');
+    const rt = roundTrip[0]!;
+    const projectLinks = rt.chain.filter((l) => l.scope === 'project' || l.scope === 'local');
+    assert.deepEqual(
+      projectLinks.map((l) => `${l.scope}=${String(l.value)}`),
+      ['project=off', 'local=on'],
+      'the two project-scope links must disagree, or this is not the shape',
+    );
+    assert.equal(rt.value, 'on', 'the winner is the local entry');
+    assert.notEqual(
+      rt.chain.at(-2)?.value ?? 'on',
+      rt.value,
+      'removing the winning link must move the value -- that is what "in force" means',
     );
 
     // Local scope, on the skill axis, for the reason `probe-local-*` exist on the plugin

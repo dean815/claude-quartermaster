@@ -27,6 +27,7 @@ import {
   type Finding,
   type ServerObservation,
 } from '../src/detect.ts';
+import { resolvePlugin } from '../src/resolve.ts';
 import { loadWorkspace } from '../src/surfaces/read.ts';
 import { measureProject, measureTranscript } from '../src/cost/transcript.ts';
 import { readInventories, type PluginInventory } from '../src/inventory.ts';
@@ -304,6 +305,49 @@ describe('restated-entries', () => {
       settings: settings('/p/.claude/settings.json', { enabledPlugins: { a: false } }),
     });
     assert.deepEqual(restatedEntries(ctx({ userSettings: user, projects: [p] })), []);
+  });
+
+  /**
+   * The load-bearing entry that resolves to the inherited value anyway (QM-43).
+   *
+   * The tracked `settings.json` disables what user scope enables, and `settings.local.json`
+   * turns it back on. Removing all project-scope links leaves `true`, which is what the
+   * cell resolves to -- so before the fourth `Origin` value this read `restated` and this
+   * detector reported it under *"These change nothing"*, advising a delete that would
+   * disable the plugin.
+   *
+   * **This case is why the plugin axis needs its own fixture.** The differential corpus
+   * carries the shape on the *skill* axis (`skill-04` in `probe-skill-chain`), and
+   * `restatedEntries` is plugins-only -- so widening its filter back to include
+   * `round-trip` left all 606 tests green until this existed. Measured, not assumed.
+   *
+   * The value assertions come first and stand on their own: whatever `origin` is called,
+   * the plugin must resolve `true` here and `false` without the local file. A test that
+   * only pinned the label would agree with whatever the classifier does.
+   */
+  test('does not fire for a local entry that overrides the project file back', () => {
+    const p = project('/p', {
+      settings: settings('/p/.claude/settings.json', { enabledPlugins: { a: false } }),
+      localSettings: settings('/p/.claude/settings.local.json', { enabledPlugins: { a: true } }),
+    });
+    const ws = ctx({ userSettings: user, projects: [p] });
+
+    const cell = resolvePlugin(ws.ws, p, 'a');
+    assert.equal(cell.value, true, 'the local entry wins');
+    assert.equal(cell.origin, 'round-trip');
+
+    // Independent of the classifier: drop the local file and the plugin goes off. That is
+    // the whole claim -- the entry is in force, so it is not one to advise deleting.
+    const withoutLocal = project('/p', {
+      settings: settings('/p/.claude/settings.json', { enabledPlugins: { a: false } }),
+    });
+    assert.equal(
+      resolvePlugin(ctx({ userSettings: user, projects: [withoutLocal] }).ws, withoutLocal, 'a').value,
+      false,
+      'removing the local entry must flip the plugin -- otherwise this is not the shape',
+    );
+
+    assert.deepEqual(restatedEntries(ws), []);
   });
 });
 
