@@ -11,6 +11,16 @@
  *
  *     node --experimental-strip-types scripts/measure-restated.ts
  *
+ * **An instrument, not a gate.** Nothing runs this -- not `npm test`, not CI -- so it
+ * cannot fail a build and cannot stop a regression. It answers a question about *this
+ * machine's* configuration on demand; the properties that must hold for everyone are
+ * pinned in `test/resolve.test.ts` and `test/detect.test.ts` instead.
+ *
+ * **Since QM-43 it also cross-checks `resolveCell`.** The load-bearing test below is an
+ * independent second route to what `origin === 'round-trip'` now means, and the run prints
+ * loudly if the two ever disagree. That is the point of keeping the computation rather than
+ * reading the origin: two answers from different routes, not one answer twice.
+ *
  * **Zero is the answer this exists to re-check.** It was zero on 2026-08-10, which is the
  * argument in DEA-154 for repairing the model rather than only pinning it -- the shape has
  * never occurred, and `qm set` writing `settings.local.json` is what arms it. Nothing here
@@ -53,7 +63,11 @@ interface Tally {
   /** Cells whose chain holds more than one project-scope link -- the precondition. */
   twoLinks: number;
   loadBearing: number;
+  /** Cells `resolveCell` itself calls `round-trip`. Should equal `loadBearing`. */
+  roundTrip: number;
   rows: string[];
+  /** Cells where the two disagree. Should always be empty; see the header. */
+  disagreements: string[];
 }
 
 function tally<V>(
@@ -62,24 +76,44 @@ function tally<V>(
   resolve: (project: ProjectRecord, id: string) => Cell<V>,
   fallback: V,
 ): Tally {
-  const t: Tally = { ids: ids.length, restated: 0, twoLinks: 0, loadBearing: 0, rows: [] };
+  const t: Tally = {
+    ids: ids.length,
+    restated: 0,
+    twoLinks: 0,
+    loadBearing: 0,
+    roundTrip: 0,
+    rows: [],
+    disagreements: [],
+  };
 
   for (const project of alive) {
     for (const id of ids) {
       const cell = resolve(project, id);
       if (cell.chain.filter((l) => PROJECT_SCOPES.includes(l.scope)).length > 1) t.twoLinks++;
-      if (cell.origin !== 'restated') continue;
-      t.restated++;
+      if (cell.origin === 'restated') t.restated++;
+      if (cell.origin === 'round-trip') t.roundTrip++;
+      if (cell.origin !== 'restated' && cell.origin !== 'round-trip') continue;
 
       // What the cell resolves to with the winning link taken out, and nothing else.
       // Read straight off the chain rather than back through `resolveCell`, because
-      // `resolveCell`'s classification is the thing under test: a check that asked it
-      // would agree with whatever it does.
+      // `resolveCell`'s classification is the thing this cross-checks: a check that asked
+      // it would agree with whatever it does.
       const withoutWinner = cell.chain.at(-2)?.value ?? fallback;
-      if (Object.is(withoutWinner, cell.value)) continue;
-
-      t.loadBearing++;
+      const bearing = !Object.is(withoutWinner, cell.value);
       const chain = cell.chain.map((l) => `${l.scope}=${String(l.value)}`).join(' ');
+
+      // The whole point of keeping this computation after QM-43 taught `resolveCell` the
+      // same distinction: two answers that must agree, from two different routes. If they
+      // ever part, one of them is wrong and this says so rather than quietly picking one.
+      if (bearing !== (cell.origin === 'round-trip')) {
+        t.disagreements.push(
+          `${project.path}  ${id}  ${chain} -> ${String(cell.value)}  ` +
+            `origin=${cell.origin} but removing the winner ${bearing ? 'moves' : 'does not move'} the value`,
+        );
+      }
+
+      if (!bearing) continue;
+      t.loadBearing++;
       t.rows.push(`${project.path}  ${id}  ${chain} -> ${String(cell.value)}`);
     }
   }
@@ -155,23 +189,36 @@ const armed = armedPairs(ws, alive);
 const col = (s: string | number, w: number) => String(s).padStart(w);
 
 console.log(`${alive.length} alive projects of ${ws.projects.length} records\n`);
-console.log('axis       ids  restated  2+ proj links  load-bearing');
+
+// The armed count first, because it is the finding. The load-bearing count is expected to
+// be zero and reads as an all-clear; what a reader needs to carry away is how close the
+// configuration sits to producing the shape, which is one `qm set` per armed pair.
+console.log(
+  `armed: ${armed.pairs} (project, plugin) pairs over ${armed.projects} projects where a ` +
+    'tracked\n       settings.json disables what user scope enables — one `qm set --on` each ' +
+    'from\n       producing the shape.\n',
+);
+
+console.log('axis       ids  restated  round-trip  2+ proj links  load-bearing');
 for (const [name, t] of axes) {
   console.log(
-    `${name.padEnd(8)}${col(t.ids, 5)}${col(t.restated, 10)}${col(t.twoLinks, 15)}${col(t.loadBearing, 14)}`,
+    `${name.padEnd(8)}${col(t.ids, 5)}${col(t.restated, 10)}${col(t.roundTrip, 12)}` +
+      `${col(t.twoLinks, 15)}${col(t.loadBearing, 14)}`,
   );
+}
+
+const disagreed = axes.flatMap(([name, t]) => t.disagreements.map((r) => `  ${name}  ${r}`));
+if (disagreed.length) {
+  console.log('\n!! resolveCell and the independent check DISAGREE — one of them is wrong:');
+  for (const row of disagreed) console.log(row);
+} else {
+  console.log('\nresolveCell agrees with the independent check on every cell.');
 }
 
 const found = axes.flatMap(([name, t]) => t.rows.map((r) => `  ${name}  ${r}`));
 if (found.length) {
-  console.log('\nload-bearing cells reported as restating the inherited value:');
+  console.log('\nload-bearing cells (origin `round-trip`):');
   for (const row of found) console.log(row);
 } else {
-  console.log('\nno load-bearing restated cell on any axis.');
+  console.log('no load-bearing cell on any axis.');
 }
-
-console.log(
-  `\narmed: ${armed.pairs} (project, plugin) pairs over ${armed.projects} projects where a\n` +
-    'tracked settings.json disables what user scope enables — one `qm set --on` each\n' +
-    'from producing the shape.',
-);

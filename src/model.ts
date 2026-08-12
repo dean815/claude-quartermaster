@@ -40,11 +40,26 @@ export function precedenceOf(scope: Scope): number {
  * - `inherited`  nothing set at project level; the project takes what it is given.
  * - `overridden` set at project level, and it differs from what would be inherited.
  * - `restated`   set at project level to the value it would have inherited anyway.
+ * - `round-trip` set at project level *more than once*, the entries disagree, and the
+ *                winner lands back on the inherited value.
  *
- * `restated` is the interesting one: it has no effect today, and it silently stops
- * tracking the global default the moment that default changes.
+ * `restated` has no effect today, and it silently stops tracking the global default the
+ * moment that default changes.
+ *
+ * **`round-trip` looks identical from outside the chain and is its opposite (QM-43).**
+ * Removing all project-scope links leaves the same value either way, which is why one
+ * comparison produced both for as long as it did. But `restated`'s entry can be deleted
+ * with nothing moving, and a `round-trip`'s winner is the entire reason the cell resolves
+ * as it does -- delete it and the value flips to what the *other* project-scope entry
+ * says. The pair is jointly redundant; neither member is redundant alone.
+ *
+ * The distinction is a property of the chain, not of the value: every project-scope link
+ * carrying the winner means inert, and links that disagree mean the winner is working.
+ * It exists as a fourth `Origin` rather than as a second opinion inside the one detector
+ * that noticed, because `qm serve` renders MCP cells through this same field and
+ * `resolveMcpServer` reaches the shape with no settings file involved at all.
  */
-export type Origin = 'inherited' | 'overridden' | 'restated';
+export type Origin = 'inherited' | 'overridden' | 'restated' | 'round-trip';
 
 /** One scope's contribution to a cell. Only scopes that actually set a value appear. */
 export interface ChainLink<V> {
@@ -91,16 +106,21 @@ export function resolveCell<V>(
   const winner = chain.at(-1);
   const value = winner ? winner.value : fallback;
 
-  const projectDecided = chain.some((l) => PROJECT_SCOPES.includes(l.scope));
-  if (!projectDecided) return { value, origin: 'inherited', chain };
+  const projectLinks = chain.filter((l) => PROJECT_SCOPES.includes(l.scope));
+  if (!projectLinks.length) return { value, origin: 'inherited', chain };
 
   // What this project would have resolved to had it said nothing at all.
   const withoutProject = chain.filter((l) => !PROJECT_SCOPES.includes(l.scope));
   const inheritedValue = withoutProject.at(-1)?.value ?? fallback;
 
-  return {
-    value,
-    origin: equals(value, inheritedValue) ? 'restated' : 'overridden',
-    chain,
-  };
+  if (!equals(value, inheritedValue)) return { value, origin: 'overridden', chain };
+
+  // The value equals what would be inherited, which used to be the whole of `restated`.
+  // It is only inert if *every* project-scope link says so: one dissenting link means the
+  // winner is overriding it, and removing the winner moves the value to what that link
+  // says rather than to the inherited one. Asked of the links rather than by re-resolving
+  // a shortened chain, because a check that re-entered this function would agree with
+  // whatever it does.
+  const allAgree = projectLinks.every((l) => equals(l.value, value));
+  return { value, origin: allAgree ? 'restated' : 'round-trip', chain };
 }

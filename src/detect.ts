@@ -257,6 +257,12 @@ function serviceOf(namespace: string): string {
 /**
  * A project restating a value it would inherit anyway. Does nothing today, and stops
  * tracking the global default the moment that default changes.
+ *
+ * **`round-trip` is deliberately not reported here (QM-43).** Both origins resolve to the
+ * value the project would have inherited, and until that issue one comparison produced
+ * both -- so this detector advised deleting entries that were the entire reason their cell
+ * resolved as it did. The discriminator now lives in `resolveCell`, where the grid reads
+ * it too, rather than as a second definition of "restated" kept in step by hand.
  */
 export function restatedEntries(ctx: AuditContext): Finding[] {
   const out: Finding[] = [];
@@ -268,7 +274,13 @@ export function restatedEntries(ctx: AuditContext): Finding[] {
     for (const id of ids) {
       const cell = resolvePlugin(ctx.ws, project, id);
       if (cell.origin === 'restated') {
-        restated.push(`${id} = ${cell.value} (also ${cell.value} at ${cell.chain[0]!.scope})`);
+        // The *link's* value and scope, not the winner's twice over. They agree on every
+        // cell this fires on today, because a `restated` chain is one where every
+        // project-scope link carries the winner -- but `chain[0]` is the lowest-precedence
+        // link and nothing makes it the user file, so printing `cell.value` against its
+        // scope is a claim this line has no standing to make.
+        const also = cell.chain[0]!;
+        restated.push(`${id} = ${cell.value} (also ${also.value} at ${also.scope})`);
       }
     }
     if (!restated.length) continue;
