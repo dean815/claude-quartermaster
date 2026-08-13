@@ -268,6 +268,45 @@ const CASES: Array<{ label: string; change: PendingChange; expect: Effect }> = [
     expect: 'reload',
   },
   { label: 'plugin naming no target at all', change: { kind: 'plugin', id: 'plain@m' }, expect: 'reload' },
+
+  /**
+   * The same three rows on the skill axis (QM-45).
+   *
+   * `skill` is the second kind `qm set` writes, and it is the one where the validity
+   * check has to run *before* `CACHE_SAFE_KINDS` rather than after: a skill toggle is
+   * cache-safe and, in a discarded file, decides nothing. Those are not the same answer,
+   * and a branch order that reached the cache-safe run first would give `reload` to a
+   * change that never happens -- which is `qm set`'s refusal and this classifier saying
+   * opposite things about one file. The `reload` rows below are what stops the fix from
+   * being "call every skill toggle `none`".
+   */
+  {
+    label: 'skill written into a discarded file',
+    change: {
+      kind: 'skill',
+      id: 'dataviz',
+      target: { source: '/void.json', sourceValidity: 'discarded' },
+    },
+    expect: 'none',
+  },
+  {
+    label: 'skill written into a field-dropped file',
+    change: {
+      kind: 'skill',
+      id: 'dataviz',
+      target: { source: '/part.json', sourceValidity: 'field-dropped' },
+    },
+    expect: 'reload',
+  },
+  {
+    label: 'skill written into an unchecked file',
+    change: {
+      kind: 'skill',
+      id: 'dataviz',
+      target: { source: '/dunno.json', sourceValidity: 'not-checked' },
+    },
+    expect: 'reload',
+  },
 ];
 
 type Classifier = (change: PendingChange, input: ClassifyInput) => Classification;
