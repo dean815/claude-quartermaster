@@ -34,23 +34,29 @@ import { NOT_CHECKED, readSettings } from '../src/surfaces/read.ts';
 import type { ClaudeJson, SettingsCheck, Workspace } from '../src/surfaces/types.ts';
 import { settingsFromDoctor } from '../src/delegate/doctor.ts';
 import {
+  AXES,
   CHECKS,
-  EMPTY_SETTINGS,
+  PLUGIN_AXIS,
+  SKILL_AXIS,
   TARGET_FILENAME,
-  WRITTEN_SETTINGS_KEY,
   describePlan,
   editsFor,
+  emptySettings,
   gitIgnoreState,
   namesWrittenKey,
   planEffect,
   planToggles,
+  showValue,
   targetFor,
   unifiedDiff,
+  type Axis,
+  type EntryValue,
   type PlanCheck,
   type PlanResult,
   type ToggleRefusalCode,
   type ToggleRequest,
 } from '../src/toggle.ts';
+import { SKILL_VALUES, type SkillValue } from '../src/model.ts';
 import { project } from './factories.ts';
 import { caseDir, doctorText, localPath, settingsPath } from './fixtures/doctor/load.ts';
 
@@ -109,7 +115,8 @@ function world(
     local?: string;
     localCheck?: SettingsCheck;
     projectSettings?: string;
-    user?: Record<string, boolean>;
+    /** User-scope keys, per axis. Both may be set; a scenario reads only its own. */
+    user?: { enabledPlugins?: Record<string, boolean>; skillOverrides?: Record<string, SkillValue> };
     asHome?: boolean;
     git?: boolean;
   } = {},
@@ -136,7 +143,7 @@ function world(
           validity: 'accepted',
           schemaErrors: [],
           droppedRuleElements: {},
-          enabledPlugins: files.user,
+          ...files.user,
           rest: {},
         }
       : null,
@@ -158,8 +165,10 @@ function world(
   };
 }
 
-const on = (id = 'p@m'): ToggleRequest[] => [{ pluginId: id, enable: true }];
-const off = (id = 'p@m'): ToggleRequest[] => [{ pluginId: id, enable: false }];
+const on = (id = 'p@m'): ToggleRequest[] => [{ id, value: true }];
+const off = (id = 'p@m'): ToggleRequest[] => [{ id, value: false }];
+/** One skill request, at whichever of the four states the scenario is about. */
+const skill = (value: SkillValue, id = 's-01'): ToggleRequest[] => [{ id, value }];
 
 // ---------------------------------------------------------------------------
 // The scenarios
@@ -168,11 +177,17 @@ const off = (id = 'p@m'): ToggleRequest[] => [{ pluginId: id, enable: false }];
 /**
  * What must happen, per situation. Literals: an expectation recomputed by calling
  * `planToggles` a second way would agree with whatever it does.
+ *
+ * `axis` defaults to the plugin one so every pre-QM-45 row reads unchanged and the skill
+ * rows are visibly the additions. It is not a second table: the point of the axis being a
+ * value is that one table exercises both, and `dropping one check reddens the gate` below
+ * therefore proves each guard on whichever axis reaches it.
  */
 interface Scenario {
   label: string;
   /** The guard this scenario exists for, or `null` where a plan is the right answer. */
   guard: string | null;
+  axis?: Axis;
   build(): World;
   requests: ToggleRequest[];
   expect: ToggleRefusalCode | 'planned';
@@ -295,7 +310,7 @@ const SCENARIOS: Scenario[] = [
           schemaErrors: [
             {
               path: 'x',
-              key: WRITTEN_SETTINGS_KEY,
+              key: PLUGIN_AXIS.settingsKey,
               message: 'Expected record, but received number. This field was ignored.',
               notes: [],
               costs: 'field',
@@ -317,22 +332,183 @@ const SCENARIOS: Scenario[] = [
   {
     label: 'the value it would inherit anyway',
     guard: 'no-change',
-    build: () => world('would-inherit', { user: { 'p@m': true } }),
+    build: () => world('would-inherit', { user: { enabledPlugins: { 'p@m': true } } }),
     requests: on(),
     expect: 'no-change',
   },
+
+  // -------------------------------------------------------------------------
+  // The skill axis (QM-45). Same table, same guards, four values.
+  // -------------------------------------------------------------------------
+
+  {
+    label: 'a skill written into a fresh project',
+    guard: null,
+    axis: SKILL_AXIS,
+    build: () => world('skill-fresh'),
+    requests: skill('off'),
+    expect: 'planned',
+  },
+  {
+    /**
+     * The refusal that would go missing if `noChange` compared against `false` rather
+     * than against the axis's own fallback. A skill nothing mentions is `on`, so asking
+     * for `on` moves nothing -- where the plugin-shaped comparison (`value !== enable`
+     * over booleans) would find `'on' !== true` and plan a write.
+     */
+    label: 'a skill asked for the value an unmentioned skill already has',
+    guard: 'no-change',
+    axis: SKILL_AXIS,
+    build: () => world('skill-default'),
+    requests: skill('on'),
+    expect: 'no-change',
+  },
+  {
+    label: 'a skill asked for the state the target already sets',
+    guard: 'no-change',
+    axis: SKILL_AXIS,
+    build: () =>
+      world('skill-already', { local: '{\n  "skillOverrides": {\n    "s-01": "name-only"\n  }\n}\n' }),
+    requests: skill('name-only'),
+    expect: 'no-change',
+  },
+  {
+    /**
+     * The row that separates four values from two, and the reason `noChange` compares
+     * with `Object.is` over the whole domain.
+     *
+     * `name-only` and `user-invocable-only` are both "not fully on" and both "not off",
+     * so every boolean-shaped comparison -- truthiness, `!== 'off'`, `=== fallback` --
+     * calls this a no-op and refuses a write that really does move the resolved value.
+     * A refusal is the quiet half of the collapse: nothing is written and nothing says
+     * the tool got the question wrong.
+     */
+    label: 'a skill moved between two non-default states',
+    guard: null,
+    axis: SKILL_AXIS,
+    build: () =>
+      world('skill-between', { local: '{\n  "skillOverrides": {\n    "s-01": "name-only"\n  }\n}\n' }),
+    requests: skill('user-invocable-only'),
+    expect: 'planned',
+  },
+  {
+    label: 'a skill written into a target Claude Code refuses whole',
+    guard: 'target-validity',
+    axis: SKILL_AXIS,
+    build: () =>
+      world('skill-discarded', {
+        local: '{\n  "permissions": 42\n}\n',
+        localCheck: {
+          validity: 'discarded',
+          schemaErrors: [
+            {
+              path: 'x',
+              key: 'permissions',
+              message: 'Expected object, but received number',
+              notes: [],
+              costs: 'file',
+            },
+          ],
+        },
+      }),
+    requests: skill('off'),
+    expect: 'target-discarded',
+  },
+  {
+    /**
+     * `namesWrittenKey` asked about the axis it was given, not about `enabledPlugins`.
+     *
+     * Its mirror image is the row below: the same file, the same dropped key, and a
+     * *plugin* write that must go through. Together they are the whole of why the axis
+     * is a required parameter there -- one of them fails whichever way a default is
+     * wrong, and neither fails on its own.
+     */
+    label: 'a skill written where doctor dropped skillOverrides',
+    guard: 'target-validity',
+    axis: SKILL_AXIS,
+    build: () => world('skill-key-ignored', droppedSkillOverrides()),
+    requests: skill('off'),
+    expect: 'target-ignores-key',
+  },
+  {
+    label: 'a plugin written where doctor dropped skillOverrides and nothing else',
+    guard: null,
+    build: () => world('plugin-past-skill-drop', droppedSkillOverrides()),
+    requests: on(),
+    expect: 'planned',
+  },
 ];
 
-/** Every scenario whose answer is not what it must be. */
-function runGate(checks: readonly PlanCheck[]): string[] {
+/**
+ * A file Claude Code keeps while ignoring its `skillOverrides` key.
+ *
+ * Constructed, and it says so: no release measured here drops either written key as a
+ * *field* -- every malformed `enabledPlugins` shape on 2.1.224 refuses the file entire,
+ * and `skillOverrides` has not been probed at all. It is a tripwire for the day one
+ * does, and it is shared by the two scenarios above so that they differ in exactly one
+ * thing: which axis is being written.
+ */
+function droppedSkillOverrides(): Parameters<typeof world>[1] {
+  return {
+    local: '{\n  "enabledPlugins": {},\n  "skillOverrides": {}\n}\n',
+    localCheck: {
+      validity: 'field-dropped',
+      schemaErrors: [
+        {
+          path: 'x',
+          key: SKILL_AXIS.settingsKey,
+          message: 'Expected record, but received number. This field was ignored.',
+          notes: [],
+          costs: 'field',
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * Every scenario whose answer is not what it must be.
+ *
+ * `axisFor` is the mutation seam (QM-45): the gate can be re-run with an axis swapped for
+ * a broken one, and every scenario on that axis must answer the same way it always did or
+ * the mutation is caught. It is a function of the scenario's own axis rather than a
+ * single override, so a mutation to `SKILL_AXIS` leaves the plugin rows alone -- which is
+ * how the failure list can name the divergence instead of listing the whole table.
+ */
+function runGate(checks: readonly PlanCheck[], mutation?: AxisMutation): string[] {
   const out: string[] = [];
   for (const s of SCENARIOS) {
     const w = s.build();
-    const result = planToggles(w.ctx, w.dir, s.requests, checks);
+    const scenarioAxis = s.axis ?? PLUGIN_AXIS;
+    const hit = mutation?.target === scenarioAxis;
+    const result = planToggles(
+      w.ctx,
+      hit ? mutation!.axis : scenarioAxis,
+      w.dir,
+      hit ? s.requests.map((r) => ({ ...r, value: mutation!.value(r.value) })) : s.requests,
+      checks,
+    );
     const got: string = result.outcome === 'planned' ? 'planned' : (result.refusals[0]?.code ?? 'none');
     if (got !== s.expect) out.push(`${s.label}: expected ${s.expect}, got ${got}`);
   }
   return out;
+}
+
+/**
+ * One axis replaced by a wrong one, requests and all.
+ *
+ * The requests are mapped too, because that is the path a real defect takes: the CLI
+ * parses `<id>=<value>` through `axis.spellings`, so an axis whose spellings are booleans
+ * hands `planToggles` a boolean and there is nowhere downstream for the state to come
+ * back. Mutating only the axis and leaving four-valued requests in place models a
+ * half-collapse nobody could write, and it reddens the gate on the wrong rows -- measured
+ * before this parameter existed.
+ */
+interface AxisMutation {
+  /** The axis to replace. Scenarios on any other axis run untouched. */
+  target: Axis;
+  axis: Axis;
+  value(v: EntryValue): EntryValue;
 }
 
 const report = (f: readonly string[]) => `\n  ${f.length} failure(s):\n  ${f.join('\n  ')}`;
@@ -412,7 +588,7 @@ describe('and the same refusals from a recorded doctor run', () => {
         localCheck: named[1],
       });
 
-      const result = planToggles(w.ctx, w.dir, on());
+      const result = planToggles(w.ctx, PLUGIN_AXIS, w.dir, on());
       assert.equal(result.outcome, 'refused');
       if (result.outcome !== 'refused') return;
       assert.equal(result.refusals[0]!.code, expected);
@@ -447,25 +623,36 @@ describe('what a plan says', () => {
   /**
    * The seed, as a literal.
    *
-   * Not `EMPTY_SETTINGS` compared against itself, and not `JSON.stringify({...}, null, 2)`
+   * Not `emptySettings` compared against itself, and not `JSON.stringify({...}, null, 2)`
    * either -- the property is that the created file carries a layout `write.ts` can copy,
    * and rebuilding the expectation from the same stringify call would agree with a seed of
    * `{}` if someone changed it back.
+   *
+   * Both axes, because the seed names the key it is about to write into (QM-45): a skills
+   * write seeded with `enabledPlugins` would create a file whose only content is a key it
+   * never touches, and `undo` would then restore *that*.
    */
   test('a created file is seeded with a layout, not with {}', () => {
-    assert.equal(EMPTY_SETTINGS, '{\n  "enabledPlugins": {}\n}\n');
+    assert.equal(emptySettings('enabledPlugins'), '{\n  "enabledPlugins": {}\n}\n');
+    assert.equal(emptySettings('skillOverrides'), '{\n  "skillOverrides": {}\n}\n');
 
     const w = world('seed');
-    const plan = planned(planToggles(w.ctx, w.dir, on()));
+    const plan = planned(planToggles(w.ctx, PLUGIN_AXIS, w.dir, on()));
     assert.equal(plan.creates, true);
-    assert.equal(plan.before, EMPTY_SETTINGS);
+    assert.equal(plan.before, '{\n  "enabledPlugins": {}\n}\n');
     assert.equal(plan.after, '{\n  "enabledPlugins": {\n    "p@m": true\n  }\n}\n');
+
+    const s = world('seed-skill');
+    const skillPlan = planned(planToggles(s.ctx, SKILL_AXIS, s.dir, skill('off')));
+    assert.equal(skillPlan.creates, true);
+    assert.equal(skillPlan.before, '{\n  "skillOverrides": {}\n}\n');
+    assert.equal(skillPlan.after, '{\n  "skillOverrides": {\n    "s-01": "off"\n  }\n}\n');
   });
 
   test('an existing file keeps every byte it had outside the entry', () => {
     const before = '{\n  "enabledPlugins": {\n    "other@m": true\n  },\n  "unmodelled": [1, 2]\n}\n';
     const w = world('surgical', { local: before });
-    const plan = planned(planToggles(w.ctx, w.dir, on()));
+    const plan = planned(planToggles(w.ctx, PLUGIN_AXIS, w.dir, on()));
 
     assert.equal(plan.creates, false);
     assert.equal(plan.before, before);
@@ -480,9 +667,9 @@ describe('what a plan says', () => {
   test('several targets are one plan, one diff and one file', () => {
     const w = world('batch');
     const plan = planned(
-      planToggles(w.ctx, w.dir, [
-        { pluginId: 'a@m', enable: true },
-        { pluginId: 'b@m', enable: true },
+      planToggles(w.ctx, PLUGIN_AXIS, w.dir, [
+        { id: 'a@m', value: true },
+        { id: 'b@m', value: true },
       ]),
     );
     assert.equal(plan.changes.length, 2);
@@ -501,11 +688,11 @@ describe('what a plan says', () => {
    */
   test('and the effect printed is the verdict, not a sentence about sessions', () => {
     const withCatalog = world('effect-reload');
-    const reload = planned(planToggles(withCatalog.ctx, withCatalog.dir, on()));
+    const reload = planned(planToggles(withCatalog.ctx, PLUGIN_AXIS, withCatalog.dir, on()));
     assert.equal(planEffect(reload), 'reload');
 
     const uncatalogued = world('effect-unknown');
-    const unknown = planned(planToggles(uncatalogued.ctx, uncatalogued.dir, on('nobody@m')));
+    const unknown = planned(planToggles(uncatalogued.ctx, PLUGIN_AXIS, uncatalogued.dir, on('nobody@m')));
     assert.equal(planEffect(unknown), 'unknown');
 
     for (const [plan, verdict] of [
@@ -537,10 +724,10 @@ describe('what a plan says', () => {
     // change; `resolveCell` still calls the entry `restated`, because it computes that
     // against the chain with *both* project-scope files removed. Reported, not refused.
     const w = world('restate', {
-      user: { 'p@m': true },
+      user: { enabledPlugins: { 'p@m': true } },
       projectSettings: '{\n  "enabledPlugins": {\n    "p@m": false\n  }\n}\n',
     });
-    const plan = planned(planToggles(w.ctx, w.dir, on()));
+    const plan = planned(planToggles(w.ctx, PLUGIN_AXIS, w.dir, on()));
     assert.equal(plan.changes[0]!.from, false);
     assert.equal(plan.changes[0]!.to, true);
     assert.ok(
@@ -563,22 +750,58 @@ describe('the pieces a plan is built from', () => {
   test('a file with the key gets per-entry edits; one without gets a single insert', () => {
     const file = readSettings(join(root, 'nope.json'), NOT_CHECKED);
     assert.equal(file, null);
-    assert.deepEqual(editsFor(null, [{ pluginId: 'a@m', enable: true }]), [
-      { path: [WRITTEN_SETTINGS_KEY], value: { 'a@m': true } },
+    assert.deepEqual(editsFor(PLUGIN_AXIS, null, [{ id: 'a@m', value: true }]), [
+      { path: ['enabledPlugins'], value: { 'a@m': true } },
     ]);
 
     const w = world('edits', { local: '{\n  "enabledPlugins": {\n    "x@m": true\n  }\n}\n' });
     const withKey = w.ctx.ws.projects[0]!.localSettings;
-    assert.deepEqual(editsFor(withKey, [{ pluginId: 'a@m', enable: false }]), [
-      { path: [WRITTEN_SETTINGS_KEY, 'a@m'], value: false },
+    assert.deepEqual(editsFor(PLUGIN_AXIS, withKey, [{ id: 'a@m', value: false }]), [
+      { path: ['enabledPlugins', 'a@m'], value: false },
     ]);
   });
 
-  test('the written key is matched downward, and not by prefix accident', () => {
-    assert.equal(namesWrittenKey('enabledPlugins'), true);
-    assert.equal(namesWrittenKey('enabledPlugins.a@m'), true);
-    assert.equal(namesWrittenKey('enabledPluginsExtra'), false);
-    assert.equal(namesWrittenKey('permissions.deny'), false);
+  /**
+   * The same file, asked about by each axis (QM-45).
+   *
+   * A file carrying `enabledPlugins` and no `skillOverrides` takes the *insert* shape for
+   * a skills write and the *per-entry* shape for a plugin one -- so `editsFor` reading
+   * the wrong axis's block would write `skillOverrides` entries one at a time into a key
+   * that is not there, which `write.ts` refuses, or splice a whole `enabledPlugins`
+   * object over one that already exists.
+   */
+  test('and which shape it takes is decided per axis, on one file', () => {
+    const w = world('edits-two-axes', {
+      local: '{\n  "enabledPlugins": {\n    "x@m": true\n  }\n}\n',
+    });
+    const file = w.ctx.ws.projects[0]!.localSettings;
+    assert.deepEqual(editsFor(SKILL_AXIS, file, [{ id: 's-01', value: 'name-only' }]), [
+      { path: ['skillOverrides'], value: { 's-01': 'name-only' } },
+    ]);
+    assert.deepEqual(editsFor(PLUGIN_AXIS, file, [{ id: 'x@m', value: false }]), [
+      { path: ['enabledPlugins', 'x@m'], value: false },
+    ]);
+  });
+
+  /**
+   * Downward matching, and the axis it is asked about.
+   *
+   * The cross pairs are the point: `enabledPlugins` is not the skill axis's key and
+   * `skillOverrides` is not the plugin axis's, so a `namesWrittenKey` that had kept a
+   * hardcoded constant would answer `true` on one of these four and refuse a live write
+   * -- or `false`, and make one.
+   */
+  test('the written key is matched downward, per axis, and not by prefix accident', () => {
+    assert.equal(namesWrittenKey(PLUGIN_AXIS, 'enabledPlugins'), true);
+    assert.equal(namesWrittenKey(PLUGIN_AXIS, 'enabledPlugins.a@m'), true);
+    assert.equal(namesWrittenKey(PLUGIN_AXIS, 'enabledPluginsExtra'), false);
+    assert.equal(namesWrittenKey(PLUGIN_AXIS, 'permissions.deny'), false);
+    assert.equal(namesWrittenKey(PLUGIN_AXIS, 'skillOverrides'), false);
+
+    assert.equal(namesWrittenKey(SKILL_AXIS, 'skillOverrides'), true);
+    assert.equal(namesWrittenKey(SKILL_AXIS, 'skillOverrides.deploy'), true);
+    assert.equal(namesWrittenKey(SKILL_AXIS, 'skillOverridesExtra'), false);
+    assert.equal(namesWrittenKey(SKILL_AXIS, 'enabledPlugins'), false);
   });
 
   test('the diff shows the change with context, and says nothing when there is none', () => {
@@ -622,10 +845,337 @@ describe('the pieces a plan is built from', () => {
   test('and a tracked target is a note rather than a refusal', () => {
     const w = world('tracked', { git: true });
     execFileSync('git', ['config', 'core.excludesFile', '/dev/null'], { cwd: w.dir });
-    const plan = planned(planToggles(w.ctx, w.dir, on()));
+    const plan = planned(planToggles(w.ctx, PLUGIN_AXIS, w.dir, on()));
     assert.ok(
       plan.notes.some((n) => n.code === 'tracked-path'),
       `no tracked-path note: ${plan.notes.map((n) => n.code).join(', ')}`,
     );
   });
+});
+
+// ---------------------------------------------------------------------------
+// Four values, and everything that could turn them into two (QM-45)
+// ---------------------------------------------------------------------------
+
+/**
+ * The states, written out.
+ *
+ * A literal and not `SKILL_VALUES.map(...)`: an expectation rebuilt from the constant
+ * under test agrees with whatever that constant becomes, which is the `memorySlug` defect
+ * this repo has already paid for once. The constant is asserted *against* this list
+ * below, in one place, so a fifth state is one edit here and a red test everywhere it
+ * matters rather than a silent widening.
+ */
+const FOUR_STATES: readonly SkillValue[] = ['on', 'name-only', 'user-invocable-only', 'off'];
+
+describe('the skill axis is four-valued in the grammar', () => {
+  test('the spellings are exactly the four states, and no boolean is among them', () => {
+    assert.deepEqual([...SKILL_AXIS.spellings.keys()], [...FOUR_STATES]);
+    assert.deepEqual([...SKILL_AXIS.spellings.values()], [...FOUR_STATES]);
+    assert.deepEqual([...SKILL_VALUES], [...FOUR_STATES]);
+
+    // The collapse, stated as the absence it is. `true`/`false` are the plugin axis's
+    // spellings and mean something there; accepting either here would mean choosing which
+    // of `on` and `name-only` a `true` was, and there is no answer to that.
+    for (const boolish of ['true', 'false']) {
+      assert.equal(
+        SKILL_AXIS.spellings.has(boolish),
+        false,
+        `--axis skill accepted ${boolish}, which has to be mapped onto one of four states`,
+      );
+    }
+    assert.equal(PLUGIN_AXIS.spellings.get('true'), true);
+    assert.equal(PLUGIN_AXIS.spellings.get('false'), false);
+  });
+
+  test('and the registry offers both axes under the names --axis takes', () => {
+    assert.deepEqual([...AXES.keys()], ['plugin', 'skill']);
+    assert.equal(AXES.get('plugin'), PLUGIN_AXIS);
+    assert.equal(AXES.get('skill'), SKILL_AXIS);
+  });
+});
+
+describe('all four values reach the file as themselves', () => {
+  /**
+   * Every state, written and read back through the bytes.
+   *
+   * The expectation is the JSON literal rather than anything derived from the request, so
+   * a write that mapped `user-invocable-only` onto `true` -- or onto `"off"`, or onto the
+   * fallback -- fails here naming the state it lost. All four are asserted and not just
+   * the two the plugin axis has analogues for: the pair that has no boolean image is the
+   * pair a collapse destroys.
+   *
+   * Each starts from a user-scope value the request moves away from. Without one, `on` is
+   * what an unmentioned skill already resolves to and `noChange` refuses it -- correctly,
+   * and it is worth saying that this test learned that the hard way rather than reasoning
+   * it out: the fallback is a real state and asking for it is a real no-op.
+   */
+  for (const value of FOUR_STATES) {
+    const standing: SkillValue = value === 'off' ? 'on' : 'off';
+    test(`a fresh project written to ${value}, from a user scope saying ${standing}`, () => {
+      const w = world(`four-${value}`, { user: { skillOverrides: { 's-01': standing } } });
+      const plan = planned(planToggles(w.ctx, SKILL_AXIS, w.dir, skill(value)));
+      assert.equal(plan.changes[0]!.from, standing);
+      assert.equal(plan.changes[0]!.to, value);
+
+      assert.equal(plan.after, `{\n  "skillOverrides": {\n    "s-01": ${JSON.stringify(value)}\n  }\n}\n`);
+      // Re-read through the real parser, so the claim is about the file and not about the
+      // string this test just built.
+      writeFileSync(join(w.dir, '.claude', TARGET_FILENAME), plan.after);
+      const reread = readSettings(join(w.dir, '.claude', TARGET_FILENAME), NOT_CHECKED);
+      assert.equal(reread?.skillOverrides?.['s-01'], value);
+    });
+  }
+
+  test('and an existing block takes the new state without re-encoding its neighbours', () => {
+    const before =
+      '{\n  "skillOverrides": {\n    "other": "off"\n  },\n  "unmodelled": [1, 2]\n}\n';
+    const w = world('four-surgical', { local: before });
+    const plan = planned(planToggles(w.ctx, SKILL_AXIS, w.dir, skill('user-invocable-only')));
+
+    assert.equal(
+      plan.after,
+      '{\n  "skillOverrides": {\n    "other": "off",\n    "s-01": "user-invocable-only"\n  },\n' +
+        '  "unmodelled": [1, 2]\n}\n',
+    );
+  });
+
+  /**
+   * The printed line names the state, not a switch.
+   *
+   * `name-only -> user-invocable-only` is the pair with no boolean rendering at all, so a
+   * change line built from `Boolean(value)` prints `false -> false` here and passes every
+   * on/off case. The header carries the key for the same reason: `on` and `true` are
+   * different words for different axes and the reader needs to know which file key they
+   * are reading.
+   */
+  test('the diff and the change line say which of four states', () => {
+    const w = world('four-printed', {
+      local: '{\n  "skillOverrides": {\n    "s-01": "name-only"\n  }\n}\n',
+    });
+    const plan = planned(planToggles(w.ctx, SKILL_AXIS, w.dir, skill('user-invocable-only')));
+    const lines = describePlan(plan);
+
+    assert.ok(
+      lines.some((l) => l.trim() === 's-01: name-only -> user-invocable-only'),
+      `no four-valued change line: ${lines.join(' | ')}`,
+    );
+    assert.ok(
+      lines[0]!.includes('skillOverrides'),
+      `the header does not name the key being written: ${lines[0]}`,
+    );
+    assert.ok(
+      lines.some((l) => l.includes('+     "s-01": "user-invocable-only"')),
+      `the diff does not carry the new state: ${lines.join(' | ')}`,
+    );
+    // The effect is `classify`'s own, on this axis too -- a skill is cache-safe.
+    assert.equal(planEffect(plan), 'reload');
+
+    // And the plugin axis still prints its own domain rather than the skill words.
+    const p = world('four-printed-plugin');
+    const pluginPlan = planned(planToggles(p.ctx, PLUGIN_AXIS, p.dir, on()));
+    assert.ok(
+      describePlan(pluginPlan).some((l) => l.trim() === 'p@m: false -> true'),
+      `the plugin change line changed shape: ${describePlan(pluginPlan).join(' | ')}`,
+    );
+    assert.equal(showValue(true), 'true');
+    assert.equal(showValue('name-only'), 'name-only');
+  });
+});
+
+/**
+ * QM-43's `round-trip`, reached by the write this axis makes first.
+ *
+ * `qm set` targets `settings.local.json`, so setting a skill against a value the repo's
+ * tracked `settings.json` already sets produces exactly the chain `skill-04` carries in
+ * the differential fixture: `project = off`, `local = on`, no user link. The resolved
+ * value lands on the `on` fallback and the local entry is the entire reason it does.
+ *
+ * A note and not a refusal, and the last clause of it was checked rather than assumed:
+ * both axes take their project-scope links from `contributingFiles`, so the link that
+ * disagrees can only be the tracked `settings.json`.
+ */
+describe('a skills write over the repo\'s own settings.json', () => {
+  test('carries the round-trip note, and the note names the skill axis', () => {
+    const w = world('skill-round-trip', {
+      projectSettings: '{\n  "skillOverrides": {\n    "s-01": "off"\n  }\n}\n',
+    });
+    const plan = planned(planToggles(w.ctx, SKILL_AXIS, w.dir, skill('on')));
+
+    assert.equal(plan.changes[0]!.from, 'off');
+    assert.equal(plan.changes[0]!.to, 'on');
+
+    const note = plan.notes.find((n) => n.code === 'would-restate');
+    assert.ok(note, `no would-restate note: ${plan.notes.map((n) => n.code).join(', ')}`);
+    assert.match(note.message, /without it the skill resolves off/);
+    assert.match(note.message, /tracked settings\.json/);
+    assert.doesNotMatch(note.message, /plugin/);
+  });
+
+  test('and the same shape on the plugin axis still says plugin', () => {
+    const w = world('plugin-round-trip', {
+      user: { enabledPlugins: { 'p@m': true } },
+      projectSettings: '{\n  "enabledPlugins": {\n    "p@m": false\n  }\n}\n',
+    });
+    const plan = planned(planToggles(w.ctx, PLUGIN_AXIS, w.dir, on()));
+    const note = plan.notes.find((n) => n.code === 'would-restate');
+    assert.ok(note, 'no would-restate note on the plugin axis');
+    assert.match(note.message, /without it the plugin resolves false/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The mutations
+// ---------------------------------------------------------------------------
+
+/**
+ * `on` and everything else, which is what a boolean axis can say about four states.
+ *
+ * The collapse is written as a real (wrong) axis rather than as an edit to `src/`, so it
+ * ships: the gate runs the whole scenario table against it and every skill row must still
+ * answer what it answers today, or the mutation is caught.
+ */
+const booleanised = (value: EntryValue): EntryValue => value === 'on' || value === true;
+
+const COLLAPSED_SKILL_AXIS: Axis = {
+  ...SKILL_AXIS,
+  fallback: booleanised(SKILL_AXIS.fallback),
+  resolve: (ws, p, id) => {
+    const cell = SKILL_AXIS.resolve(ws, p, id);
+    return {
+      value: booleanised(cell.value),
+      origin: cell.origin,
+      chain: cell.chain.map((l) => ({ ...l, value: booleanised(l.value) })),
+    };
+  },
+  spellings: new Map<string, EntryValue>(
+    [...SKILL_AXIS.spellings].map(([k, v]) => [k, booleanised(v)]),
+  ),
+};
+
+/**
+ * `noChange`, asked the wrong question.
+ *
+ * Each is a whole replacement check rather than a flag, because that is the shape the
+ * defect would really take -- somebody rewriting the comparison, not toggling one. The
+ * regex is what makes each one a gate rather than a coin flip: a mutation that reddens
+ * the table for some other reason has not proved the guard it claims to.
+ */
+interface CheckMutation {
+  name: string;
+  check: PlanCheck;
+  names: RegExp;
+}
+
+const CHECK_MUTATIONS: CheckMutation[] = [
+  {
+    /**
+     * The pair swapped for the one that is equal by construction. `after` is resolved
+     * from a chain whose winning link *is* the request, so this refuses every write on
+     * both axes -- the loudest possible version of the defect and the one a reviewer
+     * would catch by hand. It is here so the harness is known to fire at all.
+     */
+    name: 'compare the requested value against the value it would resolve to after',
+    check: {
+      name: 'no-change',
+      run: ({ requests, resolved }) =>
+        requests
+          .filter((r) => Object.is(resolved.get(r.id)?.after.value, r.value))
+          .map((r) => ({ code: 'no-change' as const, message: `${r.id}`, evidence: [] })),
+    },
+    names: /^a skill moved between two non-default states: expected planned, got no-change$/,
+  },
+  {
+    /**
+     * "Is it already the default." True of a `name-only` skill being set to `off` -- both
+     * are not-`on` -- and false of one being set from `off` to `on`, so it refuses
+     * exactly the writes that move between two configured states while letting the
+     * uninteresting ones through.
+     */
+    name: 'compare the requested value against the axis fallback',
+    check: {
+      name: 'no-change',
+      run: ({ axis, requests }) =>
+        requests
+          .filter((r) => Object.is(r.value, axis.fallback))
+          .map((r) => ({ code: 'no-change' as const, message: `${r.id}`, evidence: [] })),
+    },
+    // Named on the skill row and not on the plugin one it also reddens: this mutation is
+    // about the *four* states, and a regex a boolean row could satisfy would pass on a
+    // build where only the plugin axis had regressed.
+    names: /^a skill asked for the state the target already sets: expected no-change, got planned$/,
+  },
+  {
+    /**
+     * The comparison as it would be written by someone who had generalised the types and
+     * not the question: `!==` against a boolean, which is what `state.now.value !== req.enable`
+     * becomes when `enable` grows a string domain. Every skill value is `!==` every
+     * boolean, so no skill write is ever refused.
+     */
+    name: 'compare the resolved value against a boolean reading of the request',
+    check: {
+      name: 'no-change',
+      run: ({ requests, resolved, target }) =>
+        requests
+          .filter((r) => resolved.get(r.id)?.now.value === (r.value === 'on' || r.value === true))
+          .map((r) => ({
+            code: 'no-change' as const,
+            message: `${r.id}`,
+            evidence: [target],
+          })),
+    },
+    names: /^a skill asked for the (value an unmentioned skill already has|state the target already sets): expected no-change, got planned$/,
+  },
+];
+
+describe('the gate fails when four values become two', () => {
+  test('the whole table still answers the way it must', () => {
+    const failures = runGate(CHECKS);
+    assert.deepEqual(failures, [], report(failures));
+    console.log(
+      `    toggle: ${SCENARIOS.length} scenarios over ${CHECKS.length} checks, ` +
+        `${SCENARIOS.filter((s) => s.axis === SKILL_AXIS).length} of them on the skill axis`,
+    );
+  });
+
+  test('collapsing the skill axis onto a boolean reddens the gate', () => {
+    const failures = runGate(CHECKS, {
+      target: SKILL_AXIS,
+      axis: COLLAPSED_SKILL_AXIS,
+      value: booleanised,
+    });
+    assert.ok(
+      failures.length > 0,
+      'a boolean skill axis cost nothing — that is a hole in the gate, not a mutation to delete',
+    );
+    assert.ok(
+      failures.some((f) =>
+        /^a skill moved between two non-default states: expected planned, got no-change$/.test(f),
+      ),
+      `the gate failed, but not on the pair with no boolean image: ${report(failures)}`,
+    );
+    // And the plugin rows are untouched, so the failure is about the mutation and not
+    // about the harness having swapped something global.
+    assert.equal(
+      failures.some((f) => f.startsWith('a fresh project gets a new file')),
+      false,
+      `the collapse leaked onto the plugin axis: ${report(failures)}`,
+    );
+    console.log(`    caught the collapse (${failures.length}): ${failures[0]}`);
+  });
+
+  for (const mutation of CHECK_MUTATIONS) {
+    test(`no-change: ${mutation.name}`, () => {
+      const failures = runGate(CHECKS.map((c) => (c.name === 'no-change' ? mutation.check : c)));
+      assert.ok(
+        failures.length > 0,
+        `"${mutation.name}" cost nothing — that is a hole in the gate, not a mutation to delete`,
+      );
+      assert.ok(
+        failures.some((f) => mutation.names.test(f)),
+        `the gate failed, but for the wrong reason: ${report(failures)}`,
+      );
+      console.log(`    caught "${mutation.name}" (${failures.length}): ${failures[0]}`);
+    });
+  }
 });
