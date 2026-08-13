@@ -44,7 +44,7 @@ import {
   type ApplyResult,
   type UndoResult,
 } from '../src/apply.ts';
-import { EMPTY_SETTINGS, TARGET_FILENAME, type TogglePlan } from '../src/toggle.ts';
+import { PLUGIN_AXIS, SKILL_AXIS, TARGET_FILENAME, emptySettings, type TogglePlan } from '../src/toggle.ts';
 import { stageEdits, type Edit } from '../src/surfaces/write.ts';
 
 let root = '';
@@ -82,6 +82,7 @@ function planOver(target: string, project: string, text = BEFORE): TogglePlan {
   const staged = stageEdits(target, EDITS);
   if (staged.outcome === 'refused') throw new Error(`staging refused: ${staged.refusal.detail}`);
   return {
+    axis: PLUGIN_AXIS,
     project,
     target,
     creates: false,
@@ -89,7 +90,7 @@ function planOver(target: string, project: string, text = BEFORE): TogglePlan {
     after: staged.stage.text,
     edits: EDITS,
     stage: staged.stage,
-    changes: [{ pluginId: 'p@m', from: false, to: true, effect: effectStub() }],
+    changes: [{ id: 'p@m', from: false, to: true, effect: effectStub() }],
     notes: [],
   };
 }
@@ -98,14 +99,15 @@ function planOver(target: string, project: string, text = BEFORE): TogglePlan {
 function planNew(target: string, project: string): TogglePlan {
   const edits: Edit[] = [{ path: ['enabledPlugins'], value: { 'p@m': true } }];
   return {
+    axis: PLUGIN_AXIS,
     project,
     target,
     creates: true,
-    before: EMPTY_SETTINGS,
+    before: emptySettings(PLUGIN_AXIS.settingsKey),
     after: '{\n  "enabledPlugins": {\n    "p@m": true\n  }\n}\n',
     edits,
     stage: null,
-    changes: [{ pluginId: 'p@m', from: false, to: true, effect: effectStub() }],
+    changes: [{ id: 'p@m', from: false, to: true, effect: effectStub() }],
     notes: [],
   };
 }
@@ -136,7 +138,7 @@ describe('applying a plan', () => {
     assert.equal(readFileSync(result.backup, 'utf8'), BEFORE);
     assert.equal(result.record.target, s.target);
     assert.equal(result.record.createdTarget, false);
-    assert.deepEqual(result.record.changes, [{ pluginId: 'p@m', from: false, to: true }]);
+    assert.deepEqual(result.record.changes, [{ id: 'p@m', from: false, to: true }]);
     // Nothing outside the edited value moved -- the array written inline stays inline.
     assert.ok(readFileSync(s.target, 'utf8').includes('"unmodelled": [1, 2]'));
     assert.equal(readdirSync(join(s.project, '.claude')).filter((f) => f.includes('.qm-')).length, 0);
@@ -153,7 +155,7 @@ describe('applying a plan', () => {
     assert.equal(readFileSync(s.target, 'utf8'), plan.after);
     // The pre-image of a created file is what it was created as, so undo restores an
     // empty settings file rather than deleting one.
-    assert.equal(readFileSync(result.backup, 'utf8'), EMPTY_SETTINGS);
+    assert.equal(readFileSync(result.backup, 'utf8'), emptySettings(PLUGIN_AXIS.settingsKey));
     assert.equal(result.record.createdTarget, true);
   });
 
@@ -418,7 +420,90 @@ describe('undo', () => {
 
     assert.equal(undoLast(opts(s.state)).outcome, 'restored');
     assert.equal(existsSync(s.target), true, 'undo deleted a file');
-    assert.equal(readFileSync(s.target, 'utf8'), EMPTY_SETTINGS);
+    assert.equal(readFileSync(s.target, 'utf8'), '{\n  "enabledPlugins": {}\n}\n');
+  });
+
+  /**
+   * The same round trip on the axis with no entries anywhere (QM-45).
+   *
+   * 0 of 35 settings files on the machine this was measured against carry
+   * `skillOverrides`, so *every* real skills write creates its target -- which makes this
+   * the common path here rather than the exception, and makes the seed's key the thing
+   * undo hands back. Seeded with `enabledPlugins` instead, this restores a file whose
+   * only content is a key the write never touched.
+   */
+  test('and a created skills target goes back to an empty skillOverrides', () => {
+    const s = scratch('undo-created-skill');
+    const plan: TogglePlan = {
+      axis: SKILL_AXIS,
+      project: s.project,
+      target: s.target,
+      creates: true,
+      before: emptySettings(SKILL_AXIS.settingsKey),
+      after: '{\n  "skillOverrides": {\n    "s-01": "name-only"\n  }\n}\n',
+      edits: [{ path: ['skillOverrides'], value: { 's-01': 'name-only' } }],
+      stage: null,
+      changes: [
+        {
+          id: 's-01',
+          from: 'on',
+          to: 'name-only',
+          effect: { ...effectStub(), change: { kind: 'skill' as const, id: 's-01' } },
+        },
+      ],
+      notes: [],
+    };
+
+    const result = applyPlan(plan, opts(s.state));
+    assert.equal(result.outcome, 'written');
+    if (result.outcome !== 'written') return;
+    assert.equal(readFileSync(s.target, 'utf8'), plan.after);
+    // The four-valued change survives the record, which is JSON on disk.
+    assert.deepEqual(result.record.changes, [{ id: 's-01', from: 'on', to: 'name-only' }]);
+
+    assert.equal(undoLast(opts(s.state)).outcome, 'restored');
+    assert.equal(readFileSync(s.target, 'utf8'), '{\n  "skillOverrides": {}\n}\n');
+  });
+
+  /**
+   * The seed is this file's decision, and a plan cannot make it otherwise.
+   *
+   * `plan.before` and `emptySettings(plan.axis.settingsKey)` are equal by construction on
+   * every plan `planToggles` builds, so seeding from the plan instead reads identically
+   * and leaves the suite green -- measured, as a hand mutation, before this test existed.
+   * The state that separates them is a plan whose `before` is *not* the seed, which no
+   * planner produces and which is precisely what a caller building its own plan could
+   * hand `applyPlan`.
+   *
+   * The property is that the reviewed `after` still lands. Seeded from `before`, the
+   * edits go on top of the wrong bytes, the postcondition sees text that is not
+   * `plan.after`, and the write is refused -- which is the safe failure, but a refusal is
+   * not what this is supposed to do with a plan whose diff was correct.
+   */
+  test('the seed comes from the axis, not from the plan that asked for the file', () => {
+    const s = scratch('seed-authority');
+    const plan: TogglePlan = {
+      axis: PLUGIN_AXIS,
+      project: s.project,
+      target: s.target,
+      creates: true,
+      // A pre-image no planner would build. `after` is still what a correct seed plus the
+      // edits produces, so the reviewed diff is the one this must land.
+      before: '{\n  "somethingElse": 1\n}\n',
+      after: '{\n  "enabledPlugins": {\n    "p@m": true\n  }\n}\n',
+      edits: [{ path: ['enabledPlugins'], value: { 'p@m': true } }],
+      stage: null,
+      changes: [{ id: 'p@m', from: false, to: true, effect: effectStub() }],
+      notes: [],
+    };
+
+    const result = applyPlan(plan, opts(s.state));
+    assert.equal(
+      result.outcome,
+      'written',
+      `applyPlan refused a plan whose reviewed bytes were correct: ${JSON.stringify(result)}`,
+    );
+    assert.equal(readFileSync(s.target, 'utf8'), plan.after);
   });
 
   test('nothing recorded is nothing to undo, and is not an error', () => {

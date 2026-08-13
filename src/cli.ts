@@ -67,9 +67,12 @@ import { buildSkillCatalog, allSkillIds } from './skills.ts';
 import { buildMcpCatalog, allMcpServerNames } from './mcp.ts';
 import { allPluginIds } from './resolve.ts';
 import {
+  AXES,
   describePlan,
   planEffect,
   planToggles,
+  showValue,
+  type Axis,
   type ToggleRequest,
 } from './toggle.ts';
 import { applyPlan, stateDir, undoLast } from './apply.ts';
@@ -105,8 +108,31 @@ interface Options {
   fileIssue: boolean;
   /** `qm set --yes`: apply without the prompt. The diff still prints. */
   yes: boolean;
+  /** `qm set --axis <name>`: which settings key the write lands in. */
+  axis: Axis;
   project: string | null;
   port: number;
+}
+
+/**
+ * `--axis`, defaulting to `plugin`.
+ *
+ * A named axis rather than a `--skill` flag, because the set is a registry and grows: two
+ * mutually exclusive booleans would have to be checked against each other, and the third
+ * (QM-46) would make three. An unknown name exits rather than falling back, for the
+ * reason `--port` does -- a typo that silently writes the wrong settings key is exactly
+ * the "reported success, changed nothing" failure this phase is built around.
+ */
+function parseAxis(raw: string | null): Axis {
+  if (raw === null) return AXES.get('plugin')!;
+  const axis = AXES.get(raw);
+  if (!axis) {
+    console.error(
+      `qm: --axis expects one of ${[...AXES.keys()].join(', ')}, got ${JSON.stringify(raw)}`,
+    );
+    process.exit(2);
+  }
+  return axis;
 }
 
 /** A port the OS will accept. Anything else is a typo worth stopping for. */
@@ -129,8 +155,9 @@ function parseArgs(argv: string[]): { command: string; args: string[]; opts: Opt
   };
   const projectIdx = valueIdxOf('--project');
   const portIdx = valueIdxOf('--port');
+  const axisIdx = valueIdxOf('--axis');
   const positional = argv.filter(
-    (a, i) => !a.startsWith('-') && i !== projectIdx && i !== portIdx,
+    (a, i) => !a.startsWith('-') && i !== projectIdx && i !== portIdx && i !== axisIdx,
   );
   return {
     command: positional[0] ?? 'audit',
@@ -146,6 +173,7 @@ function parseArgs(argv: string[]): { command: string; args: string[]; opts: Opt
       status: argv.includes('--status'),
       fileIssue: argv.includes('--file-issue'),
       yes: argv.includes('--yes'),
+      axis: parseAxis(axisIdx === -1 ? null : (argv[axisIdx] ?? null)),
       project: projectIdx === -1 ? null : (argv[projectIdx] ?? null),
       port: parsePort(portIdx === -1 ? null : (argv[portIdx] ?? null)),
     },
@@ -666,7 +694,7 @@ async function oracle(opts: Options): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * `qm set <plugin>=on|off ...` -- one project, one diff, one confirmation, one write.
+ * `qm set <id>=<value> ...` -- one project, one axis, one diff, one confirmation, one write.
  *
  * **Several targets in one invocation, and no state between invocations.** CLAUDE.md's
  * convention is that edits stage in memory and apply as one reviewed batch; a CLI meets
@@ -678,6 +706,13 @@ async function oracle(opts: Options): Promise<void> {
  * other command defaults to the whole workspace and this one writes, so the difference
  * between auditing the wrong project and writing into it is the whole reason to make the
  * caller say which.
+ *
+ * **`--axis` is not inferred from the id either (QM-45).** `enabledPlugins` and
+ * `skillOverrides` share a file and share the `on`/`off` spellings, and a plugin id and a
+ * bare skill name are both just strings -- so a rule that guessed would guess wrong on the
+ * first ambiguous name and write a live-looking entry into a key nothing reads. Measured
+ * on 2.1.224: `skillOverrides` accepts any string key, writes it, and silently does
+ * nothing for one it does not match.
  */
 async function set(args: string[], opts: Options): Promise<void> {
   if (!opts.project) {
@@ -688,11 +723,11 @@ async function set(args: string[], opts: Options): Promise<void> {
     process.exit(2);
   }
 
-  const requests = parseToggles(args);
+  const requests = parseToggles(opts.axis, args);
   const target = resolve(opts.project);
   const ctx = buildContext(opts, targetOnlyValidity(target));
 
-  const result = planToggles(ctx, target, requests);
+  const result = planToggles(ctx, opts.axis, target, requests);
   if (result.outcome === 'refused') {
     console.log(`\n${BOLD}qm set${RESET} ${DIM}· nothing was written${RESET}\n`);
     for (const r of result.refusals) {
@@ -733,20 +768,30 @@ async function set(args: string[], opts: Options): Promise<void> {
   console.log(`  ${DIM}undo with${RESET} qm undo\n`);
 }
 
-/** `<plugin id>=on|off`. Split on the last `=`, because a plugin id may not contain one. */
-function parseToggles(args: readonly string[]): ToggleRequest[] {
+/**
+ * `<id>=<value>`, where the accepted values are the axis's own.
+ *
+ * Split on the last `=`, because an id may not contain one. The grammar is read off
+ * `axis.spellings` rather than written out here: a list in this function would be a second
+ * statement of which values the axis has, and the one that a four-valued write would have
+ * to get past to collapse. So `--axis skill` accepts exactly the four states and nothing
+ * else -- `true` is rejected here, not silently mapped onto `on`.
+ */
+function parseToggles(axis: Axis, args: readonly string[]): ToggleRequest[] {
+  const grammar = `<id>=${[...axis.spellings.keys()].join('|')}`;
   if (!args.length) {
-    console.error('qm: set needs at least one <plugin-id>=on|off');
+    console.error(`qm: set needs at least one ${grammar}`);
     process.exit(2);
   }
   return args.map((spec) => {
     const at = spec.lastIndexOf('=');
-    const value = at === -1 ? '' : spec.slice(at + 1).toLowerCase();
-    if (at <= 0 || !['on', 'off', 'true', 'false'].includes(value)) {
-      console.error(`qm: expected <plugin-id>=on|off, got ${JSON.stringify(spec)}`);
+    const spelling = at === -1 ? '' : spec.slice(at + 1).toLowerCase();
+    const value = axis.spellings.get(spelling);
+    if (at <= 0 || value === undefined) {
+      console.error(`qm: expected ${grammar}, got ${JSON.stringify(spec)}`);
       process.exit(2);
     }
-    return { pluginId: spec.slice(0, at), enable: value === 'on' || value === 'true' };
+    return { id: spec.slice(0, at), value };
   });
 }
 
@@ -804,7 +849,7 @@ function undo(): void {
   console.log(`\n  restored ${num(result.bytes)} bytes to ${record.target}`);
   console.log(`  ${DIM}from${RESET} ${record.backup}`);
   for (const c of record.changes) {
-    console.log(`  ${DIM}·${RESET} ${c.pluginId}: ${c.to} -> ${c.from}`);
+    console.log(`  ${DIM}·${RESET} ${c.id}: ${showValue(c.to)} -> ${showValue(c.from)}`);
   }
   if (record.createdTarget) {
     console.log(
@@ -870,7 +915,7 @@ ${BOLD}qm${RESET} -- audit which Claude Code extensions load where, and what the
   qm baseline [--full]        record today's findings, so --drift can diff against them
   qm serve    [--port <n>]    serve the grid on 127.0.0.1 until Ctrl-C
   qm oracle   [--status] [--file-issue]
-  qm set      --project <path> <plugin-id>=on|off [...] [--yes]
+  qm set      --project <path> [--axis plugin|skill] <id>=<value> [...] [--yes]
   qm undo
 
   --full    also scan git hygiene and project layout via project-optimizer, and ask
@@ -891,8 +936,16 @@ scripts/install-oracle-schedule.sh.
 <project>/.claude/settings.local.json. It prints the whole diff, says what the change
 needs before it is live, and asks before applying. It refuses rather than write when
 Claude Code would discard the target, when claude doctor reported on it in words this
-release cannot place, or when the plugin already resolves to the value you asked for.
+release cannot place, or when the id already resolves to the value you asked for.
 \`qm undo\` restores the last apply, once, and refuses if the file has changed since.
+
+  --axis plugin   ${'enabledPlugins'}, on|off (true|false also accepted)   ${DIM}the default${RESET}
+  --axis skill    ${'skillOverrides'}, on|name-only|user-invocable-only|off
+
+Skills are four-valued, so \`--axis skill\` takes four spellings and no booleans — there is
+no answer to which of \`on\` and \`name-only\` a \`true\` would mean. The id is the string
+Claude Code publishes: \`<plugin>:<skill>\` for a plugin's skill, the bare directory name
+for a personal one. A key it does not match is accepted, written, and does nothing.
 Backups live beside the baseline in \${XDG_STATE_HOME:-~/.local/state}/claude-quartermaster.
 
 Every other command is read-only. The first-party \`claude\` subcommands they invoke do

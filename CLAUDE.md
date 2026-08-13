@@ -4,9 +4,10 @@ CLI that audits which Claude Code extensions (plugins, MCP servers, skills) load
 projects, and what they cost. `qm audit`, `qm cost`, `qm baseline` / `--drift`, and
 `qm serve` for the two-view grid on loopback. Every one of those is read-only.
 
-**`qm set` and `qm undo` are not** (DEA-112). They are the whole of Phase 2 v1: a plugin
-toggle written into `<proj>/.claude/settings.local.json`, one file, after a printed diff
-and a confirmation. Nothing else here writes any Claude Code config, and v1 never writes
+**`qm set` and `qm undo` are not** (DEA-112, QM-45). They are the whole of Phase 2 v1: a
+plugin *or skill* toggle written into `<proj>/.claude/settings.local.json`, one file, after
+a printed diff and a confirmation. `--axis plugin|skill` picks the key and is never
+inferred. Nothing else here writes any Claude Code config, and v1 never writes
 `~/.claude.json`. The grid's add/remove controls stay disabled — wiring them means the
 loopback server accepting `POST` for the first time, which is a separate issue.
 
@@ -464,6 +465,48 @@ two files disagree", and any future surface pushing two links at one scope inher
 value without anyone deciding it should. Widening `restated-entries` back to include
 `round-trip` left all 606 tests green until a **plugin-axis** case existed — the fixture
 carried the shape only on the skill axis, and that detector never looks there.
+
+**The axis is a value, and the four states are the reason it had to be (QM-45).** `qm set`
+now writes `skillOverrides` as well as `enabledPlugins`, selected by `--axis` and never
+inferred from the id — the two keys share a file and share the `on`/`off` spellings, so a
+guess would guess wrong once and write a live-looking entry into a key nothing reads.
+The generalisation is wider than the constant the issue named: `ToggleRequest.pluginId`,
+`PluginChange`, `TogglePlan.changes` and `planToggles` calling `resolvePlugin` by name were
+all plugin-typed. All of it runs off one `Axis` record now and `CHECKS` is unchanged.
+`EntryValue = boolean | SkillValue` is a **union, not a type parameter**: `UndoRecord` is
+JSON on disk, `apply.ts` never knows which axis it applies, and `Axis.show` alone would make
+`Axis<boolean>` unassignable to `Axis<unknown>` — threading `<V>` through four non-generic
+consumers to express a set of two is flexibility nobody asked for.
+**Four values is not two, and the failure is quiet in both directions.** `noChange` compares
+with `Object.is` over the whole domain, because `name-only` and `user-invocable-only` are
+both not-`on` and both not-`off`: every boolean-shaped comparison refuses that write *and*
+lets `name-only` → `name-only` through. The refusal is the half nobody notices. The skill
+grammar therefore takes no `true`/`false` at all — there is no answer to which of `on` and
+`name-only` a `true` meant — and the seed is `emptySettings(key)` rather than one constant,
+or a skills write would create a file whose only content is `enabledPlugins` and `undo`
+would restore *that*.
+**The key form was measured, not re-derived, and the agreement is now a test.** Measured on
+2.1.224 with a headless run's `skill_listing` as the oracle: `skillOverrides` matches on
+exactly the string first-party publishes, and a bare `docs` for the plugin skill
+`deepgram:docs` was accepted, written, and silently did nothing. Re-verified end to end on
+**2.1.229**: `off` removes the skill from the listing (212 → 211), `name-only` leaves it
+listed as a bare `- dataviz` with its description gone, and — the QM-43 case, which is the
+sharp one — a tracked `settings.json` saying `off` plus the local `on` this writes takes it
+from 211 back to **212**. That is the entry `restated-entries` used to advise deleting.
+`user-invocable-only` is **not observable through this oracle**: the block renders it
+identically to `on`, so three of the four states are confirmed first-party and the fourth
+rests on the schema alone.
+The day it fails: the live join cannot fail. All 42 installed plugins here have a manifest
+name their marketplace id predicts *wherever they enumerate skills at all* — notion is the
+one exception and contributes zero — so `test/fixtures/skill-keys/` has to construct the
+discriminating case, and its catalog entry is the one part of that fixture that is not a
+recording. `--axis` is not inferred, which means a mistyped id on the right axis still
+writes a key nothing matches: there is **no unknown-id refusal**, deliberately, because the
+catalog that would answer excludes `stale` and `unmeasured` skills and would refuse real
+writes. And `notesFor`'s round-trip sentence names the repo's tracked `settings.json`
+because `contributingFiles` admits exactly two project-scope files — `resolveMcpServer`
+pushes two `project` links by construction, so QM-46 must revisit that sentence rather than
+inherit it.
 
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
