@@ -32,7 +32,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 
 import { applyStage, stageEdits, type Stage } from './surfaces/write.ts';
-import { EMPTY_SETTINGS, TARGET_FILENAME, type TogglePlan } from './toggle.ts';
+import { TARGET_FILENAME, emptySettings, type EntryValue, type TogglePlan } from './toggle.ts';
 
 /**
  * This tool's own state, not the user's.
@@ -67,7 +67,16 @@ export interface UndoRecord {
   createdTarget: boolean;
   sha256Before: string;
   sha256After: string;
-  changes: Array<{ pluginId: string; from: boolean; to: boolean }>;
+  /**
+   * What moved, in the axis's own value domain (QM-45).
+   *
+   * `id` rather than `pluginId`, and `EntryValue` rather than `boolean`, because the
+   * record has to describe a skill write as accurately as a plugin one -- a four-valued
+   * change flattened to a boolean here would print `true -> false` for
+   * `name-only -> user-invocable-only`. Display only: `undoLast` restores the pre-image
+   * bytes and never reads this.
+   */
+  changes: Array<{ id: string; from: EntryValue; to: EntryValue }>;
   /** Set once undo has run. One undo, and a second is refused rather than repeated. */
   undoneAt?: string;
 }
@@ -133,7 +142,11 @@ export function applyPlan(plan: TogglePlan, opts: ApplyOptions): ApplyResult {
       // Exclusive: if anything created this file between planning and now, the plan was
       // made against a file that does not exist and the one that does is not ours to
       // edit sight unseen.
-      writeFileSync(plan.target, EMPTY_SETTINGS, { flag: 'wx' });
+      // The seed is derived from the plan's axis rather than taken from `plan.before`, so
+      // a plan claiming to create a file cannot decide the bytes this writes. If the two
+      // ever disagree the edits land differently and the `stage.text !== plan.after`
+      // postcondition below refuses, which is the check that keeps them honest.
+      writeFileSync(plan.target, emptySettings(plan.axis.settingsKey), { flag: 'wx' });
     } catch (err) {
       return {
         outcome: 'refused',
@@ -199,7 +212,7 @@ export function applyPlan(plan: TogglePlan, opts: ApplyOptions): ApplyResult {
     createdTarget: plan.creates,
     sha256Before: sha256(plan.before),
     sha256After: sha256(plan.after),
-    changes: plan.changes.map((c) => ({ pluginId: c.pluginId, from: c.from, to: c.to })),
+    changes: plan.changes.map((c) => ({ id: c.id, from: c.from, to: c.to })),
   };
   mkdirSync(opts.state, { recursive: true });
   writeFileSync(undoRecordPath(opts.state), `${JSON.stringify(record, null, 2)}\n`);

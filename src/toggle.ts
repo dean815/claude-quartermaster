@@ -1,10 +1,20 @@
 /**
- * Planning a plugin write: what it would change, and everything that stops it.
+ * Planning a write: what it would change, and everything that stops it.
  *
  * This is the first thing in the repo that decides to modify a user's Claude Code
  * configuration. It decides only -- `apply.ts` is what writes -- and it is split that way
  * so every refusal is reachable without a filesystem and every gate below can run over a
  * plan that was never applied.
+ *
+ * ## Two axes, one path (QM-45)
+ *
+ * `enabledPlugins` and `skillOverrides` are different keys holding different value
+ * domains in the same file, and everything between the two -- the target, the seed, the
+ * three refusals, the staging, the diff, the backup, the undo -- is the same. So the
+ * difference is a value (`Axis`, below) and not a second copy of this module. What the
+ * generalisation costs is that `planToggles` can no longer call `resolvePlugin` by name;
+ * what it buys is that the third axis (QM-46, `~/.claude.json`'s deny-list) inherits every
+ * guard here instead of forcing a third copy of the consent model.
  *
  * ## The one file it writes, and the two it must not
  *
@@ -49,16 +59,109 @@ import {
   type Classification,
   type Effect,
 } from './effect.ts';
-import { resolveCell, type Cell, type ChainLink } from './model.ts';
-import { resolvePlugin } from './resolve.ts';
+import { SKILL_VALUES, resolveCell, type Cell, type ChainLink, type SkillValue } from './model.ts';
+import { resolvePlugin, resolveSkill } from './resolve.ts';
 import { applyEdits, sha256, stageEdits, type Edit, type Stage } from './surfaces/write.ts';
-import type { ProjectRecord, SettingsFile } from './surfaces/types.ts';
+import type { ProjectRecord, SettingsFile, Workspace } from './surfaces/types.ts';
 
 /** The only filename this phase writes. Read by `apply.ts`'s last guard. */
 export const TARGET_FILENAME = 'settings.local.json';
 
-/** The settings key a plugin toggle lands in. */
-export const WRITTEN_SETTINGS_KEY = 'enabledPlugins';
+/**
+ * Everything a settings entry can be, across every axis this writes.
+ *
+ * A union and not a type parameter, deliberately. `Cell<V>` is generic because the
+ * resolver is a piece of algebra with no opinion about `V`; this module is the opposite,
+ * and the two concrete domains reach four places that cannot be generic anyway --
+ * `UndoRecord` is JSON on disk, `apply.ts` never knows which axis it is applying,
+ * `describePlan` returns strings, and the CLI parses one grammar. Threading `<V>` through
+ * all of them to express a set of two would be flexibility nobody asked for, and
+ * `Axis.show` alone would make `Axis<boolean>` unassignable to `Axis<unknown>`.
+ */
+export type EntryValue = boolean | SkillValue;
+
+/**
+ * One writable surface: which key it lands in, how it resolves, and what a user may say.
+ *
+ * The registry, not a `switch`. Every axis-specific fact is a field here, so a check or a
+ * note that reaches for one is visibly reaching for a *parameter* -- and the day a fourth
+ * field is needed, the compiler names every axis that has not supplied it. That is
+ * DEA-145's rule about required parameters applied to a record: there is no default axis
+ * and no default anything on one.
+ */
+export interface Axis {
+  /** The `ChangeKind` `classify` answers about, and the word `--axis` takes. */
+  kind: 'plugin' | 'skill';
+  /** The settings key entries land in. */
+  settingsKey: string;
+  /** The value an id resolves to where no settings file mentions it. */
+  fallback: EntryValue;
+  /** How the id resolves in this project today, chain and all. */
+  resolve(ws: Workspace, project: ProjectRecord, id: string): Cell<EntryValue>;
+  /** This axis's own block in a settings file, when the file has one. */
+  entries(file: SettingsFile): Readonly<Record<string, EntryValue>> | undefined;
+  /**
+   * Every spelling `<id>=<value>` accepts, in the order `--help` lists them.
+   *
+   * A map and not a parser, so the accepted set is inspectable: a test can assert that
+   * the skill axis offers four distinct values and that none of them is a boolean, which
+   * is the "four-valued write collapsing to boolean" mutation stated as data.
+   */
+  spellings: ReadonlyMap<string, EntryValue>;
+  /** The noun the notes and refusals use for one row on this axis. */
+  noun: string;
+}
+
+export const PLUGIN_AXIS: Axis = {
+  kind: 'plugin',
+  settingsKey: 'enabledPlugins',
+  fallback: false,
+  resolve: (ws, project, id) => resolvePlugin(ws, project, id),
+  entries: (file) => file.enabledPlugins,
+  // `true`/`false` as well as `on`/`off`, because this key holds JSON booleans and a user
+  // reading the file sees them. Both spellings predate QM-45 and are kept.
+  spellings: new Map<string, EntryValue>([
+    ['on', true],
+    ['off', false],
+    ['true', true],
+    ['false', false],
+  ]),
+  noun: 'plugin',
+};
+
+/**
+ * The four-valued axis, spelled exactly as `SKILL_VALUES` declares it.
+ *
+ * Built *from* `SKILL_VALUES` rather than beside it, so a fifth state added to the model
+ * is a spelling the CLI accepts on the same commit rather than one it silently rejects.
+ * No `true`/`false` here: a boolean is not one of the four, and accepting it would mean
+ * choosing which of `on` and `name-only` a `true` meant -- which is the collapse this
+ * axis exists to avoid, arriving through the grammar instead of through the write.
+ */
+export const SKILL_AXIS: Axis = {
+  kind: 'skill',
+  settingsKey: 'skillOverrides',
+  fallback: 'on',
+  resolve: (ws, project, id) => resolveSkill(ws, project, id),
+  entries: (file) => file.skillOverrides,
+  spellings: new Map<string, EntryValue>(SKILL_VALUES.map((v) => [v, v])),
+  noun: 'skill',
+};
+
+/** The axes `--axis` names, in the order `--help` lists them. `plugin` is the default. */
+export const AXES: ReadonlyMap<string, Axis> = new Map([
+  ['plugin', PLUGIN_AXIS],
+  ['skill', SKILL_AXIS],
+]);
+
+/**
+ * A value as the diff, the change line and the notes print it.
+ *
+ * `String` and not `JSON.stringify`, so a skill reads `on -> off` rather than
+ * `"on" -> "off"`. The token printed is the JSON value's own text either way, which is
+ * the property worth having: what the line says is what lands in the file.
+ */
+export const showValue = (value: EntryValue): string => String(value);
 
 /**
  * What a target that does not exist yet is created as, and what undo restores it to.
@@ -70,14 +173,19 @@ export const WRITTEN_SETTINGS_KEY = 'enabledPlugins';
  * to this text rather than deleting it, because deleting a file is not something this
  * tool does.
  *
- * It declares `enabledPlugins` **empty**, which merges to nothing and is what an absent
- * key already means, and it is laid out over three lines on purpose. `write.ts` copies a
+ * It declares the axis's key **empty**, which merges to nothing and is what an absent key
+ * already means, and it is laid out over three lines on purpose. `write.ts` copies a
  * document's own layout rather than choosing one -- indent unit, colon spacing, line
  * ending -- so a seed of `{}` is a document with no layout to copy and the first entry
  * would be spliced in compact, fixing that shape for every later edit. Two spaces and a
  * key already present is the smallest seed that makes the file Claude Code writes.
+ *
+ * A function of the key rather than one constant, because seeding a skills write with
+ * `enabledPlugins` would create a file whose only content is a key the write does not
+ * touch -- and `undo` would then restore *that*, leaving a plugin block behind on a
+ * target this tool created for a skill.
  */
-export const EMPTY_SETTINGS = `{\n  "${WRITTEN_SETTINGS_KEY}": {}\n}\n`;
+export const emptySettings = (settingsKey: string): string => `{\n  "${settingsKey}": {}\n}\n`;
 
 export const targetFor = (projectPath: string): string =>
   join(projectPath, '.claude', TARGET_FILENAME);
@@ -87,9 +195,9 @@ export const targetFor = (projectPath: string): string =>
 // ---------------------------------------------------------------------------
 
 export interface ToggleRequest {
-  pluginId: string;
-  /** `true` writes `"<id>": true` -- the plugin loads in this project. */
-  enable: boolean;
+  id: string;
+  /** The value to write. On the plugin axis `true` means the plugin loads here. */
+  value: EntryValue;
 }
 
 export type ToggleRefusalCode =
@@ -101,9 +209,9 @@ export type ToggleRefusalCode =
   | 'target-discarded'
   /** `doctor` reported on the target in words this release cannot place. */
   | 'target-unplaced'
-  /** A schema error names `enabledPlugins`, so the key this writes is not in force. */
+  /** A schema error names the axis's key, so what this writes is not in force. */
   | 'target-ignores-key'
-  /** The plugin already resolves to the requested value here. */
+  /** The id already resolves to the requested value here. */
   | 'no-change'
   /** `write.ts` would not touch the file -- duplicate key, malformed JSON, and so on. */
   | 'edit-refused';
@@ -139,16 +247,18 @@ export interface ToggleNote {
 // The plan
 // ---------------------------------------------------------------------------
 
-export interface PluginChange {
-  pluginId: string;
-  /** What the plugin resolves to in this project today. */
-  from: boolean;
-  to: boolean;
+export interface EntryChange {
+  id: string;
+  /** What the id resolves to in this project today. */
+  from: EntryValue;
+  to: EntryValue;
   /** What `classify` says this change needs before it is live. */
   effect: Classification;
 }
 
 export interface TogglePlan {
+  /** Which key this plan writes, and everything else that differs by axis. */
+  axis: Axis;
   project: string;
   target: string;
   /** The target does not exist; applying creates it. */
@@ -167,7 +277,7 @@ export interface TogglePlan {
    * reviewed bytes are the applied bytes on both paths.
    */
   stage: Stage | null;
-  changes: PluginChange[];
+  changes: EntryChange[];
   notes: ToggleNote[];
 }
 
@@ -175,8 +285,16 @@ export type PlanResult =
   | { outcome: 'planned'; plan: TogglePlan }
   | { outcome: 'refused'; refusals: ToggleRefusal[] };
 
+/** How one requested id resolves now, and how it would resolve after the write. */
+export interface ResolvedPair {
+  now: Cell<EntryValue>;
+  after: Cell<EntryValue>;
+}
+
 /** What every check is handed. Built once, so no check re-reads a file or re-resolves. */
 export interface CheckInput {
+  /** The axis being written. Every check that is axis-aware reads it from here. */
+  axis: Axis;
   home: string;
   project: string;
   /** `null` when the workspace does not carry this directory at all. */
@@ -185,8 +303,8 @@ export interface CheckInput {
   /** The target settings file, or `null` when it does not exist yet. */
   targetFile: SettingsFile | null;
   requests: readonly ToggleRequest[];
-  /** Per requested plugin: how it resolves now, and how it would resolve after. */
-  resolved: ReadonlyMap<string, { now: Cell<boolean>; after: Cell<boolean> }>;
+  /** Per requested id: how it resolves now, and how it would resolve after. */
+  resolved: ReadonlyMap<string, ResolvedPair>;
 }
 
 /**
@@ -233,7 +351,7 @@ const line = (path: string, key: string, message: string) => `${path} › ${key}
  */
 const targetValidity: PlanCheck = {
   name: 'target-validity',
-  run: ({ targetFile }) => {
+  run: ({ axis, targetFile }) => {
     if (!targetFile) return [];
     const { validity, schemaErrors, path } = targetFile;
     const evidence = schemaErrors.map((e) => line(path, e.key, e.message));
@@ -268,13 +386,13 @@ const targetValidity: PlanCheck = {
     // Every partial acceptance leaves the file applying and one part of it not. If that
     // part is the key this writes, the write is as dead as it would be in a discarded
     // file -- and the validity says `field-dropped`, which is otherwise a green light.
-    const named = schemaErrors.filter((e) => namesWrittenKey(e.key));
+    const named = schemaErrors.filter((e) => namesWrittenKey(axis, e.key));
     if (named.length) {
       return [
         {
           code: 'target-ignores-key',
           message:
-            `Claude Code ignores ${WRITTEN_SETTINGS_KEY} in this file, so a plugin entry ` +
+            `Claude Code ignores ${axis.settingsKey} in this file, so a ${axis.noun} entry ` +
             'written here would decide nothing even though the rest of the file applies.',
           evidence: named.map((e) => line(path, e.key, e.message)),
           fix: 'Run claude doctor in this project and fix the key it names, then try again.',
@@ -287,15 +405,19 @@ const targetValidity: PlanCheck = {
 };
 
 /**
- * The key a schema error has to name for a plugin write to be pointless.
+ * The key a schema error has to name for a write on this axis to be pointless.
  *
- * Downward only -- `enabledPlugins` dropped whole, or one of its entries. The upward
+ * Downward only -- the axis's key dropped whole, or one of its entries. The upward
  * direction `effectDependsOn` needs (a parent key taking a child with it) has nothing to
- * match here, because the written key is already top-level and has no parent but the
+ * match here, because every written key is already top-level and has no parent but the
  * document.
+ *
+ * The axis is a required first parameter for `pluginServerKey`'s reason (DEA-145): a
+ * default would answer about `enabledPlugins` on a call site that meant `skillOverrides`,
+ * and the wrong answer is the one that lets the write through.
  */
-export function namesWrittenKey(key: string): boolean {
-  return key === WRITTEN_SETTINGS_KEY || key.startsWith(`${WRITTEN_SETTINGS_KEY}.`);
+export function namesWrittenKey(axis: Axis, key: string): boolean {
+  return key === axis.settingsKey || key.startsWith(`${axis.settingsKey}.`);
 }
 
 /**
@@ -315,21 +437,28 @@ export function namesWrittenKey(key: string): boolean {
  * reads `restated` while doing real work: without it the plugin resolves the other way.
  * Refusing on `restated` would refuse exactly the write someone reaches for when a repo's
  * tracked settings disable something they want. It is reported as a note instead.
+ *
+ * **The comparison is equality over the whole domain, and on a four-valued axis that is
+ * the whole check (QM-45).** `Object.is` and not a truthiness test, not `!==` against a
+ * boolean, and not "is it the fallback": a skill resolving `name-only` and a request for
+ * `user-invocable-only` are two different non-default states, and any comparison that
+ * folds the four into on/off refuses that write while letting `name-only` -> `name-only`
+ * through. Both halves of that are failures, and the second is the one that writes.
  */
 const noChange: PlanCheck = {
   name: 'no-change',
-  run: ({ requests, resolved, target }) => {
+  run: ({ axis, requests, resolved, target }) => {
     const out: ToggleRefusal[] = [];
     for (const req of requests) {
-      const state = resolved.get(req.pluginId);
-      if (!state || state.now.value !== req.enable) continue;
+      const state = resolved.get(req.id);
+      if (!state || !Object.is(state.now.value, req.value)) continue;
       const here = state.now.chain.find((l) => l.source === target);
       out.push({
         code: 'no-change',
-        message: `${req.pluginId} already resolves to ${req.enable} in this project.`,
+        message: `${req.id} already resolves to ${showValue(req.value)} in this project.`,
         evidence: here
-          ? [`${target} already sets it to ${here.value}`]
-          : describeChain(state.now, req.enable),
+          ? [`${target} already sets it to ${showValue(here.value)}`]
+          : describeChain(axis, state.now, req.value),
         ...(here
           ? {}
           : { fix: 'Nothing to write. An entry restating this would be a restated-entries finding.' }),
@@ -339,9 +468,11 @@ const noChange: PlanCheck = {
   },
 };
 
-function describeChain(cell: Cell<boolean>, value: boolean): string[] {
-  if (!cell.chain.length) return [`no settings file mentions it, and an unmentioned plugin is ${value}`];
-  return cell.chain.map((l) => `${l.scope}: ${l.value} — ${l.source}`);
+function describeChain(axis: Axis, cell: Cell<EntryValue>, value: EntryValue): string[] {
+  if (!cell.chain.length) {
+    return [`no settings file mentions it, and an unmentioned ${axis.noun} is ${showValue(value)}`];
+  }
+  return cell.chain.map((l) => `${l.scope}: ${showValue(l.value)} — ${l.source}`);
 }
 
 /**
@@ -365,6 +496,7 @@ export const CHECKS: readonly PlanCheck[] = [homeCollision, targetValidity, noCh
  */
 export function planToggles(
   ctx: AuditContext,
+  axis: Axis,
   projectPath: string,
   requests: readonly ToggleRequest[],
   checks: readonly PlanCheck[] = CHECKS,
@@ -386,17 +518,21 @@ export function planToggles(
   }
   const targetFile = record.localSettings;
 
-  const resolved = new Map<string, { now: Cell<boolean>; after: Cell<boolean> }>();
+  const resolved = new Map<string, ResolvedPair>();
   for (const req of requests) {
-    const now = resolvePlugin(ctx.ws, record, req.pluginId);
+    const now = axis.resolve(ctx.ws, record, req.id);
     // The chain this write produces: the target's own link replaced, everything else left
     // alone, and the answer taken from the real algebra rather than restated here.
-    const link: ChainLink<boolean> = { scope: 'local', value: req.enable, source: target };
-    const after = resolveCell([...now.chain.filter((l) => l.source !== target), link], false);
-    resolved.set(req.pluginId, { now, after });
+    const link: ChainLink<EntryValue> = { scope: 'local', value: req.value, source: target };
+    const after = resolveCell(
+      [...now.chain.filter((l) => l.source !== target), link],
+      axis.fallback,
+    );
+    resolved.set(req.id, { now, after });
   }
 
   const input: CheckInput = {
+    axis,
     home: ctx.ws.home,
     project,
     record,
@@ -410,7 +546,8 @@ export function planToggles(
   if (refusals.length) return { outcome: 'refused', refusals };
 
   const creates = !existsSync(target);
-  const edits = editsFor(targetFile, requests);
+  const edits = editsFor(axis, targetFile, requests);
+  const seed = emptySettings(axis.settingsKey);
   const refuseEdit = (detail: string): PlanResult => ({
     outcome: 'refused',
     refusals: [
@@ -430,8 +567,8 @@ export function planToggles(
     // Nothing on disk to stage against. The batch is applied to the text the file will be
     // created as, by the same function `stageEdits` uses, and `applyPlan` re-stages after
     // the create and compares -- so what is reviewed is what lands on this path too.
-    before = EMPTY_SETTINGS;
-    const previewed = applyEdits(EMPTY_SETTINGS, edits);
+    before = seed;
+    const previewed = applyEdits(seed, edits);
     if (previewed.outcome === 'refused') {
       return refuseEdit(`${previewed.refusal.reason}: ${previewed.refusal.detail}`);
     }
@@ -462,17 +599,22 @@ export function planToggles(
   }
 
   const index = buildDeferralIndex(ctx.measurements);
-  const changes: PluginChange[] = requests.map((req) => ({
-    pluginId: req.pluginId,
-    from: resolved.get(req.pluginId)!.now.value,
-    to: req.enable,
+  const changes: EntryChange[] = requests.map((req) => ({
+    id: req.id,
+    from: resolved.get(req.id)!.now.value,
+    to: req.value,
     effect: classify(
       {
-        kind: 'plugin',
-        id: req.pluginId,
+        kind: axis.kind,
+        id: req.id,
         project,
         // Absent for a file about to be created: nothing has validated a file that does
         // not exist, and `not-checked` would claim a measurement was attempted.
+        //
+        // Attached on both axes rather than only on the plugin one, which is what makes
+        // the header's "one mechanism, not two" true here as well: `classify` answers
+        // `none` for a change into a discarded file, `targetValidity` refuses exactly
+        // then, and neither is a restatement of the other.
         ...(targetFile
           ? { target: { source: targetFile.path, sourceValidity: targetFile.validity } }
           : {}),
@@ -483,38 +625,54 @@ export function planToggles(
 
   return {
     outcome: 'planned',
-    plan: { project, target, creates, before, after, edits, stage, changes, notes: notesFor(input, creates, resolved) },
+    plan: {
+      axis,
+      project,
+      target,
+      creates,
+      before,
+      after,
+      edits,
+      stage,
+      changes,
+      notes: notesFor(input, creates, resolved),
+    },
   };
 }
 
 /**
  * The edits, in the shape the file can take them.
  *
- * A file with no `enabledPlugins` key gets one insert carrying every requested entry; a
- * file that has one gets an edit per entry, so the untouched entries are not re-encoded.
- * That difference is the whole of "surgical": the second shape rewrites nothing but the
- * booleans asked about, and the first adds one member and moves no other byte.
+ * A file with no key for this axis gets one insert carrying every requested entry; a file
+ * that has one gets an edit per entry, so the untouched entries are not re-encoded. That
+ * difference is the whole of "surgical": the second shape rewrites nothing but the values
+ * asked about, and the first adds one member and moves no other byte.
  *
- * A malformed `enabledPlugins` -- a number, a string -- is not special-cased. It reaches
- * `write.ts`, which refuses `not-a-container` naming the offset, and that refusal is a
- * better answer than any repair this could invent.
+ * A malformed block -- a number, a string -- is not special-cased. It reaches `write.ts`,
+ * which refuses `not-a-container` naming the offset, and that refusal is a better answer
+ * than any repair this could invent.
+ *
+ * `r.value` is written through unchanged, which is what keeps a four-valued axis
+ * four-valued: nothing here maps a value onto anything, so `"name-only"` reaches the file
+ * as `"name-only"` and there is no place for it to become `true`.
  */
 export function editsFor(
+  axis: Axis,
   targetFile: SettingsFile | null,
   requests: readonly ToggleRequest[],
 ): Edit[] {
-  if (targetFile?.enabledPlugins) {
-    return requests.map((r) => ({ path: [WRITTEN_SETTINGS_KEY, r.pluginId], value: r.enable }));
+  if (targetFile && axis.entries(targetFile)) {
+    return requests.map((r) => ({ path: [axis.settingsKey, r.id], value: r.value }));
   }
-  const value: Record<string, boolean> = {};
-  for (const r of requests) value[r.pluginId] = r.enable;
-  return [{ path: [WRITTEN_SETTINGS_KEY], value }];
+  const value: Record<string, EntryValue> = {};
+  for (const r of requests) value[r.id] = r.value;
+  return [{ path: [axis.settingsKey], value }];
 }
 
 function notesFor(
   input: CheckInput,
   creates: boolean,
-  resolved: ReadonlyMap<string, { now: Cell<boolean>; after: Cell<boolean> }>,
+  resolved: ReadonlyMap<string, ResolvedPair>,
 ): ToggleNote[] {
   const notes: ToggleNote[] = [];
 
@@ -523,7 +681,7 @@ function notesFor(
       code: 'creates-file',
       message:
         `${input.target} does not exist and will be created. Undo restores it to ${JSON.stringify(
-          EMPTY_SETTINGS.trim(),
+          emptySettings(input.axis.settingsKey).trim(),
         )} rather than removing it.`,
     });
   }
@@ -555,21 +713,30 @@ function notesFor(
     });
   }
 
-  for (const [pluginId, state] of resolved) {
+  for (const [id, state] of resolved) {
     // `round-trip` and not `restated` (QM-43). This note exists for the write whose value
     // moves while landing on what the project would have inherited, and that shape is
     // `round-trip` by definition now: a `restated` result means every project-scope entry
     // agrees with the winner, which is a write whose value did not move, which `noChange`
     // refused before reaching here. The sentence explaining why the old label was not to
     // be believed is gone with the label.
+    //
+    // **The last clause is still true on the skill axis, and was checked rather than
+    // assumed (QM-45).** Both axes take their project-scope links from `contributingFiles`,
+    // which pushes `project` from `settings.json` and `local` from `settings.local.json`
+    // and nothing else -- and the target's own link is filtered out of `after` above. So
+    // the link that disagrees with the winner can only be the repo's tracked
+    // `settings.json`, on either axis. It is *not* true of `resolveMcpServer`, which
+    // pushes two `project` links by construction, so QM-46 has to revisit this sentence
+    // rather than inherit it.
     if (state.after.origin !== 'round-trip') continue;
     notes.push({
       code: 'would-restate',
       message:
-        `${pluginId} will resolve to ${state.after.value}, which is what this project would ` +
-        `inherit with its own settings files taken out — but the entry is in force, not ` +
-        `redundant: without it the plugin resolves ${state.now.value}, because the repo's ` +
-        `tracked settings.json says so.`,
+        `${id} will resolve to ${showValue(state.after.value)}, which is what this project ` +
+        `would inherit with its own settings files taken out — but the entry is in force, ` +
+        `not redundant: without it the ${input.axis.noun} resolves ` +
+        `${showValue(state.now.value)}, because the repo's tracked settings.json says so.`,
     });
   }
 
@@ -620,16 +787,22 @@ export function gitIgnoreState(
  * are `classify`'s own verdict and its own sentence -- there is no string here that says
  * what a change needs, because a second copy of that rule is a copy that can be right
  * while the classifier is wrong (DEA-123).
+ *
+ * **The header names the key, and the change lines name states rather than switches
+ * (QM-45).** `foo: on -> name-only` and `bar: false -> true` are both read against the
+ * `settingsKey` on the first line and against the same key in the diff below -- so a
+ * four-valued change is legible without the reader having to know which axis was asked
+ * for, and every state printed is a state the file is about to hold verbatim.
  */
 export function describePlan(plan: TogglePlan): string[] {
   const out: string[] = [];
-  out.push(`${plan.target}${plan.creates ? '  (new file)' : ''}`);
+  out.push(`${plan.target}${plan.creates ? '  (new file)' : ''}  ·  ${plan.axis.settingsKey}`);
   out.push('');
   out.push(...unifiedDiff(plan.before, plan.after).map((l) => `  ${l}`));
   out.push('');
 
   for (const c of plan.changes) {
-    out.push(`  ${c.pluginId}: ${c.from} -> ${c.to}`);
+    out.push(`  ${c.id}: ${showValue(c.from)} -> ${showValue(c.to)}`);
     out.push(`    effect: ${c.effect.effect}`);
     out.push(`    ${c.effect.reason}`);
     for (const e of c.effect.evidence) out.push(`      · ${e}`);
