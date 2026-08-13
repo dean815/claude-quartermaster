@@ -971,6 +971,24 @@ describe('all four values reach the file as themselves', () => {
     // The effect is `classify`'s own, on this axis too -- a skill is cache-safe.
     assert.equal(planEffect(plan), 'reload');
 
+    /*
+     * And the classification was handed the file it is about to write.
+     *
+     * Asserted rather than left implicit, because it is a hand mutation the rest of the
+     * suite does not catch: dropping the `target` for skills leaves 631 tests green.
+     * `targetValidity` refuses a discarded target before `classify` is reached, so the
+     * two guards never disagree today -- which is exactly why the second one has to be
+     * checked here. It is the standing half of "one mechanism, not two", and without it
+     * the skill axis silently stops depending on the target's validity the next time
+     * that refusal is narrowed.
+     */
+    const staged = plan.changes[0]!.effect.change;
+    assert.equal(staged.kind, 'skill');
+    assert.ok(
+      staged.kind === 'skill' && staged.target?.source === plan.target,
+      `the skill change named no target: ${JSON.stringify(staged)}`,
+    );
+
     // And the plugin axis still prints its own domain rather than the skill words.
     const p = world('four-printed-plugin');
     const pluginPlan = planned(planToggles(p.ctx, PLUGIN_AXIS, p.dir, on()));

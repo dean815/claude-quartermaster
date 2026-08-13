@@ -465,6 +465,47 @@ describe('undo', () => {
     assert.equal(readFileSync(s.target, 'utf8'), '{\n  "skillOverrides": {}\n}\n');
   });
 
+  /**
+   * The seed is this file's decision, and a plan cannot make it otherwise.
+   *
+   * `plan.before` and `emptySettings(plan.axis.settingsKey)` are equal by construction on
+   * every plan `planToggles` builds, so seeding from the plan instead reads identically
+   * and leaves the suite green -- measured, as a hand mutation, before this test existed.
+   * The state that separates them is a plan whose `before` is *not* the seed, which no
+   * planner produces and which is precisely what a caller building its own plan could
+   * hand `applyPlan`.
+   *
+   * The property is that the reviewed `after` still lands. Seeded from `before`, the
+   * edits go on top of the wrong bytes, the postcondition sees text that is not
+   * `plan.after`, and the write is refused -- which is the safe failure, but a refusal is
+   * not what this is supposed to do with a plan whose diff was correct.
+   */
+  test('the seed comes from the axis, not from the plan that asked for the file', () => {
+    const s = scratch('seed-authority');
+    const plan: TogglePlan = {
+      axis: PLUGIN_AXIS,
+      project: s.project,
+      target: s.target,
+      creates: true,
+      // A pre-image no planner would build. `after` is still what a correct seed plus the
+      // edits produces, so the reviewed diff is the one this must land.
+      before: '{\n  "somethingElse": 1\n}\n',
+      after: '{\n  "enabledPlugins": {\n    "p@m": true\n  }\n}\n',
+      edits: [{ path: ['enabledPlugins'], value: { 'p@m': true } }],
+      stage: null,
+      changes: [{ id: 'p@m', from: false, to: true, effect: effectStub() }],
+      notes: [],
+    };
+
+    const result = applyPlan(plan, opts(s.state));
+    assert.equal(
+      result.outcome,
+      'written',
+      `applyPlan refused a plan whose reviewed bytes were correct: ${JSON.stringify(result)}`,
+    );
+    assert.equal(readFileSync(s.target, 'utf8'), plan.after);
+  });
+
   test('nothing recorded is nothing to undo, and is not an error', () => {
     const s = scratch('undo-empty');
     const result = undoLast(opts(s.state));
