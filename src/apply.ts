@@ -183,6 +183,17 @@ export interface ApplyOptions {
   now: Date;
   /** Injected, so nothing under test writes into the user's real state directory. */
   state: string;
+  /**
+   * Called with the stage after it is taken and before anything is written.
+   *
+   * The seam the concurrency gate needs, and it exists for that (QM-46). Since the plan no
+   * longer carries a stage, the window `applyStage` exists for is the microseconds inside
+   * this function -- and a gate that cannot open that window is a gate that can only watch
+   * the semantic precondition and call it the drift check. `test/apply.test.ts` writes to
+   * the target from here and asserts the write is refused with the file intact. Nothing in
+   * `src/` passes it, the way nothing in `src/` passes `planToggles`' `checks`.
+   */
+  onStaged?: (stage: Stage) => void;
 }
 
 /**
@@ -204,7 +215,7 @@ export function applyPlan(plan: TogglePlan, opts: ApplyOptions): ApplyResult {
   }
 
   if (plan.creates) {
-    const { seed } = plan;
+    const { seed } = plan.axis;
     if (seed === null) {
       return {
         outcome: 'refused',
@@ -251,6 +262,7 @@ export function applyPlan(plan: TogglePlan, opts: ApplyOptions): ApplyResult {
   if (moved) return moved;
 
   const backup = writeBackup(plan, stage, opts);
+  opts.onStaged?.(stage);
   const written = applyStage(stage);
   if (written.outcome === 'refused') {
     return {
@@ -590,6 +602,7 @@ function undoEntries(record: UndoRecord, axis: Axis, opts: ApplyOptions): UndoRe
       evidence: [`${staged.refusal.reason}: ${staged.refusal.detail}`],
     };
   }
+  opts.onStaged?.(staged.stage);
   const written = applyStage(staged.stage);
   if (written.outcome === 'refused') {
     return {

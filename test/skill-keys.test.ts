@@ -200,7 +200,7 @@ describe('every id the repo builds is a key Claude Code matches', () => {
    */
   test('and the edit each one produces keys on that same published name', () => {
     for (const id of repoBuiltIds()) {
-      const [edit] = editsFor(SKILL_AXIS, null, [{ id, value: 'off' }]);
+      const [edit] = editsFor(SKILL_AXIS, {}, '/p', [{ id, value: 'off' }]) ?? [];
       assert.deepEqual(edit, { path: ['skillOverrides'], value: { [id]: 'off' } });
       assert.ok(PUBLISHED.has(id), `${id} would be written and matched by nothing`);
     }

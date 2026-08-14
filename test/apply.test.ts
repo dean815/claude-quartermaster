@@ -27,6 +27,7 @@ import {
   rmSync,
   statSync,
   unlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -44,8 +45,15 @@ import {
   type ApplyResult,
   type UndoResult,
 } from '../src/apply.ts';
-import { PLUGIN_AXIS, SKILL_AXIS, TARGET_FILENAME, emptySettings, type TogglePlan } from '../src/toggle.ts';
-import { stageEdits, type Edit } from '../src/surfaces/write.ts';
+import {
+  MCP_AXIS,
+  PLUGIN_AXIS,
+  SKILL_AXIS,
+  TARGET_FILENAME,
+  emptySettings,
+  type TogglePlan,
+} from '../src/toggle.ts';
+import { applyEdits, type Edit } from '../src/surfaces/write.ts';
 
 let root = '';
 before(() => {
@@ -76,21 +84,30 @@ function scratch(label: string): { project: string; target: string; state: strin
   };
 }
 
-/** A plan over a file that already exists, staged the way `planToggles` stages one. */
+/** The one change every plugin plan here makes, in the shape `planToggles` records it. */
+const CHANGE = (): TogglePlan['changes'][number] => ({
+  id: 'p@m',
+  from: false,
+  to: true,
+  wasInFile: null,
+  willBeInFile: true,
+  effect: effectStub(),
+});
+
+/** A plan over a file that already exists, in the shape `planToggles` builds one. */
 function planOver(target: string, project: string, text = BEFORE): TogglePlan {
   writeFileSync(target, text);
-  const staged = stageEdits(target, EDITS);
-  if (staged.outcome === 'refused') throw new Error(`staging refused: ${staged.refusal.detail}`);
+  const previewed = applyEdits(text, EDITS);
+  if (previewed.outcome === 'refused') throw new Error(`preview refused: ${previewed.refusal.detail}`);
   return {
     axis: PLUGIN_AXIS,
     project,
     target,
     creates: false,
     before: text,
-    after: staged.stage.text,
+    after: previewed.text,
     edits: EDITS,
-    stage: staged.stage,
-    changes: [{ id: 'p@m', from: false, to: true, effect: effectStub() }],
+    changes: [CHANGE()],
     notes: [],
   };
 }
@@ -103,11 +120,10 @@ function planNew(target: string, project: string): TogglePlan {
     project,
     target,
     creates: true,
-    before: emptySettings(PLUGIN_AXIS.settingsKey),
+    before: emptySettings(PLUGIN_AXIS.writtenKey),
     after: '{\n  "enabledPlugins": {\n    "p@m": true\n  }\n}\n',
     edits,
-    stage: null,
-    changes: [{ id: 'p@m', from: false, to: true, effect: effectStub() }],
+    changes: [CHANGE()],
     notes: [],
   };
 }
@@ -138,7 +154,10 @@ describe('applying a plan', () => {
     assert.equal(readFileSync(result.backup, 'utf8'), BEFORE);
     assert.equal(result.record.target, s.target);
     assert.equal(result.record.createdTarget, false);
-    assert.deepEqual(result.record.changes, [{ id: 'p@m', from: false, to: true }]);
+    assert.deepEqual(result.record.changes, [
+      { id: 'p@m', from: false, to: true, wasInFile: null, willBeInFile: true },
+    ]);
+    assert.equal(result.rebased, false, 'a quiet file should not report a rebase');
     // Nothing outside the edited value moved -- the array written inline stays inline.
     assert.ok(readFileSync(s.target, 'utf8').includes('"unmodelled": [1, 2]'));
     assert.equal(readdirSync(join(s.project, '.claude')).filter((f) => f.includes('.qm-')).length, 0);
@@ -155,7 +174,7 @@ describe('applying a plan', () => {
     assert.equal(readFileSync(s.target, 'utf8'), plan.after);
     // The pre-image of a created file is what it was created as, so undo restores an
     // empty settings file rather than deleting one.
-    assert.equal(readFileSync(result.backup, 'utf8'), emptySettings(PLUGIN_AXIS.settingsKey));
+    assert.equal(readFileSync(result.backup, 'utf8'), emptySettings(PLUGIN_AXIS.writtenKey));
     assert.equal(result.record.createdTarget, true);
   });
 
@@ -221,8 +240,10 @@ const naive: Applier = (plan) => {
     outcome: 'written',
     bytes: Buffer.byteLength(plan.after),
     backup: '',
+    rebased: false,
     record: {
       appliedAt: '',
+      axis: plan.axis.name,
       project: plan.project,
       target: plan.target,
       backup: '',
@@ -237,9 +258,19 @@ const naive: Applier = (plan) => {
 /**
  * Everything an apply must refuse, with what the target must still say afterwards.
  *
- * Both halves of the concurrency check are here as separate rows. Either alone is
- * defeatable: a coarse filesystem timestamp hides a fast write, so the hash is what
- * catches it, and the hash alone cannot distinguish a quiet file from one being written.
+ * **Two windows, and QM-46 split them.** The plan no longer carries a stage, so the window
+ * `applyStage` exists for is the microseconds inside `applyPlan` between `stageEdits` and
+ * the rename -- opened here through `ApplyOptions.onStaged`, which is the only way to reach
+ * it from outside and is why that seam exists. Both halves of the concurrency check are
+ * separate rows through it: either alone is defeatable, a coarse filesystem timestamp hides
+ * a fast write so the hash is what catches it, and the hash alone cannot distinguish a quiet
+ * file from one being written.
+ *
+ * The *human's* window is the third row, and it is guarded semantically rather than by
+ * bytes. A file whose unrelated keys moved while someone read the diff is re-based onto and
+ * reported; a file whose **entry** moved is refused, because the change someone approved is
+ * not the change that would be made. Refusing the first is the design this issue replaced;
+ * failing to refuse the second is the hole that replacement could have left.
  */
 function driftGate(apply: Applier): string[] {
   const failures: string[] = [];
@@ -252,22 +283,38 @@ function driftGate(apply: Applier): string[] {
   {
     const s = scratch('drift-mtime');
     const plan = planOver(s.target, s.project);
+    // Written from inside the window: after the stage was taken, before the rename.
     const meanwhile = BEFORE.replace('"other@m": true', '"other@m": false');
-    writeFileSync(s.target, meanwhile);
-    check('a file written since staging', s.target, meanwhile, apply(plan, opts(s.state)));
+    const o: ApplyOptions = {
+      ...opts(s.state),
+      onStaged: () => writeFileSync(s.target, meanwhile),
+    };
+    check('a file written since staging', s.target, meanwhile, apply(plan, o));
   }
 
   {
     const s = scratch('drift-hash');
     const plan = planOver(s.target, s.project);
     const meanwhile = BEFORE.replace('"other@m": true', '"other@m": false');
-    writeFileSync(s.target, meanwhile);
     // The mtime half satisfied on purpose, so only the content can notice.
-    const asIfUnmoved: TogglePlan = {
-      ...plan,
-      stage: { ...plan.stage!, mtimeMs: statSync(s.target).mtimeMs },
+    const o: ApplyOptions = {
+      ...opts(s.state),
+      onStaged: (stage) => {
+        writeFileSync(s.target, meanwhile);
+        utimesSync(s.target, new Date(stage.mtimeMs), new Date(stage.mtimeMs));
+      },
     };
-    check('a file whose content moved under an unchanged mtime', s.target, meanwhile, apply(asIfUnmoved, opts(s.state)));
+    check('a file whose content moved under an unchanged mtime', s.target, meanwhile, apply(plan, o));
+  }
+
+  {
+    const s = scratch('drift-entry');
+    const plan = planOver(s.target, s.project);
+    // The human's window: the entry this plan is about was decided by someone else while
+    // the diff was on screen. Nothing here is inside `applyStage`'s window.
+    const theirs = BEFORE.replace('"other@m": true', '"other@m": true,\n    "p@m": false');
+    writeFileSync(s.target, theirs);
+    check('an entry decided since the diff was printed', s.target, theirs, apply(plan, opts(s.state)));
   }
 
   {
@@ -281,7 +328,14 @@ function driftGate(apply: Applier): string[] {
   return failures;
 }
 
-/** The two files this phase promised never to write, by name. */
+/**
+ * A path the plan's own axis does not own.
+ *
+ * `settings.json` by name, because no axis may ever write it. `.claude.json` because a
+ * *plugin* plan naming it is a plan naming another axis's file -- which is the check
+ * QM-46 replaced the flat basename set with, and the one a flat set could not make once
+ * one axis was allowed that name.
+ */
 function forbiddenGate(apply: Applier): string[] {
   const failures: string[] = [];
   for (const name of ['settings.json', '.claude.json']) {
@@ -305,20 +359,60 @@ describe('the write gate', () => {
     assert.deepEqual(failures, [], report(failures));
   });
 
-  test('and settings.json and ~/.claude.json are refused by name', () => {
-    assert.deepEqual([...FORBIDDEN_BASENAMES].sort(), ['.claude.json', 'settings.json']);
+  test('and settings.json is refused by name, ~/.claude.json by ownership', () => {
+    assert.deepEqual([...FORBIDDEN_BASENAMES].sort(), ['settings.json']);
+    // The MCP axis owns that basename and the plugin axis does not, which is the whole
+    // difference between the old flat set and the registry check that replaced it.
+    assert.equal(MCP_AXIS.owns('/h/.claude.json', '/p'), true);
+    assert.equal(PLUGIN_AXIS.owns('/h/.claude.json', '/p'), false);
+    assert.equal(PLUGIN_AXIS.owns('/p/.claude/settings.local.json', '/p'), true);
     const failures = forbiddenGate(applyPlan);
     assert.deepEqual(failures, [], report(failures));
   });
 
-  test('the bytes staged must be the bytes reviewed', () => {
+  /**
+   * What the reviewed diff is binding on, now that it is not binding on every byte.
+   *
+   * The entry. A plan whose edits do not put `willBeInFile` where it says they will is
+   * refused -- so a batch that has drifted from the change it was reviewed as making
+   * cannot land, however the bytes around it look.
+   */
+  test('the entry staged must be the entry reviewed', () => {
     const s = scratch('diverged');
     const plan = planOver(s.target, s.project);
-    const result = applyPlan({ ...plan, after: `${plan.after}\n/* not what was staged */` }, opts(s.state));
+    const result = applyPlan(
+      { ...plan, changes: [{ ...plan.changes[0]!, willBeInFile: false }] },
+      opts(s.state),
+    );
     assert.equal(result.outcome, 'refused');
     if (result.outcome !== 'refused') return;
     assert.equal(result.code, 'preview-diverged');
     assert.equal(readFileSync(s.target, 'utf8'), BEFORE);
+  });
+
+  /**
+   * The other half of that, and the one the byte comparison used to refuse.
+   *
+   * An unrelated key written while the diff was on screen. The entry is untouched, so the
+   * batch is re-applied to the bytes as they now are, both writes survive, and the run
+   * says the file moved. On `settings.local.json` this is a courtesy; on the file that
+   * moves every 11.5s it is the only way the command ever applies anything.
+   */
+  test('an unrelated key written since the review is re-based onto, and reported', () => {
+    const s = scratch('rebased');
+    const plan = planOver(s.target, s.project);
+    const theirs = BEFORE.replace('"unmodelled": [1, 2]', '"unmodelled": [1, 2, 3]');
+    writeFileSync(s.target, theirs);
+
+    const result = applyPlan(plan, opts(s.state));
+    assert.equal(result.outcome, 'written');
+    if (result.outcome !== 'written') return;
+    assert.equal(result.rebased, true, 'a file that moved was not reported as re-based');
+    const now = readFileSync(s.target, 'utf8');
+    assert.ok(now.includes('"p@m": true'), 'the reviewed change did not land');
+    assert.ok(now.includes('"unmodelled": [1, 2, 3]'), 'the concurrent write was clobbered');
+    // The pre-image is the bytes actually replaced, not the ones someone read.
+    assert.equal(readFileSync(result.backup, 'utf8'), theirs);
   });
 
   test('an applier that skips both gates is caught by both', () => {
@@ -326,8 +420,9 @@ describe('the write gate', () => {
     assert.ok(drift.length > 0, 'the drift gate passed a writer that checks nothing — that is a hole');
     assert.ok(
       drift.some((f) => /a file written since staging/.test(f)) &&
-        drift.some((f) => /unchanged mtime/.test(f)),
-      `the drift gate failed, but not on both halves: ${report(drift)}`,
+        drift.some((f) => /unchanged mtime/.test(f)) &&
+        drift.some((f) => /an entry decided since the diff/.test(f)),
+      `the drift gate failed, but not on all three windows: ${report(drift)}`,
     );
 
     const forbidden = forbiddenGate(naive);
@@ -439,15 +534,16 @@ describe('undo', () => {
       project: s.project,
       target: s.target,
       creates: true,
-      before: emptySettings(SKILL_AXIS.settingsKey),
+      before: emptySettings(SKILL_AXIS.writtenKey),
       after: '{\n  "skillOverrides": {\n    "s-01": "name-only"\n  }\n}\n',
       edits: [{ path: ['skillOverrides'], value: { 's-01': 'name-only' } }],
-      stage: null,
       changes: [
         {
           id: 's-01',
           from: 'on',
           to: 'name-only',
+          wasInFile: null,
+          willBeInFile: 'name-only',
           effect: { ...effectStub(), change: { kind: 'skill' as const, id: 's-01' } },
         },
       ],
@@ -459,7 +555,9 @@ describe('undo', () => {
     if (result.outcome !== 'written') return;
     assert.equal(readFileSync(s.target, 'utf8'), plan.after);
     // The four-valued change survives the record, which is JSON on disk.
-    assert.deepEqual(result.record.changes, [{ id: 's-01', from: 'on', to: 'name-only' }]);
+    assert.deepEqual(result.record.changes, [
+      { id: 's-01', from: 'on', to: 'name-only', wasInFile: null, willBeInFile: 'name-only' },
+    ]);
 
     assert.equal(undoLast(opts(s.state)).outcome, 'restored');
     assert.equal(readFileSync(s.target, 'utf8'), '{\n  "skillOverrides": {}\n}\n');
@@ -492,8 +590,7 @@ describe('undo', () => {
       before: '{\n  "somethingElse": 1\n}\n',
       after: '{\n  "enabledPlugins": {\n    "p@m": true\n  }\n}\n',
       edits: [{ path: ['enabledPlugins'], value: { 'p@m': true } }],
-      stage: null,
-      changes: [{ id: 'p@m', from: false, to: true, effect: effectStub() }],
+      changes: [CHANGE()],
       notes: [],
     };
 

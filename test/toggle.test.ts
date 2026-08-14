@@ -24,18 +24,25 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { AuditContext } from '../src/detect.ts';
 import type { PluginInventory } from '../src/inventory.ts';
 import { NOT_CHECKED, readSettings } from '../src/surfaces/read.ts';
-import type { ClaudeJson, SettingsCheck, Workspace } from '../src/surfaces/types.ts';
+import type {
+  ClaudeJson,
+  McpServerSpec,
+  ProjectEntry,
+  SettingsCheck,
+  Workspace,
+} from '../src/surfaces/types.ts';
 import { settingsFromDoctor } from '../src/delegate/doctor.ts';
 import {
   AXES,
   CHECKS,
+  MCP_AXIS,
   PLUGIN_AXIS,
   SKILL_AXIS,
   TARGET_FILENAME,
@@ -73,13 +80,14 @@ after(() => {
   if (root) rmSync(root, { recursive: true, force: true });
 });
 
-const claudeJson = (path: string): ClaudeJson => ({
+const claudeJson = (path: string, body: Partial<ClaudeJson> = {}): ClaudeJson => ({
   path,
   mcpServers: {},
   projects: {},
   claudeAiMcpEverConnected: [],
   skillUsage: {},
   pluginUsage: {},
+  ...body,
 });
 
 const inventory = (id: string): PluginInventory => ({
@@ -101,6 +109,8 @@ interface World {
   dir: string;
   ctx: AuditContext;
   target: string;
+  /** The MCP axis's target -- the fake home's `.claude.json`, on disk. */
+  claudeJson: string;
 }
 
 /**
@@ -119,6 +129,18 @@ function world(
     user?: { enabledPlugins?: Record<string, boolean>; skillOverrides?: Record<string, SkillValue> };
     asHome?: boolean;
     git?: boolean;
+    /**
+     * The MCP axis's world: what `~/.claude.json` says, and what it holds for this
+     * project. Written to disk as well as modelled, because that file *is* the target and
+     * `planToggles` reads its bytes.
+     */
+    mcp?: {
+      mcpServers?: Record<string, McpServerSpec>;
+      everConnected?: string[];
+      /** `null` leaves the project out of `projects` entirely -- an unregistered one. */
+      entry?: ProjectEntry | null;
+      mcpJson?: Record<string, McpServerSpec>;
+    };
   } = {},
 ): World {
   const dir = join(root, name);
@@ -131,12 +153,45 @@ function world(
     execFileSync('git', ['init', '-q', '.'], { cwd: dir });
   }
 
+  const home = files.asHome ? dir : join(root, '__home__');
+  mkdirSync(home, { recursive: true });
+  const claudeJsonPath = join(home, `.claude.json`);
+  const entry = files.mcp?.entry;
+  const registered = entry !== null;
+  const doc = claudeJson(claudeJsonPath, {
+    mcpServers: files.mcp?.mcpServers ?? {},
+    claudeAiMcpEverConnected: files.mcp?.everConnected ?? [],
+    projects: registered ? { [dir]: entry ?? {} } : {},
+  });
+  // The real bytes, two-space indented the way Claude Code writes them, so the edits
+  // splice into a document with a layout to copy rather than one this file invented.
+  // `lastCost` stands in for the telemetry every live session writes into this file.
+  writeFileSync(
+    claudeJsonPath,
+    `${JSON.stringify(
+      {
+        numStartups: 3,
+        mcpServers: doc.mcpServers,
+        claudeAiMcpEverConnected: doc.claudeAiMcpEverConnected,
+        projects: doc.projects,
+        lastCost: 0.5,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
   const record = project(dir, {
+    registered,
+    entry: entry ?? null,
+    ...(files.mcp?.mcpJson
+      ? { mcpJson: { path: join(dir, '.mcp.json'), mcpServers: files.mcp.mcpJson } }
+      : {}),
     settings: readSettings(join(dir, '.claude', 'settings.json'), NOT_CHECKED),
     localSettings: readSettings(join(dir, '.claude', TARGET_FILENAME), files.localCheck ?? NOT_CHECKED),
   });
   const ws: Workspace = {
-    home: files.asHome ? dir : join(root, '__home__'),
+    home,
     userSettings: files.user
       ? {
           path: join(root, '__home__', '.claude', 'settings.json'),
@@ -149,13 +204,14 @@ function world(
       : null,
     userRules: [],
     personalSkills: [],
-    claudeJson: claudeJson(join(root, '__home__', '.claude.json')),
+    claudeJson: doc,
     projects: [record],
   };
 
   return {
     dir,
     target: targetFor(dir),
+    claudeJson: claudeJsonPath,
     ctx: {
       ws,
       measurements: [],
@@ -169,6 +225,8 @@ const on = (id = 'p@m'): ToggleRequest[] => [{ id, value: true }];
 const off = (id = 'p@m'): ToggleRequest[] => [{ id, value: false }];
 /** One skill request, at whichever of the four states the scenario is about. */
 const skill = (value: SkillValue, id = 's-01'): ToggleRequest[] => [{ id, value }];
+/** One MCP request. `false` denies, `true` un-denies -- the container is inverted. */
+const mcp = (id: string, value: boolean): ToggleRequest[] => [{ id, value }];
 
 // ---------------------------------------------------------------------------
 // The scenarios
@@ -310,7 +368,7 @@ const SCENARIOS: Scenario[] = [
           schemaErrors: [
             {
               path: 'x',
-              key: PLUGIN_AXIS.settingsKey,
+              key: PLUGIN_AXIS.writtenKey,
               message: 'Expected record, but received number. This field was ignored.',
               notes: [],
               costs: 'field',
@@ -437,7 +495,156 @@ const SCENARIOS: Scenario[] = [
     requests: on(),
     expect: 'planned',
   },
+
+  // -------------------------------------------------------------------------
+  // The MCP axis (QM-46). Same table, same guards, a shared file and a deny-list.
+  // -------------------------------------------------------------------------
+
+  {
+    /**
+     * The commonest real write on this axis, and the one a plugin-shaped `noChange`
+     * refuses.
+     *
+     * A claude.ai connector nothing on disk mentions resolves `false` here -- `mcp.ts`
+     * says that means *no file decided this*, not *it does not load* -- so comparing the
+     * request against the resolved value calls this a no-op. 22 of the 34 distinct names
+     * in this machine's deny-lists are exactly this shape, every one of them added while
+     * in exactly this state. `Axis.fallbackDecides` is what keeps it planned.
+     */
+    label: 'a connector nothing declares, denied',
+    guard: null,
+    axis: MCP_AXIS,
+    build: () => world('mcp-connector', { mcp: { everConnected: ['claude.ai Linear'], entry: {} } }),
+    requests: mcp('claude.ai Linear', false),
+    expect: 'planned',
+  },
+  {
+    label: 'a user-scope server denied for this project',
+    guard: null,
+    axis: MCP_AXIS,
+    build: () => world('mcp-user-scope', { mcp: { mcpServers: { linear: {} }, entry: {} } }),
+    requests: mcp('linear', false),
+    expect: 'planned',
+  },
+  {
+    label: 'a denied server let back through',
+    guard: null,
+    axis: MCP_AXIS,
+    build: () =>
+      world('mcp-undeny', {
+        mcp: { mcpServers: { linear: {} }, entry: { disabledMcpServers: ['linear'] } },
+      }),
+    requests: mcp('linear', true),
+    expect: 'planned',
+  },
+  {
+    label: 'a server the deny-list already names, denied again',
+    guard: 'no-change',
+    axis: MCP_AXIS,
+    build: () =>
+      world('mcp-already', { mcp: { entry: { disabledMcpServers: ['claude.ai Linear'] } } }),
+    requests: mcp('claude.ai Linear', false),
+    expect: 'no-change',
+  },
+  {
+    /**
+     * The shape only an inverted container reaches: `on` against a name nothing denies.
+     *
+     * There is no entry to remove, so the batch is empty -- and no comparison of the
+     * resolved value notices, because `false` and the requested `true` differ. Without the
+     * empty-batch clause this plans a write of zero edits and reports success.
+     */
+    label: 'a server nothing denies, turned on',
+    guard: 'no-change',
+    axis: MCP_AXIS,
+    build: () => world('mcp-nothing-to-remove', { mcp: { mcpServers: { linear: {} }, entry: {} } }),
+    requests: mcp('linear', true),
+    expect: 'no-change',
+  },
+  {
+    label: 'a project ~/.claude.json has never recorded',
+    guard: 'unregistered-project',
+    axis: MCP_AXIS,
+    build: () => world('mcp-unregistered', { mcp: { entry: null } }),
+    requests: mcp('linear', false),
+    expect: 'unregistered-project',
+  },
+  {
+    /**
+     * A deny beside an allow. `resolveMcpServer` pushes both at `project` scope out of the
+     * same file, so which wins is decided by the order this repo happens to push them in
+     * -- reverse-engineered and never measured -- and a write whose effect cannot be
+     * stated is the "reported success, changed nothing" failure with extra steps.
+     */
+    label: 'a deny written beside an allow for the same server',
+    guard: 'contested-entry',
+    axis: MCP_AXIS,
+    build: () =>
+      world('mcp-contested', {
+        mcp: { mcpServers: { linear: {} }, entry: { enabledMcpServers: ['linear'] } },
+      }),
+    requests: mcp('linear', false),
+    expect: 'contested-entry',
+  },
+  {
+    /**
+     * The DEA-145 tripwire, and it fires on nothing today.
+     *
+     * Measured across the live catalog: 7 rows read `manifest`, 55 carry no plugin, and
+     * **0** read `marketplace-id`. It is constructed here for the same reason the dropped
+     * -`enabledPlugins` row above is -- 2 of the 42 installed manifests on this machine
+     * are unreadable, so the day one of those plugins enumerates an MCP server is the day
+     * a write would mint `plugin:<marketplace id>:<server>` into a deny-list and report
+     * success against a key no config file matches.
+     */
+    label: 'a plugin server whose name was built from the marketplace id',
+    guard: 'key-provenance',
+    axis: MCP_AXIS,
+    build: () => unreadableManifest(),
+    requests: mcp('plugin:notion:notion', false),
+    expect: 'key-guessed',
+  },
+  {
+    label: 'the home directory, whose deny-list is an ordinary projects entry',
+    guard: null,
+    axis: MCP_AXIS,
+    build: () => world('mcp-as-home', { asHome: true, mcp: { entry: {} } }),
+    requests: mcp('claude.ai Linear', false),
+    expect: 'planned',
+  },
 ];
+
+/**
+ * A workspace whose one enabled plugin has no readable manifest name (QM-46).
+ *
+ * `pluginNamespace` then falls back to the marketplace id and `keyBasis` reads
+ * `marketplace-id`, which is the state `attestMcpName` refuses. Built by handing the
+ * inventory `manifestName: null` and an enumerated MCP server -- the same two facts
+ * `readInventories` would report for a plugin whose `.claude-plugin/plugin.json` could not
+ * be read.
+ */
+function unreadableManifest(): World {
+  const w = world('mcp-guessed-key', {
+    local: '{\n  "enabledPlugins": {\n    "notion@m": true\n  }\n}\n',
+    mcp: { entry: {} },
+  });
+  const inv: PluginInventory = {
+    ...inventory('notion@m'),
+    manifestName: null,
+    enumerated: [
+      {
+        source: 'catalog',
+        names: [],
+        skillNames: [],
+        mcpServerNames: ['notion'],
+        sha: null,
+        version: null,
+        fetchedAt: null,
+      },
+    ],
+  };
+  return { ...w, ctx: { ...w.ctx, inventories: new Map([['notion@m', inv]]) } };
+}
 
 /**
  * A file Claude Code keeps while ignoring its `skillOverrides` key.
@@ -456,7 +663,7 @@ function droppedSkillOverrides(): Parameters<typeof world>[1] {
       schemaErrors: [
         {
           path: 'x',
-          key: SKILL_AXIS.settingsKey,
+          key: SKILL_AXIS.writtenKey,
           message: 'Expected record, but received number. This field was ignored.',
           notes: [],
           costs: 'field',
@@ -748,17 +955,46 @@ describe('the pieces a plan is built from', () => {
   });
 
   test('a file with the key gets per-entry edits; one without gets a single insert', () => {
-    const file = readSettings(join(root, 'nope.json'), NOT_CHECKED);
-    assert.equal(file, null);
-    assert.deepEqual(editsFor(PLUGIN_AXIS, null, [{ id: 'a@m', value: true }]), [
+    assert.deepEqual(editsFor(PLUGIN_AXIS, {}, '/p', [{ id: 'a@m', value: true }]), [
       { path: ['enabledPlugins'], value: { 'a@m': true } },
     ]);
 
-    const w = world('edits', { local: '{\n  "enabledPlugins": {\n    "x@m": true\n  }\n}\n' });
-    const withKey = w.ctx.ws.projects[0]!.localSettings;
-    assert.deepEqual(editsFor(PLUGIN_AXIS, withKey, [{ id: 'a@m', value: false }]), [
+    const withKey = { enabledPlugins: { 'x@m': true } };
+    assert.deepEqual(editsFor(PLUGIN_AXIS, withKey, '/p', [{ id: 'a@m', value: false }]), [
       { path: ['enabledPlugins', 'a@m'], value: false },
     ]);
+  });
+
+  /**
+   * The inverted container, which is where the shape stops being a settings block (QM-46).
+   *
+   * `off` appends one element and moves no other byte -- the index is the array's own
+   * length, so `write.ts` copies the separator the file already uses. `on` has no such
+   * shape: JSON has no way to splice an element *out*, so the array is rewritten without
+   * it, and that is the one place this axis re-encodes anything it was not asked about.
+   * A `disabledMcpServers` that is not there yet is created whole, and a `projects` entry
+   * that is not there is never created at all -- `unregisteredProject` refuses first.
+   */
+  test('the deny-list appends to add and rewrites to remove', () => {
+    const doc = { projects: { '/p': { disabledMcpServers: ['a', 'b'] } } };
+    assert.deepEqual(editsFor(MCP_AXIS, doc, '/p', [{ id: 'c', value: false }]), [
+      { path: ['projects', '/p', 'disabledMcpServers', 2], value: 'c' },
+    ]);
+    assert.deepEqual(editsFor(MCP_AXIS, doc, '/p', [{ id: 'a', value: true }]), [
+      { path: ['projects', '/p', 'disabledMcpServers'], value: ['b'] },
+    ]);
+    assert.deepEqual(editsFor(MCP_AXIS, { projects: { '/p': {} } }, '/p', [{ id: 'a', value: false }]), [
+      { path: ['projects', '/p', 'disabledMcpServers'], value: ['a'] },
+    ]);
+    // Presence is the value, so `entryIn` has two states and `entryFor` inverts.
+    assert.equal(MCP_AXIS.entryIn(doc, '/p', 'a'), false);
+    assert.equal(MCP_AXIS.entryIn(doc, '/p', 'zz'), null);
+    assert.equal(MCP_AXIS.entryFor(false), false);
+    assert.equal(MCP_AXIS.entryFor(true), null);
+    // And the settings axes cannot express "no entry", which is why undo there is the file.
+    assert.equal(PLUGIN_AXIS.editsFor({}, '/p', new Map([['a@m', null]])), null);
+    assert.equal(PLUGIN_AXIS.undo, 'file');
+    assert.equal(MCP_AXIS.undo, 'entries');
   });
 
   /**
@@ -774,11 +1010,11 @@ describe('the pieces a plan is built from', () => {
     const w = world('edits-two-axes', {
       local: '{\n  "enabledPlugins": {\n    "x@m": true\n  }\n}\n',
     });
-    const file = w.ctx.ws.projects[0]!.localSettings;
-    assert.deepEqual(editsFor(SKILL_AXIS, file, [{ id: 's-01', value: 'name-only' }]), [
+    const file = JSON.parse(readFileSync(join(w.dir, '.claude', TARGET_FILENAME), 'utf8'));
+    assert.deepEqual(editsFor(SKILL_AXIS, file, w.dir, [{ id: 's-01', value: 'name-only' }]), [
       { path: ['skillOverrides'], value: { 's-01': 'name-only' } },
     ]);
-    assert.deepEqual(editsFor(PLUGIN_AXIS, file, [{ id: 'x@m', value: false }]), [
+    assert.deepEqual(editsFor(PLUGIN_AXIS, file, w.dir, [{ id: 'x@m', value: false }]), [
       { path: ['enabledPlugins', 'x@m'], value: false },
     ]);
   });
@@ -889,9 +1125,13 @@ describe('the skill axis is four-valued in the grammar', () => {
   });
 
   test('and the registry offers both axes under the names --axis takes', () => {
-    assert.deepEqual([...AXES.keys()], ['plugin', 'skill']);
+    assert.deepEqual([...AXES.keys()], ['plugin', 'skill', 'mcp']);
     assert.equal(AXES.get('plugin'), PLUGIN_AXIS);
     assert.equal(AXES.get('skill'), SKILL_AXIS);
+    assert.equal(AXES.get('mcp'), MCP_AXIS);
+    // The map key and the axis's own name are the same string, because `UndoRecord`
+    // stores one and `undoLast` looks the other up (QM-46).
+    for (const [name, axis] of AXES) assert.equal(axis.name, name);
   });
 });
 
@@ -1009,9 +1249,12 @@ describe('all four values reach the file as themselves', () => {
  * the differential fixture: `project = off`, `local = on`, no user link. The resolved
  * value lands on the `on` fallback and the local entry is the entire reason it does.
  *
- * A note and not a refusal, and the last clause of it was checked rather than assumed:
- * both axes take their project-scope links from `contributingFiles`, so the link that
- * disagrees can only be the tracked `settings.json`.
+ * A note and not a refusal, and its last clause **names the link** rather than describing
+ * it (QM-46). It used to end "because the repo's tracked settings.json says so", which
+ * QM-45 checked and found true on the settings axes -- `contributingFiles` admits exactly
+ * two project-scope files -- and which is false on the MCP axis, where the disagreeing link
+ * is a `.mcp.json` declaration. So the note reads the source off the chain, and the
+ * assertions below pin the path rather than the phrase.
  */
 describe('a skills write over the repo\'s own settings.json', () => {
   test('carries the round-trip note, and the note names the skill axis', () => {
@@ -1026,7 +1269,10 @@ describe('a skills write over the repo\'s own settings.json', () => {
     const note = plan.notes.find((n) => n.code === 'would-restate');
     assert.ok(note, `no would-restate note: ${plan.notes.map((n) => n.code).join(', ')}`);
     assert.match(note.message, /without it the skill resolves off/);
-    assert.match(note.message, /tracked settings\.json/);
+    assert.ok(
+      note.message.endsWith(`because ${join(w.dir, '.claude', 'settings.json')} says so.`),
+      `the note did not name the link that disagrees: ${note.message}`,
+    );
     assert.doesNotMatch(note.message, /plugin/);
   });
 

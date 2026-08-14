@@ -120,18 +120,32 @@ export const CLAUDE_JSON_FILENAME = '.claude.json';
  */
 export type EntryValue = boolean | SkillValue;
 
-/** The file an axis writes for one project, and what an absent one may become. */
-export interface AxisTarget {
-  path: string;
-  /**
-   * The bytes an absent target is created as, or `null` where this axis may not create it.
-   *
-   * `null` is not "create it empty". `~/.claude.json` arriving on a machine that has none
-   * carries a `machineID` and a `userID` the user did not have (DEA-140), so a tool that
-   * discloses first-party subcommands creating it must not create it itself.
-   */
-  seed: string | null;
-}
+/**
+ * What a target that does not exist yet is created as, and what undo restores it to.
+ *
+ * Inert rather than finished, so the create and the edit stay two separable steps: the
+ * create is exclusive (`wx`) and decides nothing, and the edit goes through
+ * `stageEdits`/`applyStage` like every other write in this repo. It is also what makes
+ * undo an ordinary restore -- undoing a write that created its own file returns the file
+ * to this text rather than deleting it, because deleting a file is not something this
+ * tool does.
+ *
+ * It declares the axis's key **empty**, which merges to nothing and is what an absent key
+ * already means, and it is laid out over three lines on purpose. `write.ts` copies a
+ * document's own layout rather than choosing one -- indent unit, colon spacing, line
+ * ending -- so a seed of `{}` is a document with no layout to copy and the first entry
+ * would be spliced in compact, fixing that shape for every later edit. Two spaces and a
+ * key already present is the smallest seed that makes the file Claude Code writes.
+ *
+ * A function of the key rather than one constant, because seeding a skills write with
+ * `enabledPlugins` would create a file whose only content is a key the write does not
+ * touch -- and `undo` would then restore *that*, leaving a plugin block behind on a
+ * target this tool created for a skill.
+ */
+export const emptySettings = (settingsKey: string): string => `{\n  "${settingsKey}": {}\n}\n`;
+
+export const targetFor = (projectPath: string): string =>
+  join(projectPath, '.claude', TARGET_FILENAME);
 
 /**
  * Whether the workspace attests an id's spelling, and what it costs if it does not.
@@ -193,8 +207,20 @@ export interface Axis {
   spellings: ReadonlyMap<string, EntryValue>;
   /** How the id resolves in this project today, chain and all. */
   resolve(ws: Workspace, project: ProjectRecord, id: string): Cell<EntryValue>;
-  /** The file this write lands in, and what an absent one may be created as. */
-  target(ws: Workspace, project: string): AxisTarget;
+  /** The file this write lands in for one project. */
+  target(ws: Workspace, project: string): string;
+  /**
+   * The bytes an absent target is created as, or `null` where this axis may not create it.
+   *
+   * `null` is not "create it empty". `~/.claude.json` arriving on a machine that has none
+   * carries a `machineID` and a `userID` the user did not have (DEA-140), so a tool that
+   * discloses first-party subcommands creating it must not create it itself.
+   *
+   * A field and not part of `target`, because `apply.ts` writes these bytes and holds no
+   * workspace to ask for them -- and a plan carrying its own seed could decide what the
+   * exclusive create writes, which is the authority `test/apply.test.ts` pins to the axis.
+   */
+  seed: string | null;
   /**
    * Whether a path is one this axis may write for this project.
    *
@@ -297,7 +323,8 @@ function settingsAxis(
   return {
     ...base,
     fallbackDecides: true,
-    target: (_ws, project) => ({ path: targetFor(project), seed: emptySettings(key) }),
+    target: (_ws, project) => targetFor(project),
+    seed: emptySettings(key),
     owns: (target, project) => target === targetFor(project),
     stored: 'project-file',
     validated: (record) => record.localSettings,
@@ -316,17 +343,25 @@ function settingsAxis(
     entryFor: (value) => value,
     editsFor: (doc, _project, wanted) => {
       const out: Edit[] = [];
-      const missing: Record<string, EntryValue> = {};
+      const fresh: Record<string, EntryValue> = {};
       const block = (doc as Record<string, unknown> | null)?.[key];
-      const hasBlock = block !== null && typeof block === 'object';
+      // An **empty** block takes the whole-key shape, like an absent one. `write.ts`
+      // copies the separator between two existing members, and an empty container has
+      // none to copy, so a per-entry insert into `{}` splices in compact and fixes that
+      // shape for every later edit. Writing the key whole instead renders it with the
+      // document's own indent unit -- which is the entire reason `emptySettings` seeds a
+      // file with a layout rather than with `{}` (DEA-112), and which used to hold only
+      // because a file that did not exist arrived here as a `null` `SettingsFile`.
+      const hasEntries =
+        block !== null && typeof block === 'object' && Object.keys(block).length > 0;
       for (const [id, value] of wanted) {
         // `write.ts` splices values; it has no way to delete an object member, so the
         // state "this file says nothing about the id" is unreachable from here.
         if (value === null) return null;
-        if (hasBlock) out.push({ path: [key, id], value });
-        else missing[id] = value;
+        if (hasEntries) out.push({ path: [key, id], value });
+        else fresh[id] = value;
       }
-      return hasBlock ? out : [{ path: [key], value: missing }];
+      return hasEntries ? out : [{ path: [key], value: fresh }];
     },
     afterChain: (now, target, value) => [
       ...now.chain.filter((l) => l.source !== target),
@@ -432,7 +467,8 @@ export const MCP_AXIS: Axis = {
     ['off', false],
   ]),
   resolve: (ws, project, id) => resolveMcpServer(ws, project, id),
-  target: (ws) => ({ path: ws.claudeJson.path, seed: null }),
+  target: (ws) => ws.claudeJson.path,
+  seed: null,
   owns: (target) => basename(target) === CLAUDE_JSON_FILENAME,
   stored: 'user-file',
   // Nothing validates `~/.claude.json` against a settings schema -- `doctor` reports on
@@ -587,33 +623,6 @@ export function attestMcpName(ctx: AuditContext, id: string): Attestation {
  */
 export const showValue = (value: EntryValue): string => String(value);
 
-/**
- * What a target that does not exist yet is created as, and what undo restores it to.
- *
- * Inert rather than finished, so the create and the edit stay two separable steps: the
- * create is exclusive (`wx`) and decides nothing, and the edit goes through
- * `stageEdits`/`applyStage` like every other write in this repo. It is also what makes
- * undo an ordinary restore -- undoing a write that created its own file returns the file
- * to this text rather than deleting it, because deleting a file is not something this
- * tool does.
- *
- * It declares the axis's key **empty**, which merges to nothing and is what an absent key
- * already means, and it is laid out over three lines on purpose. `write.ts` copies a
- * document's own layout rather than choosing one -- indent unit, colon spacing, line
- * ending -- so a seed of `{}` is a document with no layout to copy and the first entry
- * would be spliced in compact, fixing that shape for every later edit. Two spaces and a
- * key already present is the smallest seed that makes the file Claude Code writes.
- *
- * A function of the key rather than one constant, because seeding a skills write with
- * `enabledPlugins` would create a file whose only content is a key the write does not
- * touch -- and `undo` would then restore *that*, leaving a plugin block behind on a
- * target this tool created for a skill.
- */
-export const emptySettings = (settingsKey: string): string => `{\n  "${settingsKey}": {}\n}\n`;
-
-export const targetFor = (projectPath: string): string =>
-  join(projectPath, '.claude', TARGET_FILENAME);
-
 // ---------------------------------------------------------------------------
 // Requests, refusals, notes
 // ---------------------------------------------------------------------------
@@ -715,13 +724,6 @@ export interface TogglePlan {
   target: string;
   /** The target does not exist; applying creates it. */
   creates: boolean;
-  /**
-   * What an absent target is created as, from the axis. `null` where it may not be.
-   *
-   * Carried rather than re-derived in `apply.ts`, which holds no workspace -- and it is
-   * the bytes the exclusive create writes, so `before` cannot decide them.
-   */
-  seed: string | null;
   /** The file as it was read for review -- the axis's seed when it is about to be created. */
   before: string;
   /**
@@ -1082,7 +1084,8 @@ export function planToggles(
       ],
     };
   }
-  const { path: target, seed } = axis.target(ctx.ws, project);
+  const target = axis.target(ctx.ws, project);
+  const seed = axis.seed;
   const targetFile = axis.validated(record);
   const creates = !existsSync(target);
 
@@ -1213,7 +1216,6 @@ export function planToggles(
       project,
       target,
       creates,
-      seed,
       before,
       after,
       edits,
