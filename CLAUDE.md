@@ -587,6 +587,42 @@ hand mutations left the suite green before the gaps were closed: `afterChain` fi
 chain by path alone (taking the user-scope launch spec out with the deny), `noChange`'s
 empty-batch clause deleted, and `MCP_AXIS.owns` widened to every path.
 
+**"Cannot refuse" was read as "cannot mention", and it was an asymmetry rather than a hole
+(QM-47).** `qm set` accepted an id nothing on this machine recognised, wrote it and reported
+success — DEA-145's shape exactly — on the plugin and skill axes, while the MCP axis had said
+so since QM-46. The cause was one line: `attest: () => null` on the shared settings-axis
+factory, carrying QM-45's reasoning, **every clause of which is correct and whose conclusion
+does not follow.** The catalogs that would answer exclude `stale` and `unmeasured` rows, so an
+unknown-id *refusal* built on them refuses real writes — measured 2026-08-14, 44 distinct
+plugin ids in this machine's settings files against 42 installed, and the 2 that no build
+names (`coderabbit@claude-plugins-official`, `minutes@minutes`) are exactly what a marketplace
+that is not currently added looks like. That rules out a refusal and says nothing about a
+sentence: `Attestation.guessed` and `Attestation.note` are separate fields *precisely* so an
+axis can report what it cannot refuse on, which is what `ever-connected` and `unattested`
+already were.
+**The two answers are not one sentence with the noun swapped, and that is the whole design.**
+`readInventories` is the set Claude Code resolves `enabledPlugins` against, so "no installed
+plugin has this id" is a strong claim; `buildSkillCatalog` reaches only what a measured
+session listed plus `~/.claude/skills` plus the plugin catalog — 797 ids over 571 sessions and
+26 projects here, 459 of them not `stale`, and **thinner again under `qm set`**, which
+measures the one project it is writing to. So the skill note carries the catalog's own size
+and says a skill neither source reaches is indistinguishable from a typo, and a gate runs both
+wordings onto the other axis and requires that to redden. `Axis.attest` also stopped being
+nullable: a fourth axis has to say what it checked, and there is no value meaning "I did not
+ask".
+**A note code that names the wrong mechanism is the same defect one layer out.** `minted-key`
+is true of a connector name `attestMcpName` reconstructs and false of an id typed on the
+command line, and it is *printed*. It is `unattested-id` now on all three axes, with "mints"
+kept where it belongs — inside the MCP message.
+The day it fails: an override already in a settings file makes `SkillEntry.configured` true,
+so a second `qm set` at a different value is silent about an id the first flagged — which is
+`attestMcpName`'s `config` basis (a deny-list this tool wrote attests the next write) accepted
+for the same reason and no better one. And of eleven hand mutations, one left all 658 tests
+green: swapping `attestPluginId`'s two `basis` values. `Attestation.basis` is read by nothing
+in `src/` on **any** axis — `keyProvenance` reads `guessed`, `notesFor` reads `note`, and the
+field's own doc says it is printed where it is not — so it is test-only until something
+consumes it, and the plugin axis is now pinned like the other two.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32

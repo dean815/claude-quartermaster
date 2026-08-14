@@ -323,7 +323,7 @@ export interface Axis {
  * rather than a spread of one axis over another, so neither is the other's special case.
  *
  * `attest` joined that list in QM-47 rather than staying a shared `() => null`, and the
- * two answers are deliberately not one sentence with a noun swapped: an id absent from 43
+ * two answers are deliberately not one sentence with a noun swapped: an id absent from 42
  * installed plugins and an id absent from a skill catalog built out of what some session
  * happened to list are different strengths of claim, and flattening them is the failure
  * this repo keeps correcting one axis at a time.
@@ -641,8 +641,10 @@ export function attestMcpName(ctx: AuditContext, id: string): Attestation {
  * statement about what the entry will do, and much stronger than the skill axis can make.
  *
  * **It is a note because an uninstalled id is an ordinary thing to hold.** Measured across
- * this machine's live config: 45 distinct plugin ids appear in settings files and 2 of them
- * -- `coderabbit@claude-plugins-official` and `minutes@minutes` -- are not installed. A
+ * this machine's live config on 2026-08-14: 44 distinct plugin ids appear in settings files
+ * against 42 installed, and 2 of the 44 -- `coderabbit@claude-plugins-official` and
+ * `minutes@minutes` -- are named by no installed build. (QM-47's brief said 2 of 45 against
+ * 43 installed; the pair is the same and the totals have each moved by one since.) A
  * marketplace that is not currently added produces exactly that state, so a refusal would
  * reject configuration the user legitimately holds while claiming to reject a typo. Both
  * are `test/toggle.test.ts`'s fixture for flagged-but-legitimate, and a version that
@@ -688,12 +690,13 @@ export function attestPluginId(ctx: AuditContext, id: string): Attestation {
  * - `unattested`           no source here produces this id at all.
  *
  * **The weakness is stated in the note rather than hidden in the basis.** `buildSkillCatalog`
- * knows only what a measured session listed, plus `~/.claude/skills`, plus the plugin
- * catalog -- and `qm set --project <p>` measures that one project, so the catalog a write is
- * checked against is thinner again than the 460 ids a whole-workspace run builds. A skill
- * that exists and has never loaded in a measured session is therefore indistinguishable
- * here from a typo, which is exactly why this is worth a sentence and not a refusal, and why
- * the sentence carries the catalog's own size.
+ * knows what a measured session listed, plus `~/.claude/skills`, plus the plugin catalog,
+ * and nothing else -- and `qm set --project <p>` measures that one project, so the catalog a
+ * write is checked against is thinner again than the whole-workspace one. Measured
+ * 2026-08-14 over 571 sessions and 26 measured projects: 797 ids, of which 459 are not
+ * `stale`. A skill that exists and has loaded in no measured session is therefore
+ * indistinguishable here from a typo, which is exactly why this is worth a sentence and not
+ * a refusal, and why the sentence carries the catalog's own size.
  *
  * The day it fails: an override already in a settings file makes `configured` true and the
  * presence `installed-unobserved`, so a second `qm set` for a state this tool wrote is
@@ -727,11 +730,11 @@ export function attestSkillId(ctx: AuditContext, id: string): Attestation {
     note:
       `Nothing here names a skill ${JSON.stringify(id)} — not a measured session's listing, ` +
       `not ~/.claude/skills, not an installed plugin's catalog and no settings file's ` +
-      `skillOverrides. That says less than the same sentence would about a plugin: this ` +
-      `catalog holds only skills a measured session listed (catalog size here: ` +
-      `${catalog.entries.length}), so a skill that exists and has loaded in no measured ` +
-      `session looks exactly like a typo. The entry will be written either way, and ` +
-      `skillOverrides silently ignores a key it does not match.`,
+      `skillOverrides. That says less than the same sentence would about a plugin: between ` +
+      `them those sources reach only what has loaded in a session this run measured or is ` +
+      `installed where this can see it (catalog size here: ${catalog.entries.length}), and ` +
+      `a skill neither of them reaches looks exactly like a typo. The entry will be written ` +
+      `either way, and skillOverrides silently ignores a key it does not match.`,
   };
 }
 

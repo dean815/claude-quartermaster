@@ -389,7 +389,7 @@ const SCENARIOS: Scenario[] = [
      * (QM-47).
      *
      * The fixture for flagged-but-legitimate. `coderabbit@claude-plugins-official` and
-     * `minutes@minutes` are 2 of the 45 plugin ids in live config here, and a marketplace
+     * `minutes@minutes` are 2 of the 44 plugin ids in live config here, and a marketplace
      * that is not currently added is what produces that state -- so the row's answer is
      * `planned`, and the mutation that turns the note into a refusal reddens exactly here.
      */
@@ -1722,7 +1722,7 @@ const ATTEST_CASES: AttestCase[] = [
       const w = world(name);
       return withMeasurements(w, [listing(w.dir, ['s-01'])]);
     },
-    says: /only skills a measured session listed/,
+    says: /has loaded in a session this run measured/,
   },
   {
     axis: MCP_AXIS,
@@ -1844,11 +1844,12 @@ describe('an id nothing here recognises', () => {
   /**
    * The two live plugin ids, flagged and written (QM-47).
    *
-   * Measured across this machine's settings files: 45 distinct plugin ids, of which
-   * `coderabbit@claude-plugins-official` and `minutes@minutes` are installed by nothing. A
-   * refusal built on the inventory would reject both, and both are configuration someone
-   * legitimately holds -- so this asserts the plan exists, that the notes name each id, and
-   * that the entries really land in the file.
+   * Measured across this machine's settings files on 2026-08-14: 44 distinct plugin ids
+   * against 42 installed builds, of which `coderabbit@claude-plugins-official` and
+   * `minutes@minutes` are installed by nothing. A refusal built on the inventory would
+   * reject both, and both are configuration someone legitimately holds -- so this asserts
+   * the plan exists, that the notes name each id, and that the entries really land in the
+   * file.
    */
   test('the two live uninstalled plugin ids are flagged, not refused', () => {
     const w = world('attest-live-ids');
