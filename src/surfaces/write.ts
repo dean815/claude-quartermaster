@@ -568,6 +568,16 @@ export interface Stage {
   mtimeMs: number;
   /** The whole file as it would be written. Reviewable before anything is applied. */
   text: string;
+  /**
+   * The bytes the edits were applied to, decoded (QM-46).
+   *
+   * Carried rather than left to the caller to read again. A caller that wants the
+   * pre-image -- to back it up, to diff against, to ask what the file said before -- had
+   * to `readFileSync` a second time and then prove that read was the same one, which is a
+   * window it opened itself and then had to guard. `hash` is the hash of exactly these
+   * bytes, so a caller holding a `Stage` needs no second read and has no window.
+   */
+  original: string;
 }
 
 /**
@@ -605,7 +615,10 @@ export function stageEdits(path: string, edits: readonly Edit[]): StageResult {
   const applied = applyEdits(text, edits);
   if (applied.outcome === 'refused') return { outcome: 'refused', refusal: applied.refusal };
 
-  return { outcome: 'staged', stage: { path, hash: sha256(buf), mtimeMs, text: applied.text } };
+  return {
+    outcome: 'staged',
+    stage: { path, hash: sha256(buf), mtimeMs, text: applied.text, original: text },
+  };
 }
 
 /**
