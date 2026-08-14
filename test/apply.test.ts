@@ -53,7 +53,7 @@ import {
   emptySettings,
   type TogglePlan,
 } from '../src/toggle.ts';
-import { applyEdits, type Edit } from '../src/surfaces/write.ts';
+import { applyEdits, applyStage, stageEdits, type Edit } from '../src/surfaces/write.ts';
 
 let root = '';
 before(() => {
@@ -705,5 +705,267 @@ describe('undo', () => {
     // And the mutant does not refuse, which is what makes this a gate.
     const again = clobber(opts(a.state));
     assert.equal(again.outcome, 'restored');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The contended file (QM-46)
+// ---------------------------------------------------------------------------
+
+/**
+ * `~/.claude.json`, in the shape and at the scale that made this axis different.
+ *
+ * `lastCost` and `lastSessionId` stand in for the telemetry every live session writes:
+ * measured on the machine this was built against, that file changed **6 times in 72
+ * seconds** with ordinary sessions running, a mean interval of 11.5s. Everything below
+ * turns on one question -- whether a guard spans the human's decision or the
+ * read-modify-write -- and these two keys are how a test can tell.
+ */
+function claudeJsonText(project: string, deny: string[], session: string): string {
+  return `${JSON.stringify(
+    {
+      numStartups: 142,
+      userID: 'u-0',
+      mcpServers: { linear: { type: 'http' } },
+      projects: {
+        '/some/other/project': { lastCost: 9.99, disabledMcpServers: ['claude.ai Canva'] },
+        [project]: {
+          ...(deny.length ? { disabledMcpServers: deny } : {}),
+          hasTrustDialogAccepted: true,
+          lastCost: 0.5,
+          lastSessionId: session,
+        },
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}
+
+/** A scratch `~/.claude.json` and the project whose entry it carries. */
+function claudeScratch(label: string, deny: string[] = []): {
+  project: string;
+  target: string;
+  state: string;
+  text: string;
+} {
+  const s = scratch(label);
+  const target = join(s.project, '.claude.json');
+  const text = claudeJsonText(s.project, deny, 'session-a');
+  writeFileSync(target, text);
+  return { project: s.project, target, state: s.state, text };
+}
+
+/** A plan on the MCP axis, in the shape `planToggles` builds one. */
+function planMcp(
+  target: string,
+  project: string,
+  id: string,
+  value: boolean,
+  text: string,
+): TogglePlan {
+  const doc = JSON.parse(text);
+  const wanted = new Map([[id, MCP_AXIS.entryFor(value)]]);
+  const edits = MCP_AXIS.editsFor(doc, project, wanted)!;
+  const previewed = applyEdits(text, edits);
+  if (previewed.outcome === 'refused') throw new Error(`preview refused: ${previewed.refusal.detail}`);
+  return {
+    axis: MCP_AXIS,
+    project,
+    target,
+    creates: false,
+    before: text,
+    after: previewed.text,
+    edits,
+    changes: [
+      {
+        id,
+        from: !value,
+        to: value,
+        wasInFile: MCP_AXIS.entryIn(doc, project, id),
+        willBeInFile: MCP_AXIS.entryIn(JSON.parse(previewed.text), project, id),
+        effect: { ...effectStub(), change: { kind: 'mcp-server' as const, name: id } },
+      },
+    ],
+    notes: [],
+  };
+}
+
+const costOf = (target: string, project: string): unknown =>
+  JSON.parse(readFileSync(target, 'utf8')).projects[project].lastCost;
+
+describe('the axis that writes ~/.claude.json', () => {
+  test('adds one deny-list entry and moves no other byte', () => {
+    const c = claudeScratch('mcp-add');
+    const plan = planMcp(c.target, c.project, 'claude.ai Linear', false, c.text);
+
+    const result = applyPlan(plan, opts(c.state));
+    assert.equal(result.outcome, 'written');
+    if (result.outcome !== 'written') return;
+    assert.equal(result.record.axis, 'mcp');
+    assert.equal(result.rebased, false);
+
+    const now = readFileSync(c.target, 'utf8');
+    assert.deepEqual(JSON.parse(now).projects[c.project].disabledMcpServers, ['claude.ai Linear']);
+    // Everything else, verbatim: the 83-keys-nobody-modelled problem, as a property.
+    // The added member is cut out by its own text, and what is left must be the original
+    // byte for byte -- so a writer that re-serialised the document fails here even where
+    // the parsed values would agree.
+    const added = ',\n      "disabledMcpServers": [\n        "claude.ai Linear"\n      ]';
+    assert.ok(now.includes(added), `the member did not land with the file's own layout:\n${now}`);
+    assert.equal(now.replace(added, ''), c.text);
+  });
+
+  /**
+   * The whole design, in one test.
+   *
+   * A session writes telemetry into the file *after* the diff was printed and *before* the
+   * answer -- which on this file is the ordinary case, not a race anyone engineered. The
+   * change lands, the telemetry survives, and the run says the file moved. Under the
+   * stage-then-confirm-then-apply shape this issue replaced, this refuses, and at a mean
+   * write interval of 11.5s it refuses on nearly every attempt.
+   */
+  test('survives a concurrent write to the file, and says that it did', () => {
+    const c = claudeScratch('mcp-concurrent');
+    const plan = planMcp(c.target, c.project, 'claude.ai Linear', false, c.text);
+
+    // Between the printed diff and the answer.
+    const meanwhile = claudeJsonText(c.project, [], 'session-b').replace('0.5', '1.25');
+    writeFileSync(c.target, meanwhile);
+
+    const result = applyPlan(plan, opts(c.state));
+    assert.equal(result.outcome, 'written', `refused a write nothing was wrong with: ${JSON.stringify(result)}`);
+    if (result.outcome !== 'written') return;
+    assert.equal(result.rebased, true, 'the run did not report that the file had moved');
+
+    const now = JSON.parse(readFileSync(c.target, 'utf8'));
+    assert.deepEqual(now.projects[c.project].disabledMcpServers, ['claude.ai Linear']);
+    assert.equal(now.projects[c.project].lastCost, 1.25, 'the concurrent write was clobbered');
+    assert.equal(now.projects[c.project].lastSessionId, 'session-b');
+  });
+
+  /**
+   * The mutation the brief names second: the re-read dropped.
+   *
+   * This is what `applyPlan` was before QM-46 -- a stage taken at plan time, carried
+   * across the confirmation, and handed to `applyStage`. It is not *unsafe*; it is
+   * *useless*, and that is the harder failure to see. On the quiet axes it is
+   * indistinguishable from the real thing, so the case that separates them is a file that
+   * moved for reasons that are nobody's business, and there the real one writes and this
+   * one refuses. A test asserting only "the mutant does something different" would pass
+   * on the wrong difference, so both halves are pinned.
+   */
+  test('and a stage carried across the confirmation refuses the same write', () => {
+    const c = claudeScratch('mcp-stale');
+    const plan = planMcp(c.target, c.project, 'claude.ai Linear', false, c.text);
+    const staleStage = stageEdits(c.target, plan.edits);
+    assert.equal(staleStage.outcome, 'staged');
+    if (staleStage.outcome !== 'staged') return;
+
+    writeFileSync(c.target, claudeJsonText(c.project, [], 'session-b'));
+
+    const stale = applyStage(staleStage.stage);
+    assert.equal(stale.outcome, 'refused', 'the stale stage applied — the mutation is not being modelled');
+    if (stale.outcome !== 'refused') return;
+    assert.equal(stale.refusal.reason, 'file-moved');
+
+    assert.equal(applyPlan(plan, opts(c.state)).outcome, 'written');
+  });
+
+  /**
+   * The mutation the brief names fourth: undo clobbering telemetry written since.
+   *
+   * `undoLast` on this axis puts back the *entries* and nothing else. The mutant is the
+   * inherited operation -- restore the pre-image blob -- and what it costs is visible in
+   * one number: every `lastCost` and `lastSessionId` written between the apply and the
+   * undo. It also cannot run: the whole-file guard compares a hash that stops matching
+   * within ~11.5s of the apply, so the operation that would discard the telemetry is the
+   * one that would refuse to try.
+   */
+  test('undo puts back the entry and keeps the telemetry written since', () => {
+    const c = claudeScratch('mcp-undo');
+    const plan = planMcp(c.target, c.project, 'claude.ai Linear', false, c.text);
+    const applied = applyPlan(plan, opts(c.state));
+    assert.equal(applied.outcome, 'written');
+    if (applied.outcome !== 'written') return;
+
+    // A session runs, and the file gains telemetry the undo has no business discarding.
+    const withCost = readFileSync(c.target, 'utf8').replace('"lastCost": 0.5', '"lastCost": 7.75');
+    writeFileSync(c.target, withCost);
+
+    const undone = undoLast(opts(c.state));
+    assert.equal(undone.outcome, 'restored', `undo refused: ${JSON.stringify(undone)}`);
+    const now = JSON.parse(readFileSync(c.target, 'utf8'));
+    assert.deepEqual(now.projects[c.project].disabledMcpServers, [], 'the entry was not put back');
+    assert.equal(now.projects[c.project].lastCost, 7.75, 'undo discarded telemetry written since');
+
+    // The mutant, and both halves of what it costs.
+    const clobbered = readFileSync(applied.backup, 'utf8');
+    assert.equal(JSON.parse(clobbered).projects[c.project].lastCost, 0.5);
+    assert.notEqual(
+      costOf(c.target, c.project),
+      JSON.parse(clobbered).projects[c.project].lastCost,
+      'the pre-image and the live file agree, so this case cannot show the loss',
+    );
+    assert.notEqual(
+      createHash('sha256').update(Buffer.from(withCost, 'utf8')).digest('hex'),
+      applied.record.sha256After,
+      'the whole-file guard would still have matched, so it would not have refused either',
+    );
+  });
+
+  /**
+   * The entry-level guard undo keeps, which is the intent of the whole-file one at the
+   * granularity that can survive this file.
+   */
+  test('and refuses when the entry itself has changed since', () => {
+    const c = claudeScratch('mcp-undo-changed');
+    const plan = planMcp(c.target, c.project, 'claude.ai Linear', false, c.text);
+    assert.equal(applyPlan(plan, opts(c.state)).outcome, 'written');
+
+    // Someone denies a second server by hand. The entry this tool wrote is still there,
+    // so this must still restore -- only *its* entry is its business.
+    const theirs = readFileSync(c.target, 'utf8').replace(
+      '"claude.ai Linear"',
+      '"claude.ai Linear",\n          "claude.ai Canva"',
+    );
+    writeFileSync(c.target, theirs);
+    assert.equal(undoLast(opts(c.state)).outcome, 'restored');
+    assert.deepEqual(
+      JSON.parse(readFileSync(c.target, 'utf8')).projects[c.project].disabledMcpServers,
+      ['claude.ai Canva'],
+      'undo removed an entry it did not write',
+    );
+
+    // And an entry someone reversed by hand is refused.
+    const d = claudeScratch('mcp-undo-reversed');
+    const p2 = planMcp(d.target, d.project, 'claude.ai Linear', false, d.text);
+    assert.equal(applyPlan(p2, opts(d.state)).outcome, 'written');
+    writeFileSync(d.target, claudeJsonText(d.project, [], 'session-b'));
+    const result = undoLast(opts(d.state));
+    assert.equal(result.outcome, 'refused');
+    if (result.outcome !== 'refused') return;
+    assert.equal(result.code, 'target-changed');
+  });
+
+  test('a project entry that is not there is never invented', () => {
+    const c = claudeScratch('mcp-no-entry');
+    const plan = planMcp(c.target, c.project, 'claude.ai Linear', false, c.text);
+    const orphan: TogglePlan = { ...plan, project: '/nowhere/at/all' };
+
+    const result = applyPlan(orphan, opts(c.state));
+    assert.equal(result.outcome, 'refused');
+    if (result.outcome !== 'refused') return;
+    assert.equal(readFileSync(c.target, 'utf8'), c.text);
+  });
+
+  /** The backup of a file holding a userID is not published at 0644 by a default umask. */
+  test('the pre-image is kept at the mode the original was read under', () => {
+    const c = claudeScratch('mcp-backup-mode');
+    const plan = planMcp(c.target, c.project, 'claude.ai Linear', false, c.text);
+    const result = applyPlan(plan, opts(c.state));
+    assert.equal(result.outcome, 'written');
+    if (result.outcome !== 'written') return;
+    assert.equal(statSync(result.backup).mode & 0o777, 0o600);
   });
 });

@@ -43,6 +43,7 @@ import {
   AXES,
   CHECKS,
   MCP_AXIS,
+  attestMcpName,
   PLUGIN_AXIS,
   SKILL_AXIS,
   TARGET_FILENAME,
@@ -1426,6 +1427,86 @@ describe('the gate fails when four values become two', () => {
       `the collapse leaked onto the plugin axis: ${report(failures)}`,
     );
     console.log(`    caught the collapse (${failures.length}): ${failures[0]}`);
+  });
+
+  /**
+   * The MCP axis with its `false` read as a decision (QM-46).
+   *
+   * `fallbackDecides` is one boolean and its wrong value is silent: a connector nothing on
+   * disk mentions resolves `false`, so reading that as "already off" refuses the deny --
+   * and a refusal writes nothing, says a true-sounding sentence, and leaves the connector
+   * loading. 22 of the 34 distinct names in this machine's deny-lists were added from
+   * exactly that state, so the field is not an edge case with a flag on it.
+   */
+  test('reading the MCP fallback as a decision refuses the commonest real write', () => {
+    const failures = runGate(CHECKS, {
+      target: MCP_AXIS,
+      axis: { ...MCP_AXIS, fallbackDecides: true },
+      value: (v) => v,
+    });
+    assert.ok(failures.length > 0, 'fallbackDecides cost nothing on the MCP axis');
+    assert.ok(
+      failures.some((f) =>
+        /^a connector nothing declares, denied: expected planned, got no-change$/.test(f),
+      ),
+      `the gate failed, but not on the connector row: ${report(failures)}`,
+    );
+    assert.equal(
+      failures.some((f) => f.startsWith('a fresh project gets a new file')),
+      false,
+      `the MCP mutation leaked onto the plugin axis: ${report(failures)}`,
+    );
+    console.log(`    caught the MCP fallback (${failures.length}): ${failures[0]}`);
+  });
+
+  /**
+   * The DEA-145 mutation, on the axis that would write the key.
+   *
+   * `attestMcpName` reads `McpEntry.keyBasis`, and the mutation is the one shape the
+   * defect actually takes: an attestation that reports a basis and never reports a guess
+   * -- which is `pluginServerKey` before DEA-145, wearing provenance it does not have. It
+   * costs exactly the `marketplace-id` row, because that is the only row whose key this
+   * tool builds rather than copies.
+   */
+  test('an attestation that never reports a guess reddens the marketplace-id row', () => {
+    const failures = runGate(CHECKS, {
+      target: MCP_AXIS,
+      axis: { ...MCP_AXIS, attest: (ctx, id) => ({ ...attestMcpName(ctx, id), guessed: null }) },
+      value: (v) => v,
+    });
+    assert.deepEqual(
+      failures,
+      ['a plugin server whose name was built from the marketplace id: expected key-guessed, got planned'],
+      report(failures),
+    );
+    console.log(`    caught the guessed key: ${failures[0]}`);
+  });
+
+  /**
+   * And the basis it reports, per source, so the four values are not one value with four
+   * spellings. Read off the same catalog the refusal reads.
+   */
+  test('the basis names where each spelling came from', () => {
+    const w = world('mcp-bases', {
+      mcp: {
+        mcpServers: { linear: {} },
+        everConnected: ['claude.ai Linear'],
+        entry: { disabledMcpServers: ['some-user-server'] },
+      },
+    });
+    const basisOf = (id: string) => attestMcpName(w.ctx, id).basis;
+    assert.equal(basisOf('linear'), 'config');
+    assert.equal(basisOf('some-user-server'), 'config');
+    assert.equal(basisOf('claude.ai Linear'), 'ever-connected');
+    assert.equal(basisOf('claude.ai Never Heard Of It'), 'unattested');
+    assert.equal(attestMcpName(unreadableManifest().ctx, 'plugin:notion:notion').basis, 'marketplace-id');
+
+    // The two that are not refusals still say so, because a minted key is the live risk
+    // and `keyBasis` is null on every row that carries one.
+    assert.equal(attestMcpName(w.ctx, 'claude.ai Linear').guessed, null);
+    assert.ok(attestMcpName(w.ctx, 'claude.ai Linear').note);
+    assert.ok(attestMcpName(w.ctx, 'claude.ai Never Heard Of It').note);
+    assert.equal(attestMcpName(w.ctx, 'linear').note, null);
   });
 
   for (const mutation of CHECK_MUTATIONS) {
