@@ -28,6 +28,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { TranscriptMeasurement } from '../src/cost/transcript.ts';
 import type { AuditContext } from '../src/detect.ts';
 import type { PluginInventory } from '../src/inventory.ts';
 import { NOT_CHECKED, readSettings } from '../src/surfaces/read.ts';
@@ -44,6 +45,8 @@ import {
   CHECKS,
   MCP_AXIS,
   attestMcpName,
+  attestPluginId,
+  attestSkillId,
   PLUGIN_AXIS,
   SKILL_AXIS,
   TARGET_FILENAME,
@@ -379,6 +382,25 @@ const SCENARIOS: Scenario[] = [
       }),
     requests: on(),
     expect: 'target-ignores-key',
+  },
+  {
+    /**
+     * Two plugin ids this machine's settings files really name and nothing installs
+     * (QM-47).
+     *
+     * The fixture for flagged-but-legitimate. `coderabbit@claude-plugins-official` and
+     * `minutes@minutes` are 2 of the 45 plugin ids in live config here, and a marketplace
+     * that is not currently added is what produces that state -- so the row's answer is
+     * `planned`, and the mutation that turns the note into a refusal reddens exactly here.
+     */
+    label: 'a plugin id nothing installed here provides',
+    guard: null,
+    build: () => world('plugin-uninstalled'),
+    requests: [
+      { id: 'coderabbit@claude-plugins-official', value: true },
+      { id: 'minutes@minutes', value: true },
+    ],
+    expect: 'planned',
   },
   {
     label: 'the value the target already sets',
@@ -1331,8 +1353,8 @@ describe('what an MCP plan says the value does', () => {
       plan.notes.some((n) => n.code === 'shared-file' && n.message.includes(w.dir)),
       `no shared-file note naming the project: ${plan.notes.map((n) => n.code).join(', ')}`,
     );
-    // And the minted-key note, because nothing on this machine holds that string.
-    assert.ok(plan.notes.some((n) => n.code === 'minted-key'));
+    // And the unattested-id note, because nothing on this machine holds that string.
+    assert.ok(plan.notes.some((n) => n.code === 'unattested-id'));
     // No git note at all. The target is outside the project, so `git check-ignore` exits
     // 128 and this used to print "this directory is not a git repository" on a plain write
     // in an ordinary repo -- a true-sounding sentence about a question that does not apply.
@@ -1630,4 +1652,334 @@ describe('the gate fails when four values become two', () => {
       console.log(`    caught "${mutation.name}" (${failures.length}): ${failures[0]}`);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// An id nothing here recognises, on every axis (QM-47)
+// ---------------------------------------------------------------------------
+
+/**
+ * One session's listing, which is the only thing that makes a skill `observed`.
+ *
+ * Every field but `skills` and `modifiedAt` is inert here. It is spelled out rather than
+ * factored into `test/factories.ts` because `buildSkillCatalog` reads exactly two of them
+ * and a factory would invite a third test to depend on the rest.
+ */
+const listing = (dir: string, skills: string[], modifiedAt = 1): TranscriptMeasurement => ({
+  path: join(dir, `${modifiedAt}.jsonl`),
+  project: dir,
+  sessionId: `s${modifiedAt}`,
+  modifiedAt,
+  blocks: [],
+  servers: [],
+  needsAuth: [],
+  pending: [],
+  skills,
+  totalChars: 0,
+});
+
+const withMeasurements = (w: World, measurements: TranscriptMeasurement[]): World => ({
+  ...w,
+  ctx: { ...w.ctx, measurements },
+});
+
+/**
+ * Per axis: an id its world names, an id nothing does, and the one fact the note states.
+ *
+ * `says` is the whole point of the table. The three axes answer the same question from
+ * sources of different strength, so each note carries a claim the other two cannot make --
+ * and `mutants` below swaps one axis's wording for another's and requires that to redden.
+ * A single shared sentence would satisfy every other assertion in this file.
+ */
+interface AttestCase {
+  axis: Axis;
+  /** An id no source in this world names. */
+  unknown: ToggleRequest[];
+  /** An id some source in this world does name, whose plan must carry no note. */
+  known: ToggleRequest[];
+  build(name: string): World;
+  /** A fact only this axis's note states. */
+  says: RegExp;
+}
+
+const ATTEST_CASES: AttestCase[] = [
+  {
+    axis: PLUGIN_AXIS,
+    unknown: on('nonsense@nowhere'),
+    // `world()` installs exactly one plugin, so this is the only attested plugin id there
+    // is -- which is also what makes the count in the note a real reading.
+    known: on('p@m'),
+    build: (name) => world(name),
+    says: /installed_plugins\.json lists \d+/,
+  },
+  {
+    axis: SKILL_AXIS,
+    unknown: skill('off', 'totally-made-up'),
+    known: skill('off', 's-01'),
+    // A current listing naming `s-01` and nothing else, so the known id is `observed` by
+    // the source `buildSkillCatalog` treats as authoritative rather than by a disk walk.
+    build: (name) => {
+      const w = world(name);
+      return withMeasurements(w, [listing(w.dir, ['s-01'])]);
+    },
+    says: /only skills a measured session listed/,
+  },
+  {
+    axis: MCP_AXIS,
+    unknown: mcp('no-such-server', false),
+    known: mcp('linear', false),
+    build: (name) => world(name, { mcp: { mcpServers: { linear: {} }, entry: {} } }),
+    says: /not a launch spec/,
+  },
+];
+
+/** The `unattested-id` notes a plan carries, which is what the user reads. */
+function unattestedNotes(axis: Axis, w: World, requests: ToggleRequest[]): string[] {
+  const result = planToggles(w.ctx, axis, w.dir, requests);
+  if (result.outcome === 'refused') {
+    return [`refused ${result.refusals.map((r) => r.code).join(', ')}`];
+  }
+  return result.plan.notes.filter((n) => n.code === 'unattested-id').map((n) => n.message);
+}
+
+/**
+ * Every way the table can be wrong, as strings naming the axis.
+ *
+ * `axes` lets a mutant replace one axis and leave the other two alone, so a failure list
+ * can say *which* axis stopped speaking -- the asymmetry this issue exists to end would
+ * otherwise be reproducible by a gate that only ever covered one of them.
+ */
+function attestFailures(axes: ReadonlyMap<Axis, Axis> = new Map()): string[] {
+  const out: string[] = [];
+  for (const c of ATTEST_CASES) {
+    const axis = axes.get(c.axis) ?? c.axis;
+    const tag = c.axis.name;
+
+    const notes = unattestedNotes(axis, c.build(`attest-unknown-${tag}`), c.unknown);
+    if (notes.length !== c.unknown.length) {
+      out.push(`${tag}: an unknown id produced ${notes.length} note(s), not ${c.unknown.length}`);
+    }
+    for (const req of c.unknown) {
+      if (!notes.some((n) => n.startsWith(`${req.id}: `))) {
+        out.push(`${tag}: no note names ${req.id}: ${notes.join(' | ')}`);
+      }
+    }
+    if (notes.length && !c.says.test(notes[0]!)) {
+      out.push(`${tag}: the note does not state ${c.says}: ${notes[0]}`);
+    }
+    // And it states nothing another axis's evidence would have to carry, which is what
+    // makes three sentences three claims rather than one with the nouns swapped.
+    for (const other of ATTEST_CASES) {
+      if (other === c || !notes.length) continue;
+      if (other.says.test(notes[0]!)) {
+        out.push(`${tag}: the note makes ${other.axis.name}'s claim: ${notes[0]}`);
+      }
+    }
+
+    const quiet = unattestedNotes(axis, c.build(`attest-known-${tag}`), c.known);
+    if (quiet.length) out.push(`${tag}: a known id was not silent: ${quiet.join(' | ')}`);
+  }
+  return out;
+}
+
+describe('an id nothing here recognises', () => {
+  test('every axis says so, in words only that axis can say', () => {
+    const failures = attestFailures();
+    assert.deepEqual(failures, [], report(failures));
+    for (const c of ATTEST_CASES) {
+      console.log(`    ${c.axis.name}: ${unattestedNotes(c.axis, c.build(`attest-show-${c.axis.name}`), c.unknown)[0]}`);
+    }
+  });
+
+  /**
+   * The bases, per source, so four values are not one value with four spellings.
+   *
+   * The mirror of `the basis names where each spelling came from` on the MCP axis. `stale`
+   * is the one that has to be built out of two listings: the older names the skill and the
+   * newer does not, which is `buildSkillCatalog`'s own definition of a skill that used to
+   * load -- and it is a note rather than silence for the reason `ever-connected` is.
+   */
+  test('and the skill bases follow the catalog\'s own presence values', () => {
+    const w = world('attest-skill-bases', {
+      local: '{\n  "skillOverrides": {\n    "configured-only": "off"\n  }\n}\n',
+    });
+    const ctx = withMeasurements(w, [
+      listing(w.dir, ['current', 'gone'], 1),
+      listing(w.dir, ['current'], 2),
+    ]).ctx;
+    const basisOf = (id: string) => attestSkillId(ctx, id).basis;
+
+    assert.equal(basisOf('current'), 'observed');
+    assert.equal(basisOf('gone'), 'stale');
+    assert.equal(basisOf('configured-only'), 'installed-unobserved');
+    assert.equal(basisOf('never-heard-of-it'), 'unattested');
+
+    // Only the two that no current source names carry a note, and the stale one says
+    // which of the two it is rather than being folded into "nothing names it".
+    assert.equal(attestSkillId(ctx, 'current').note, null);
+    assert.equal(attestSkillId(ctx, 'configured-only').note, null);
+    assert.match(attestSkillId(ctx, 'gone').note ?? '', /no longer current/);
+    assert.match(attestSkillId(ctx, 'never-heard-of-it').note ?? '', /Nothing here names a skill/);
+    // Neither is a refusal, on either settings axis. That is the whole shape of this issue.
+    for (const id of ['gone', 'never-heard-of-it']) {
+      assert.equal(attestSkillId(ctx, id).guessed, null);
+    }
+    assert.equal(attestPluginId(w.ctx, 'nonsense@nowhere').guessed, null);
+  });
+
+  /**
+   * The two live plugin ids, flagged and written (QM-47).
+   *
+   * Measured across this machine's settings files: 45 distinct plugin ids, of which
+   * `coderabbit@claude-plugins-official` and `minutes@minutes` are installed by nothing. A
+   * refusal built on the inventory would reject both, and both are configuration someone
+   * legitimately holds -- so this asserts the plan exists, that the notes name each id, and
+   * that the entries really land in the file.
+   */
+  test('the two live uninstalled plugin ids are flagged, not refused', () => {
+    const w = world('attest-live-ids');
+    const ids = ['coderabbit@claude-plugins-official', 'minutes@minutes'];
+    const plan = planned(planToggles(w.ctx, PLUGIN_AXIS, w.dir, ids.map((id) => ({ id, value: true }))));
+
+    for (const id of ids) {
+      assert.ok(
+        plan.notes.some((n) => n.code === 'unattested-id' && n.message.startsWith(`${id}: `)),
+        `no note for ${id}: ${plan.notes.map((n) => n.code).join(', ')}`,
+      );
+      assert.ok(plan.after.includes(`"${id}": true`), `${id} was not written: ${plan.after}`);
+    }
+    assert.equal(plan.changes.length, 2);
+  });
+
+  /**
+   * The note printed, in the plan the user reads.
+   *
+   * `describePlan` is what the CLI prints, so a note reachable only through `plan.notes`
+   * is a note nobody sees. The code is asserted verbatim because it is the label: it read
+   * `minted-key` until this issue, which is true of a name `attestMcpName` reconstructs
+   * and false of an id typed on the command line.
+   */
+  test('and the plan prints it under a code that is true on this axis', () => {
+    const w = world('attest-printed');
+    const plan = planned(planToggles(w.ctx, PLUGIN_AXIS, w.dir, on('nonsense@nowhere')));
+    const lines = describePlan(plan);
+    assert.ok(
+      lines.some((l) => l.includes('note (unattested-id): nonsense@nowhere: No plugin installed here')),
+      `the note is not printed: ${lines.join(' | ')}`,
+    );
+    assert.equal(
+      lines.some((l) => l.includes('minted')),
+      false,
+      `a typed id was described as minted: ${lines.join(' | ')}`,
+    );
+  });
+});
+
+/**
+ * The mutations, one per way this could have been done wrong.
+ *
+ * Suppression is run **per axis** rather than once: a gate that covered only the MCP axis
+ * passes on `main` today and proves nothing, which is the state the issue exists to end. So
+ * each mutant silences exactly one axis, and the failures it produces must name that axis
+ * and no other.
+ */
+const silenced = (axis: Axis): Axis => ({
+  ...axis,
+  attest: (ctx, id) => ({ ...axis.attest(ctx, id), note: null }),
+});
+
+/** The note promoted to the refusal QM-45 rejected and QM-47 still rejects. */
+const refusing = (axis: Axis): Axis => ({
+  ...axis,
+  attest: (ctx, id) => {
+    const a = axis.attest(ctx, id);
+    return a.note ? { ...a, guessed: { message: a.note, evidence: [], fix: '' }, note: null } : a;
+  },
+});
+
+describe('the gate fails when an axis stops saying it', () => {
+  for (const c of ATTEST_CASES) {
+    test(`silencing the ${c.axis.name} axis reddens, naming that axis`, () => {
+      const failures = attestFailures(new Map([[c.axis, silenced(c.axis)]]));
+      assert.ok(
+        failures.length > 0,
+        `silencing ${c.axis.name} cost nothing — that is a hole in the gate, not a note to delete`,
+      );
+      assert.ok(
+        failures.every((f) => f.startsWith(`${c.axis.name}:`)),
+        `silencing ${c.axis.name} reddened another axis too: ${report(failures)}`,
+      );
+      console.log(`    caught the silent ${c.axis.name} axis: ${failures[0]}`);
+    });
+  }
+
+  /**
+   * One axis's wording on another's, which every other assertion here would accept.
+   *
+   * The plugin note rests on 43 installed plugins and the skill one on whatever some
+   * session listed, so a shared sentence would either overstate the skill catalog or
+   * understate the inventory. Both directions are run, because a copy in either direction
+   * is the same flattening.
+   */
+  test('reusing one axis\'s wording on another reddens, naming the axis it was copied onto', () => {
+    for (const [target, borrowed, from] of [
+      [PLUGIN_AXIS, attestSkillId, SKILL_AXIS],
+      [SKILL_AXIS, attestPluginId, PLUGIN_AXIS],
+    ] as const) {
+      const failures = attestFailures(new Map([[target, { ...target, attest: borrowed }]]));
+      assert.ok(
+        failures.length > 0,
+        `${from.name}'s wording on the ${target.name} axis cost nothing`,
+      );
+      assert.ok(
+        failures.every((f) => f.startsWith(`${target.name}:`)),
+        `the copy reddened another axis: ${report(failures)}`,
+      );
+      assert.ok(
+        failures.some((f) => f.includes(`makes ${from.name}'s claim`)),
+        `the gate failed, but not on the borrowed claim: ${report(failures)}`,
+      );
+      console.log(`    caught ${from.name}'s wording on ${target.name}: ${failures[0]}`);
+    }
+  });
+
+  /**
+   * The note promoted to a refusal, on the axis whose fixture is real configuration.
+   *
+   * `deepEqual` against the one row, because that row is the argument: two plugin ids this
+   * machine holds and nothing installs, which a refusal keyed on the inventory rejects.
+   */
+  test('promoting the plugin note to a refusal rejects live configuration', () => {
+    const failures = runGate(CHECKS, {
+      target: PLUGIN_AXIS,
+      axis: refusing(PLUGIN_AXIS),
+      value: (v) => v,
+    });
+    assert.deepEqual(
+      failures,
+      ['a plugin id nothing installed here provides: expected planned, got key-guessed'],
+      report(failures),
+    );
+    console.log(`    caught the plugin refusal: ${failures[0]}`);
+  });
+
+  /** And on the skill axis, where every fixture id is one no listing here names. */
+  test('promoting the skill note to a refusal rejects every skill write in the table', () => {
+    const failures = runGate(CHECKS, {
+      target: SKILL_AXIS,
+      axis: refusing(SKILL_AXIS),
+      value: (v) => v,
+    });
+    assert.ok(failures.length > 0, 'a refusing skill axis cost nothing');
+    assert.ok(
+      failures.some((f) => f === 'a skill written into a fresh project: expected planned, got key-guessed'),
+      `the gate failed, but not on a plain skill write: ${report(failures)}`,
+    );
+    assert.equal(
+      failures.some((f) => f.startsWith('a fresh project gets a new file')),
+      false,
+      `the skill mutation leaked onto the plugin axis: ${report(failures)}`,
+    );
+    console.log(`    caught the skill refusal (${failures.length}): ${failures[0]}`);
+  });
 });
