@@ -857,10 +857,23 @@ function undo(): void {
   }
 
   const { record } = result;
+  const entries = AXES.get(record.axis)?.undo === 'entries';
   console.log(`\n  restored ${num(result.bytes)} bytes to ${record.target}`);
-  console.log(`  ${DIM}from${RESET} ${record.backup}`);
+  // Which of the two operations ran, said rather than implied. An entry-scoped undo does
+  // not read the backup at all -- naming it as the source would be the one sentence a
+  // reader would use to work out what had been put back (QM-46).
+  console.log(
+    entries
+      ? `  ${DIM}put back the entries below and nothing else; pre-image kept at${RESET} ${record.backup}`
+      : `  ${DIM}from${RESET} ${record.backup}`,
+  );
   for (const c of record.changes) {
-    console.log(`  ${DIM}·${RESET} ${c.id}: ${showValue(c.to)} -> ${showValue(c.from)}`);
+    // The file's own entry either side on the axis that restores entries, and the resolved
+    // value on the one that restores bytes. Both are what that undo actually moved.
+    const [was, now] = entries
+      ? [c.willBeInFile, c.wasInFile].map((v) => (v === null ? 'no entry' : showValue(v)))
+      : [showValue(c.to), showValue(c.from)];
+    console.log(`  ${DIM}·${RESET} ${c.id}: ${was} -> ${now}`);
   }
   if (record.createdTarget) {
     console.log(

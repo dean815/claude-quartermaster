@@ -606,8 +606,8 @@ export function attestMcpName(ctx: AuditContext, id: string): Attestation {
         `No config file on this machine holds the name ${JSON.stringify(id)}. It is ` +
         `reconstructed from claudeAiMcpEverConnected, which records that a connector ` +
         `connected once and never that it still does — so this write mints the key rather ` +
-        `than copying one. The form is right: 22 of this machine's deny-list entries are ` +
-        `spelled that way.`,
+        `than copying one. The form is the one deny-lists already use for a connector; ` +
+        `whether this is the name Claude Code has for it is not something a file here says.`,
     };
   }
   return {
@@ -1317,7 +1317,15 @@ function notesFor(
     });
   }
 
-  const ignore = gitIgnoreState(input.project, input.target);
+  // Only where the target is inside the project (QM-46). `git check-ignore` asked about
+  // `~/.claude.json` from a repo it is not in exits 128, which this reads as `not-a-repo`
+  // -- so a plain MCP write in a perfectly ordinary git repository printed "this directory
+  // is not a git repository". The question itself does not apply: no `git add -A` in this
+  // project can reach a file outside it, whatever any .gitignore says.
+  const ignore =
+    input.axis.stored === 'project-file'
+      ? gitIgnoreState(input.project, input.target)
+      : 'ignored';
   if (ignore === 'tracked') {
     notes.push({
       code: 'tracked-path',

@@ -1333,6 +1333,13 @@ describe('what an MCP plan says the value does', () => {
     );
     // And the minted-key note, because nothing on this machine holds that string.
     assert.ok(plan.notes.some((n) => n.code === 'minted-key'));
+    // No git note at all. The target is outside the project, so `git check-ignore` exits
+    // 128 and this used to print "this directory is not a git repository" on a plain write
+    // in an ordinary repo -- a true-sounding sentence about a question that does not apply.
+    assert.deepEqual(
+      plan.notes.filter((n) => n.code === 'tracked-path' || n.code === 'gitignore-unchecked'),
+      [],
+    );
   });
 
   /**
