@@ -563,6 +563,25 @@ const SCENARIOS: Scenario[] = [
     expect: 'no-change',
   },
   {
+    /**
+     * The case the empty-batch clause is actually for, and the one the row above is not.
+     *
+     * `linear` above resolves `true` from its launch spec, so the *value* comparison
+     * refuses it and the empty batch never gets asked about. A connector nothing declares
+     * resolves `false`, differs from the requested `true`, and reaches the end of
+     * `noChange` with no entry to remove -- so without the empty-batch clause this plans a
+     * write of zero edits and reports success. Measured: with only the row above, deleting
+     * that clause left all 644 tests green.
+     */
+    label: 'a connector nothing denies and nothing declares, turned on',
+    guard: 'no-change',
+    axis: MCP_AXIS,
+    build: () =>
+      world('mcp-nothing-at-all', { mcp: { everConnected: ['claude.ai Linear'], entry: {} } }),
+    requests: mcp('claude.ai Linear', true),
+    expect: 'no-change',
+  },
+  {
     label: 'a project ~/.claude.json has never recorded',
     guard: 'unregistered-project',
     axis: MCP_AXIS,
@@ -1257,6 +1276,87 @@ describe('all four values reach the file as themselves', () => {
  * is a `.mcp.json` declaration. So the note reads the source off the chain, and the
  * assertions below pin the path rather than the phrase.
  */
+/**
+ * What the MCP plan says about the value, which is not what the request said (QM-46).
+ *
+ * `EntryChange.to` is the *resolved* value and not the requested one, and on this axis the
+ * two come apart in both directions. Un-denying a server the user file declares really does
+ * move the cell to `true`; un-denying a connector nothing declares moves the entry and
+ * leaves the cell where it was, because this model cannot see a connector's live state --
+ * which is a note and not a refusal, since the entry it removes is really there.
+ *
+ * Both halves are here because `afterChain` is one line and its wrong version is quiet:
+ * filtering the chain by path alone takes the user-scope launch spec out with the deny, and
+ * every scenario in the table still answers `planned`. Measured -- that mutation left all
+ * 644 tests green until this existed.
+ */
+describe('what an MCP plan says the value does', () => {
+  test('un-denying a declared server moves the cell; un-denying a connector does not', () => {
+    const declared = world('mcp-to-declared', {
+      mcp: { mcpServers: { linear: {} }, entry: { disabledMcpServers: ['linear'] } },
+    });
+    const a = planned(planToggles(declared.ctx, MCP_AXIS, declared.dir, mcp('linear', true)));
+    assert.equal(a.target, declared.claudeJson);
+    assert.equal(a.changes[0]!.from, false);
+    assert.equal(a.changes[0]!.to, true, 'the launch spec left the chain with the deny');
+    assert.equal(a.changes[0]!.wasInFile, false);
+    assert.equal(a.changes[0]!.willBeInFile, null);
+    assert.equal(a.notes.find((n) => n.code === 'value-unmoved'), undefined);
+
+    const connector = world('mcp-to-connector', {
+      mcp: {
+        everConnected: ['claude.ai Linear'],
+        entry: { disabledMcpServers: ['claude.ai Linear'] },
+      },
+    });
+    const b = planned(
+      planToggles(connector.ctx, MCP_AXIS, connector.dir, mcp('claude.ai Linear', true)),
+    );
+    assert.equal(b.changes[0]!.from, false);
+    assert.equal(b.changes[0]!.to, false, 'nothing declares it, so the cell cannot move');
+    assert.equal(b.changes[0]!.wasInFile, false);
+    assert.equal(b.changes[0]!.willBeInFile, null);
+    assert.ok(
+      b.notes.find((n) => n.code === 'value-unmoved'),
+      `an unmoved value with no note: ${b.notes.map((n) => n.code).join(', ')}`,
+    );
+  });
+
+  /** The shared file says it is shared, once, and the diff header names the deny-list. */
+  test('the plan names the shared file and the key it writes', () => {
+    const w = world('mcp-header', { mcp: { entry: {} } });
+    const plan = planned(planToggles(w.ctx, MCP_AXIS, w.dir, mcp('claude.ai Linear', false)));
+    assert.ok(describePlan(plan)[0]!.endsWith('·  disabledMcpServers'));
+    assert.ok(
+      plan.notes.some((n) => n.code === 'shared-file' && n.message.includes(w.dir)),
+      `no shared-file note naming the project: ${plan.notes.map((n) => n.code).join(', ')}`,
+    );
+    // And the minted-key note, because nothing on this machine holds that string.
+    assert.ok(plan.notes.some((n) => n.code === 'minted-key'));
+  });
+
+  /**
+   * The QM-43 shape, reached with no settings file involved.
+   *
+   * `.mcp.json` declares the server and the deny-list refuses it: two `project` links out
+   * of two different files, which is why `round-trip` had to be a fourth `Origin` in the
+   * resolver rather than a second opinion inside `restated-entries`. The note that follows
+   * names *the link that disagrees* -- here a `.mcp.json`, which is exactly the sentence
+   * QM-45 flagged as false on this axis and left for this issue to fix.
+   */
+  test('a deny over a project\'s own .mcp.json is round-trip, and the note names it', () => {
+    const w = world('mcp-round-trip', { mcp: { mcpJson: { linear: {} }, entry: {} } });
+    const plan = planned(planToggles(w.ctx, MCP_AXIS, w.dir, mcp('linear', false)));
+    const note = plan.notes.find((n) => n.code === 'would-restate');
+    assert.ok(note, `no round-trip note: ${plan.notes.map((n) => n.code).join(', ')}`);
+    assert.ok(
+      note.message.endsWith(`because ${join(w.dir, '.mcp.json')} says so.`),
+      `the note named the wrong link: ${note.message}`,
+    );
+    assert.doesNotMatch(note.message, /settings\.json/);
+  });
+});
+
 describe('a skills write over the repo\'s own settings.json', () => {
   test('carries the round-trip note, and the note names the skill axis', () => {
     const w = world('skill-round-trip', {

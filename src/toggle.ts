@@ -455,6 +455,13 @@ function denyList(doc: unknown, project: string): string[] | null {
  * path, so a project `~/.claude.json` has never recorded refuses `no-such-path` rather than
  * having a `projects[<path>]` invented for it -- a claim about the machine this tool is not
  * entitled to make. `unregisteredProject` says so before the edit is reached.
+ *
+ * **A `disabledMcpServers` this write creates is one undo can only empty.** `write.ts`
+ * splices values and has no operation that removes an object member, so undoing the first
+ * deny in a project leaves `"disabledMcpServers": []` behind rather than taking the key
+ * out. That is the same "nothing is deleted" rule that returns a created *file* to its
+ * seed instead of unlinking it, one level down; it resolves identically to an absent key,
+ * and it is a residue rather than a state.
  */
 export const MCP_AXIS: Axis = {
   name: 'mcp',

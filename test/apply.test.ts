@@ -959,6 +959,31 @@ describe('the axis that writes ~/.claude.json', () => {
     assert.equal(readFileSync(c.target, 'utf8'), c.text);
   });
 
+  /**
+   * The ownership guard, on the axis that made it necessary.
+   *
+   * `FORBIDDEN_BASENAMES` used to carry `.claude.json` and that is how a plan naming it
+   * was stopped. One axis owns that name now, so the flat set cannot make the check any
+   * more, and what replaced it has to be tested from both sides: a plugin plan naming the
+   * MCP axis's file, and an MCP plan naming anything else. Measured -- widening
+   * `MCP_AXIS.owns` to accept every path left all 644 tests green until this existed.
+   */
+  test('an MCP plan naming any other file is refused, and the file is untouched', () => {
+    const c = claudeScratch('mcp-owns');
+    const plan = planMcp(c.target, c.project, 'claude.ai Linear', false, c.text);
+    const elsewhere = join(c.project, '.claude', 'settings.local.json');
+    writeFileSync(elsewhere, BEFORE);
+
+    for (const target of [elsewhere, join(c.project, '.claude', 'settings.json')]) {
+      writeFileSync(target, BEFORE);
+      const result = applyPlan({ ...plan, target }, opts(c.state));
+      assert.equal(result.outcome, 'refused', `${target}: applied instead of refusing`);
+      if (result.outcome !== 'refused') return;
+      assert.equal(result.code, 'forbidden-target');
+      assert.equal(readFileSync(target, 'utf8'), BEFORE, `${target}: was written`);
+    }
+  });
+
   /** The backup of a file holding a userID is not published at 0644 by a default umask. */
   test('the pre-image is kept at the mode the original was read under', () => {
     const c = claudeScratch('mcp-backup-mode');
