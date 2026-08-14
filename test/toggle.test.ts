@@ -1825,6 +1825,20 @@ describe('an id nothing here recognises', () => {
       assert.equal(attestSkillId(ctx, id).guessed, null);
     }
     assert.equal(attestPluginId(w.ctx, 'nonsense@nowhere').guessed, null);
+
+    /*
+     * And the plugin axis's two, which nothing else pins.
+     *
+     * Added after a hand mutation: swapping `installed` for `not-installed` on the
+     * attested branch left all 658 tests green, because `basis` is read by nothing in
+     * `src/` -- `keyProvenance` reads `guessed`, `notesFor` reads `note`, and the field's
+     * own doc says it is printed where in fact it is not. That is a pre-existing property
+     * of `Attestation` rather than something this axis introduced, and it is what makes
+     * the two values interchangeable until something asserts them. `p@m` is the one plugin
+     * `world()` installs, so this reads the real inventory rather than a constructed one.
+     */
+    assert.equal(attestPluginId(w.ctx, 'p@m').basis, 'installed');
+    assert.equal(attestPluginId(w.ctx, 'nonsense@nowhere').basis, 'not-installed');
   });
 
   /**
