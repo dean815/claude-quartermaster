@@ -7,9 +7,9 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, AskUserQuestion, Skill
 
 # Project Onboarding
 
-Bring a project directory to a well-configured baseline across four areas: which
-plugins and MCP servers load, CLAUDE.md quality, directory organization, and
-GitHub configuration.
+Bring a project directory to a well-configured baseline across five areas: which
+plugins and MCP servers load, CLAUDE.md quality, directory organization, GitHub
+configuration, and the project's session-naming short code.
 
 **The governing rule: propose a complete plan, change nothing until the user
 approves it.** No file is written, no `gh` mutation is issued, and no registry
@@ -114,7 +114,7 @@ a CLAUDE.md exists, or whether there is a git remote. The scan knows all of thes
 
 ### 4. Build the plan
 
-Compose proposed changes across the four areas. Consult the references rather than
+Compose proposed changes across the five areas. Consult the references rather than
 improvising:
 
 | Area | Reference (under `${CLAUDE_PLUGIN_ROOT}/references/`) | Produces |
@@ -123,6 +123,13 @@ improvising:
 | CLAUDE.md | `claude-md-template.md` | `CLAUDE.md` |
 | Layout | `layout-checks.md` | Moves, additions, `.gitignore` edits |
 | GitHub | `github-checklist.md` | `gh` commands, `.github/` files |
+| Session naming | `session-naming.md` | `.claude/settings.json` (`env`), `~/.claude/session-name-shortnames.json` |
+
+Session naming is the only area that writes outside the project — it registers the
+project's short code in a user-level map. Skip the area entirely when
+`~/.claude/session-name-shortnames.json` does not exist; that means the naming system
+is not installed on this machine, and inventing the file would strand a code nothing
+reads.
 
 **Delegate rather than duplicate.** When the project already has a CLAUDE.md and
 the `claude-md-management` plugin is installed, invoke the Skill tool with
@@ -163,6 +170,11 @@ project in a coherent state:
 2. Claude configuration (`.claude/settings.json`, `.mcp.json`)
 3. Layout moves
 4. GitHub remote changes
+5. User-level registration (`~/.claude/session-name-shortnames.json`)
+
+Register the short code last, after the project's own `.claude/settings.json` carries
+the matching `env` prefix. That ordering means a failure never leaves a code claimed in
+the user-level map for a project that was not configured to use it.
 
 Report each result as it happens. When a step fails, say so plainly, stop that
 area, and continue with the others rather than aborting everything.

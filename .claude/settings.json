@@ -106,5 +106,8 @@
       "Bash(rm -rf *)"
     ],
     "defaultMode": "auto"
+  },
+  "env": {
+    "CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX": "CPO"
   }
 }
