@@ -5,9 +5,10 @@
  * Every reporting command reads and reports; the first-party subcommands they invoke do
  * initialise `~/.claude.json` on a machine that has none, and the run discloses it (see
  * `disclose.ts`). `qm set` is the one command that changes a user's configuration, and it
- * changes exactly one file -- `<project>/.claude/settings.local.json` -- after showing the
- * whole diff and asking. `qm undo` puts the last one back. Neither ever touches
- * `~/.claude.json` or a tracked `settings.json`; `apply.ts` names both and refuses.
+ * changes exactly one file per axis -- `<project>/.claude/settings.local.json` for plugins
+ * and skills, `~/.claude.json` for MCP servers (QM-46) -- after showing the whole diff and
+ * asking. `qm undo` puts the last one back. Neither ever writes a tracked `settings.json`;
+ * `apply.ts` names it and refuses, and refuses any path the plan's own axis does not own.
  */
 import { homedir } from 'node:os';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -760,6 +761,16 @@ async function set(args: string[], opts: Options): Promise<void> {
   }
 
   console.log(`\n  wrote ${num(applied.bytes)} bytes to ${plan.target}`);
+  if (applied.rebased) {
+    // Never silent (QM-46). The entries were checked and are what the diff said; the rest
+    // of the file belongs to whoever wrote it, and a run that merged into someone else's
+    // write without saying so would be asking to be trusted about the one thing nobody
+    // can see afterwards.
+    console.log(
+      `  ${DIM}note${RESET} the file changed while you were reading the diff — the change ` +
+        `was re-applied to it as it is now, and the entries above are what they said`,
+    );
+  }
   console.log(`  ${DIM}backup${RESET} ${applied.backup}`);
   // The classifier's verdict, not a sentence about sessions. A blanket "takes effect next
   // session" is false for a toggle that /reload-plugins picks up, and this project does
@@ -846,10 +857,23 @@ function undo(): void {
   }
 
   const { record } = result;
+  const entries = AXES.get(record.axis)?.undo === 'entries';
   console.log(`\n  restored ${num(result.bytes)} bytes to ${record.target}`);
-  console.log(`  ${DIM}from${RESET} ${record.backup}`);
+  // Which of the two operations ran, said rather than implied. An entry-scoped undo does
+  // not read the backup at all -- naming it as the source would be the one sentence a
+  // reader would use to work out what had been put back (QM-46).
+  console.log(
+    entries
+      ? `  ${DIM}put back the entries below and nothing else; pre-image kept at${RESET} ${record.backup}`
+      : `  ${DIM}from${RESET} ${record.backup}`,
+  );
   for (const c of record.changes) {
-    console.log(`  ${DIM}·${RESET} ${c.id}: ${showValue(c.to)} -> ${showValue(c.from)}`);
+    // The file's own entry either side on the axis that restores entries, and the resolved
+    // value on the one that restores bytes. Both are what that undo actually moved.
+    const [was, now] = entries
+      ? [c.willBeInFile, c.wasInFile].map((v) => (v === null ? 'no entry' : showValue(v)))
+      : [showValue(c.to), showValue(c.from)];
+    console.log(`  ${DIM}·${RESET} ${c.id}: ${was} -> ${now}`);
   }
   if (record.createdTarget) {
     console.log(
@@ -915,7 +939,7 @@ ${BOLD}qm${RESET} -- audit which Claude Code extensions load where, and what the
   qm baseline [--full]        record today's findings, so --drift can diff against them
   qm serve    [--port <n>]    serve the grid on 127.0.0.1 until Ctrl-C
   qm oracle   [--status] [--file-issue]
-  qm set      --project <path> [--axis plugin|skill] <id>=<value> [...] [--yes]
+  qm set      --project <path> [--axis plugin|skill|mcp] <id>=<value> [...] [--yes]
   qm undo
 
   --full    also scan git hygiene and project layout via project-optimizer, and ask
@@ -932,20 +956,27 @@ this tool that reaches outside the machine; without it the run is a dry run. It 
 per-directory \`enabled\` resolution and nothing else. Schedule it weekly with
 scripts/install-oracle-schedule.sh.
 
-\`qm set\` is the only command that writes, and it writes exactly one file:
-<project>/.claude/settings.local.json. It prints the whole diff, says what the change
-needs before it is live, and asks before applying. It refuses rather than write when
-Claude Code would discard the target, when claude doctor reported on it in words this
-release cannot place, or when the id already resolves to the value you asked for.
-\`qm undo\` restores the last apply, once, and refuses if the file has changed since.
+\`qm set\` is the only command that writes, and each axis writes exactly one file. It prints
+the whole diff, says what the change needs before it is live, and asks before applying. It
+refuses rather than write when Claude Code would discard the target, when claude doctor
+reported on it in words this release cannot place, or when the write would decide nothing.
+\`qm undo\` restores the last apply, once, and refuses if what it wrote has changed since.
 
   --axis plugin   ${'enabledPlugins'}, on|off (true|false also accepted)   ${DIM}the default${RESET}
   --axis skill    ${'skillOverrides'}, on|name-only|user-invocable-only|off
+  --axis mcp      ${'disabledMcpServers'}, on|off
 
 Skills are four-valued, so \`--axis skill\` takes four spellings and no booleans — there is
 no answer to which of \`on\` and \`name-only\` a \`true\` would mean. The id is the string
 Claude Code publishes: \`<plugin>:<skill>\` for a plugin's skill, the bare directory name
 for a personal one. A key it does not match is accepted, written, and does nothing.
+
+\`--axis mcp\` is the one that writes ~/.claude.json, under projects[<abspath>], and it is a
+deny-list — \`off\` adds the name, \`on\` removes it. The id is the config key: \`claude.ai
+<Name>\` for a connector, \`plugin:<Manifest>:<server>\` for a plugin's, the bare name for a
+user server. Because that file is written by every live session, the diff is printed from
+one read and the change is re-applied to the file as it is when you answer; the run says so
+when it had to. Undo puts back only the entries it changed there, never the whole document.
 Backups live beside the baseline in \${XDG_STATE_HOME:-~/.local/state}/claude-quartermaster.
 
 Every other command is read-only. The first-party \`claude\` subcommands they invoke do

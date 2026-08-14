@@ -4,12 +4,14 @@ CLI that audits which Claude Code extensions (plugins, MCP servers, skills) load
 projects, and what they cost. `qm audit`, `qm cost`, `qm baseline` / `--drift`, and
 `qm serve` for the two-view grid on loopback. Every one of those is read-only.
 
-**`qm set` and `qm undo` are not** (DEA-112, QM-45). They are the whole of Phase 2 v1: a
-plugin *or skill* toggle written into `<proj>/.claude/settings.local.json`, one file, after
-a printed diff and a confirmation. `--axis plugin|skill` picks the key and is never
-inferred. Nothing else here writes any Claude Code config, and v1 never writes
-`~/.claude.json`. The grid's add/remove controls stay disabled — wiring them means the
-loopback server accepting `POST` for the first time, which is a separate issue.
+**`qm set` and `qm undo` are not** (DEA-112, QM-45, QM-46). They are the whole of Phase 2:
+a plugin, skill *or MCP server* toggle written after a printed diff and a confirmation.
+`--axis plugin|skill|mcp` picks the key and is never inferred. Two files, one per axis:
+`<proj>/.claude/settings.local.json` for the settings keys, and **`~/.claude.json` for the
+MCP deny-list** — the first thing here that writes it, and the reason `applyPlan` re-reads
+on confirmation rather than carrying a stage across it. Nothing else writes any Claude Code
+config. The grid's add/remove controls stay disabled — wiring them means the loopback
+server accepting `POST` for the first time, which is a separate issue.
 
 ## Architecture
 
@@ -41,6 +43,8 @@ tracked `settings.json` and its local override.
   session, in CI, or in anyone else's clone, 11 of 17 would commit the file on the next
   `git add -A`. So `qm set` asks `git check-ignore` and says so when the answer is no —
   a note and not a refusal, because a tracked settings file is a thing someone may want.
+  The MCP axis writes `~/.claude.json` instead and is **not** asked that question: the
+  target is outside the project, so no `git add -A` there can reach it (QM-46).
 - Edits stage in memory and apply as one reviewed batch, never on click.
 - JSON edits are surgical: change only target keys, never rewrite a file.
 
@@ -507,6 +511,81 @@ writes. And `notesFor`'s round-trip sentence names the repo's tracked `settings.
 because `contributingFiles` admits exactly two project-scope files — `resolveMcpServer`
 pushes two `project` links by construction, so QM-46 must revisit that sentence rather than
 inherit it.
+
+**A guard that spans a human's decision on a file written every 11.5 seconds is not a
+guard, it is a refusal (QM-46).** The MCP axis: `qm set --axis mcp <name>=on|off` writes
+`~/.claude.json` → `projects[<abspath>].disabledMcpServers`, the first write to that file
+in this repo. DEA-112's stage-then-confirm-then-apply is **not** lifted. Sampled every 3s
+for 72s with ordinary sessions running, the file changed **6 times, mean interval 11.5s**
+(gaps 6, 3, 9, 18, 12, 21) — longer than nobody takes to read a diff and type `y`, so a
+byte-level guard spanning that window refuses on nearly every attempt and the command
+applies nothing. The issue predicted "refusals will be common"; common is the whole
+failure. So the plan carries **edits and a precondition**, and `applyPlan` re-reads on
+confirmation, re-applies the same batch and hands `applyStage` a read-modify-write
+measured in milliseconds. `applyStage` is unchanged — what changed is how long it is asked
+to cover. What is re-checked after the second read is **semantic**: each id's own entry in
+the target still says what the plan said, and the re-staged text holds what the plan
+promised. Whether another project's `lastCost` moved is not the user's question. The
+reviewed diff is therefore binding **on the entries it changes**, not on every byte, and a
+run that re-based says so (`rebased`) rather than merging into someone else's write in
+silence. The day it fails: the rest of the chain is *not* re-read, so a user-scope launch
+spec removed inside the confirmation window leaves the printed `from`/`to` describing a
+chain that has moved. Named, not closed — closing it means re-reading the workspace between
+the prompt and the write.
+
+**Undo's unit follows the file's contention, not the axis's convenience.** `Axis.undo` is
+`file` on the settings axes and `entries` on this one. The whole-file restore is *stronger*
+where it works — it reverts every key the batch touched — but on a 220KB document every
+live session writes it discards every `lastCost` and `lastSessionId` written since, **and**
+its own guard (the file still hashes to what this tool left there) stops matching within
+~11.5s, so the operation that would clobber telemetry is the one that would refuse to run.
+What survives is that guard's *intent* at the granularity that can survive: each changed
+entry must still hold what this tool wrote. It cannot see a change to some other key of the
+same file, which on this file is the point. Residue, disclosed rather than fixed: `write.ts`
+splices values and cannot remove an object member, so undoing the first deny in a project
+leaves `"disabledMcpServers": []` — which resolves identically to an absent key.
+
+**The issue's headline refusal protects zero rows, and the live risk is the one with no
+provenance field.** Measured across the live catalog: `keyBasis` reads `manifest` on 7 rows,
+`marketplace-id` on **0**, and is `null` on 55. So DEA-145's refusal is built as a tripwire
+(2 of 42 installed manifests here are unreadable) and fires on nothing today. The 55 are
+connectors and user servers, 21 of them named by no config file at all — denying one *mints*
+the key exactly as the plugin case does, and `keyBasis` cannot say so because it is
+documented as the basis of the *plugin half*. So `attestMcpName` computes a basis over the
+whole name: `manifest` / `marketplace-id` from `keyBasis`, else `config` where a file holds
+the exact string, else `ever-connected` (reconstructed from a set that only grows), else
+`unattested`. A plugin-provided row keeps its plugin basis even where a deny-list echoes the
+string, because a name this tool built can be wrong however many files carry the mistake.
+Only `marketplace-id` refuses; `ever-connected` and `unattested` are **notes**, because all
+three deny-list forms are attested here (`claude.ai <Name>` 22, `plugin:X:Y` 7, bare 5) and a
+connector declared in claude.ai leaves no trace until it connects — refusing it would refuse
+on "this machine has seen it" while claiming to refuse on "Claude Code matches it".
+
+**`Axis` was widened, and the fields are where the three axes really disagree.** Forking
+would have been a third copy of the consent model; contorting `Axis` describes nothing. What
+moved: `settingsKey` → `writtenKey`, `entries(file)` → `entryIn`/`entryFor`/`editsFor` over
+the parsed document, `targetFor` → `target`/`owns`/`seed`, and new `stored`,
+`fallbackDecides`, `afterChain`, `contested`, `attest`, `pending`, `undo`. Three of those
+exist because the container is a **list with inverted polarity**. `fallbackDecides` is the
+sharp one: an unmentioned plugin really is off, and an unmentioned connector resolves `false`
+here while very possibly loading (`mcp.ts` says so) — so reading that `false` as a decision
+refuses the commonest real write on the axis, silently, and 22 of the 34 distinct names in
+this machine's deny-lists were added from exactly that state. `noChange` therefore gained a
+third clause no value comparison can express: an `on` against a name nothing denies produces
+an **empty batch**. `stored` replaced three booleans that always move together — it settles
+the `~` collision (which genuinely does not apply: `projects[<home>]` is an ordinary key),
+whether `projects[<abspath>]` must already exist, and whether the project's git has anything
+to say about a target outside it.
+**`enabledMcpServers` is read and never written.** `resolveMcpServer` pushes deny and allow
+at the same scope from the same file, so which wins is decided by the order this repo pushes
+them in — never measured. A deny beside an allow is refused (`contested-entry`, 3 entries on
+this machine) rather than written with an effect this tool cannot state.
+The day it fails: `attestMcpName` reads a catalog built from this machine's sources, so a
+connector that has never connected here is `unattested` and still written — deliberately.
+The `marketplace-id` refusal has no live instance and its scenario is constructed. And three
+hand mutations left the suite green before the gaps were closed: `afterChain` filtering the
+chain by path alone (taking the user-scope launch spec out with the deny), `noChange`'s
+empty-batch clause deleted, and `MCP_AXIS.owns` widened to every path.
 
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
