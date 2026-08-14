@@ -43,6 +43,8 @@ tracked `settings.json` and its local override.
   session, in CI, or in anyone else's clone, 11 of 17 would commit the file on the next
   `git add -A`. So `qm set` asks `git check-ignore` and says so when the answer is no —
   a note and not a refusal, because a tracked settings file is a thing someone may want.
+  The MCP axis writes `~/.claude.json` instead and is **not** asked that question: the
+  target is outside the project, so no `git add -A` there can reach it (QM-46).
 - Edits stage in memory and apply as one reviewed batch, never on click.
 - JSON edits are surgical: change only target keys, never rewrite a file.
 
