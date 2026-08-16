@@ -356,6 +356,8 @@ interface State {
   /** Where backups and the undo record go. Injected so a test never writes the real one. */
   stateDir: string;
   log: (lines: string[]) => void;
+  /** The gate every `POST` passes. A parameter so one can be dropped -- see `PostCheck`. */
+  postChecks: readonly PostCheck[];
 }
 
 /**
@@ -387,13 +389,73 @@ const TOKEN_HEADER = 'x-qm-token';
  * wrong length is simply wrong -- there is nothing to learn from that, the token's length
  * is a constant of this program.
  */
-function tokenOk(req: IncomingMessage, state: State): boolean {
+function tokenOk(req: IncomingMessage, token: string): boolean {
   const got = req.headers[TOKEN_HEADER];
   if (typeof got !== 'string') return false;
   const a = Buffer.from(got, 'utf8');
-  const b = Buffer.from(state.token, 'utf8');
+  const b = Buffer.from(token, 'utf8');
   return a.length === b.length && timingSafeEqual(a, b);
 }
+
+/** The type, without its parameters. `application/json; charset=utf-8` is the same type. */
+const contentTypeOf = (req: IncomingMessage): string =>
+  (req.headers['content-type'] ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+
+/**
+ * One reason a `POST` does not get to the route.
+ *
+ * A list of named checks and not a chain of `if`s, for `CHECKS`' reason exactly
+ * (`toggle.ts`): a gate can drop one and watch the suite go red, and a guard nobody can
+ * delete is a guard nobody has tested. `test/serve-write.test.ts` runs the whole write
+ * scenario once per check with that check removed, and every removal must cost a refusal.
+ *
+ * The reason is the name of a fixed body, so a check cannot invent a message -- the error
+ * bodies are the same fixed set every other failure here uses.
+ */
+export interface PostCheck {
+  name: string;
+  run(req: IncomingMessage, token: string): 'forbidden' | 'unsupportedMedia' | null;
+}
+
+/**
+ * Four gates, and the first two are one question split deliberately.
+ *
+ * `origin-present` and `origin-loopback` could be a single predicate, and were, on the
+ * read path -- `if (origin !== undefined)`. That shape passes a request with no `Origin`
+ * at all, which is the shape a local process sends and the shape a browser never does. Two
+ * checks means the two mutations are separable: drop `origin-present` and a header-less
+ * `POST` is accepted, drop `origin-loopback` and one from `https://evil.example.com` is.
+ * Folded together, one of those two holes would be invisible.
+ *
+ * `csrf-token` is the one that is worth anything against a program rather than a page, and
+ * `json-body` is what stops the one content type a cross-origin form can send without a
+ * preflight this server would fail.
+ */
+const POST_GATE: readonly PostCheck[] = [
+  {
+    name: 'origin-present',
+    run: (req) => (req.headers.origin === undefined ? 'forbidden' : null),
+  },
+  {
+    name: 'origin-loopback',
+    run: (req) => {
+      const origin = req.headers.origin;
+      return origin !== undefined && !originIsLoopback(origin) ? 'forbidden' : null;
+    },
+  },
+  {
+    name: 'csrf-token',
+    run: (req, token) => (tokenOk(req, token) ? null : 'forbidden'),
+  },
+  {
+    name: 'json-body',
+    run: (req) => (contentTypeOf(req) === 'application/json' ? null : 'unsupportedMedia'),
+  },
+];
+
+export const POST_CHECKS = POST_GATE;
+
+const REFUSAL_STATUS = { forbidden: 403, unsupportedMedia: 415 } as const;
 
 /** The body, or `null` where it was too large or the connection failed. */
 function readBody(req: IncomingMessage): Promise<string | null> {
@@ -513,13 +575,15 @@ function applyRoute(req: IncomingMessage, res: ServerResponse, state: State, bod
  * only shape this accepts is one that had to be preflighted.
  */
 function post(req: IncomingMessage, res: ServerResponse, state: State, pathname: string): void {
-  // Ahead of the path, so a caller with no token learns nothing about which paths write.
-  if (!tokenOk(req, state)) return send(req, res, 403, ERRORS.forbidden);
+  // Ahead of the path, so a caller that fails the gate learns nothing about which paths
+  // write, and buys no parsing, no plan and no `git check-ignore`.
+  for (const check of state.postChecks) {
+    const refusal = check.run(req, state.token);
+    if (refusal) return send(req, res, REFUSAL_STATUS[refusal], ERRORS[refusal]);
+  }
   if (pathname !== '/api/plan' && pathname !== '/api/apply') {
     return send(req, res, 404, ERRORS.notFound);
   }
-  const type = (req.headers['content-type'] ?? '').split(';')[0]?.trim().toLowerCase();
-  if (type !== 'application/json') return send(req, res, 415, ERRORS.unsupportedMedia);
 
   void readBody(req).then((text) => {
     try {
@@ -552,15 +616,10 @@ function route(req: IncomingMessage, res: ServerResponse, state: State): void {
   }
   if (!hostIsLoopback(req.headers.host)) return send(req, res, 403, ERRORS.forbidden);
 
+  // On a read, an `Origin` is checked when the client sent one; on a write it is one of
+  // `POST_CHECKS`, where its absence is itself a refusal (QM-44).
   const origin = req.headers.origin;
-  if (method === 'POST') {
-    // Required, not merely checked when present. A browser always sends `Origin` on a
-    // POST, so demanding it costs a legitimate caller nothing and refuses the shape a
-    // local process reaches for first -- no header at all (QM-44).
-    if (origin === undefined || !originIsLoopback(origin)) {
-      return send(req, res, 403, ERRORS.forbidden);
-    }
-  } else if (origin !== undefined && !originIsLoopback(origin)) {
+  if (method !== 'POST' && origin !== undefined && !originIsLoopback(origin)) {
     return send(req, res, 403, ERRORS.forbidden);
   }
 
@@ -634,6 +693,14 @@ export interface ServeOptions {
    * that opts in.
    */
   log?: (lines: string[]) => void;
+  /**
+   * The gate every `POST` passes, with `POST_CHECKS` as its default.
+   *
+   * A parameter for the reason `planToggles` takes its `checks` and `applyPlan` takes
+   * `onStaged`: a gate has to be able to run the whole scenario with one guard missing.
+   * Nothing in `src/` passes it.
+   */
+  postChecks?: readonly PostCheck[];
 }
 
 /**
@@ -657,6 +724,7 @@ export function startServer(ctx: AuditContext, opts: ServeOptions = {}): Promise
     plans: new Map(),
     stateDir: opts.stateDir ?? stateDir(),
     log: opts.log ?? (() => {}),
+    postChecks: opts.postChecks ?? POST_CHECKS,
   };
   const categories: CategoryCoverage = {
     found: structure.categories !== null,
