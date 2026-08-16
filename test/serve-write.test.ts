@@ -34,7 +34,7 @@ import type { PluginInventory } from '../src/inventory.ts';
 import { NOT_CHECKED, readSettings } from '../src/surfaces/read.ts';
 import type { ClaudeJson, SettingsFile, Workspace } from '../src/surfaces/types.ts';
 import { TARGET_FILENAME, targetFor } from '../src/toggle.ts';
-import { projectId } from '../src/view/model.ts';
+import { planView, projectId } from '../src/view/model.ts';
 import { POST_CHECKS, startServer, type PostCheck, type RunningServer } from '../src/view/server.ts';
 import { project } from './factories.ts';
 
@@ -85,6 +85,7 @@ let root = '';
 let state = '';
 let fresh = '';
 let existing = '';
+let dead = '';
 let ctx: AuditContext;
 let server: RunningServer;
 let logged: string[] = [];
@@ -118,6 +119,7 @@ function buildWorld(): AuditContext {
   const home = join(root, 'home');
   fresh = join(root, 'fresh');
   existing = join(root, 'existing');
+  dead = join(root, 'gone');
   mkdirSync(join(home, '.claude'), { recursive: true });
   mkdirSync(join(fresh, '.claude'), { recursive: true });
   mkdirSync(join(existing, '.claude'), { recursive: true });
@@ -151,6 +153,9 @@ function buildWorld(): AuditContext {
       project(existing, {
         localSettings: readSettings(targetFor(existing), NOT_CHECKED),
       }),
+      // Registered once and gone since. `viewFrom` draws no column for it, and the point
+      // of the test below is that not drawing one is what makes it unwritable.
+      project(dead, { alive: false, localSettings: null }),
     ],
   };
 
@@ -476,6 +481,35 @@ describe('planning changes nothing, and says what it would change', () => {
     }
   });
 
+  /**
+   * The column set and the writable set are one expression, and this is what says so.
+   *
+   * A directory Claude Code registered and which no longer exists is in the workspace and
+   * is not a column -- `viewFrom` filters it out, so the grid draws nothing for it. Nothing
+   * about `planToggles` would stop a write there: the record exists, so it would plan, and
+   * `applyPlan` would `mkdirSync` the directory back into being. What stops it is that
+   * `columnPaths` answers for exactly the set `viewFrom` drew. Pointing it at
+   * `ws.projects` instead left the whole suite green until this existed.
+   */
+  test('a project the grid drew no column for is not writable', async () => {
+    const res = await post(server, '/api/plan', planBody(dead, PLUGIN, false));
+    assert.equal(res.status, 404);
+    assert.equal(existsSync(dead), false, 'a plan brought a dead project back');
+  });
+
+  test('and neither is one outside a scoped run', async () => {
+    const scoped = await startServer({ ...ctx, scope: existing }, { port: 0, stateDir: state });
+    try {
+      assert.equal((await post(scoped, '/api/plan', planBody(fresh, P.fresh, false))).status, 404);
+      // The scoped project itself still plans, so this is a narrowing and not a breakage.
+      const ok = await post(scoped, '/api/plan', planBody(existing, PLUGIN, true));
+      assert.equal(ok.status, 200);
+      assert.equal(JSON.parse(ok.body).outcome, 'planned');
+    } finally {
+      await scoped.close();
+    }
+  });
+
   test('and an id no row carries is refused before anything is planned', async () => {
     for (const plugin of ['nope@nowhere', 'alpha', '']) {
       const res = await post(server, '/api/plan', { project: column(fresh), plugin, value: false });
@@ -635,6 +669,33 @@ describe('the plan payload names its fields', () => {
       // Codes are hyphenated words. A sentence would have spaces in it, and a path.
       assert.match(n, /^[a-z-]+$/, n);
     }
+  });
+
+  /**
+   * The target display is a lookup by identity, and this is the case that has no recording.
+   *
+   * Every plan reaching `planView` in this program was built by `planToggles`, whose target
+   * *is* `axis.target(...)` -- so the branch that refuses to name a path the axis did not
+   * build is unreachable through the server, and deleting it left the suite green. It is a
+   * tripwire rather than a live guard, in `attestMcpName`'s `marketplace-id` sense, so the
+   * case is **constructed** and labelled as such: a plan handed a foreign target, straight
+   * to the projection.
+   */
+  test('a target no axis built is named as unrecognised, not printed', () => {
+    const forged = {
+      axis: { name: 'plugin', target: () => targetFor(existing) },
+      project: existing,
+      target: '/etc/claude/settings.local.json',
+      creates: false,
+      before: '',
+      after: '',
+      edits: [],
+      changes: [],
+      notes: [],
+    } as unknown as Parameters<typeof planView>[1];
+
+    const view = planView(ctx, forged, 'constructed');
+    assert.equal(view?.target, '(unrecognised source)');
   });
 
   test('an apply answers in the same currency', async () => {
