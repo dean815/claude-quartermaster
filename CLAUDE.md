@@ -10,8 +10,9 @@ a plugin, skill *or MCP server* toggle written after a printed diff and a confir
 `<proj>/.claude/settings.local.json` for the settings keys, and **`~/.claude.json` for the
 MCP deny-list** — the first thing here that writes it, and the reason `applyPlan` re-reads
 on confirmation rather than carrying a stage across it. Nothing else writes any Claude Code
-config. The grid's add/remove controls stay disabled — wiring them means the loopback
-server accepting `POST` for the first time, which is a separate issue.
+config. **`qm serve` writes too now, on the plugin axis only (QM-44)**: two `POST` routes
+behind a per-run token, planning through the same `planToggles` and applying a plan the
+server is holding. The MCP and skill controls in the grid stay disabled and say so.
 
 ## Architecture
 
@@ -622,6 +623,54 @@ green: swapping `attestPluginId`'s two `basis` values. `Attestation.basis` is re
 in `src/` on **any** axis — `keyProvenance` reads `guessed`, `notesFor` reads `note`, and the
 field's own doc says it is printed where it is not — so it is test-only until something
 consumes it, and the plugin axis is now pinned like the other two.
+
+**A read stack asks who is looking; a write stack asks which program (QM-44).** The grid's
+add/remove control works, on the plugin axis, and the socket takes `POST` for the first
+time. The four layers already there were built for reads and each answers differently now.
+`Origin` was checked `if (origin !== undefined)` — right for a browser, worth nothing
+against a local process, which omits it; on `POST` it is **required**, which narrows the gap
+and does not close it, because a program can send any `Origin` it likes. What closes it is a
+**token**: 32 random bytes per process, delivered in the URL **fragment** `qm serve` prints.
+A fragment is never sent to a server, so it reaches the page opened from the terminal and
+reaches nothing that merely knows the port — and a token served over an endpoint would be a
+token anything local could fetch, which is no token at all. It travels in a custom header
+(a second barrier: that forces a preflight this server, emitting no CORS headers, fails) and
+is compared with `timingSafeEqual`.
+**Consent stays server-side by making the plan unsendable.** The browser never transmits a
+plan. `/api/plan` computes one and keeps it; `/api/apply` names it by handle and the handle
+is consumed before the write, so a substituted plan is not a thing the wire can express and
+a replay finds nothing. Measured end to end against a scratch HOME: a plan-shaped body
+posted beside a valid handle — naming a different target, a different id and its own edits —
+wrote exactly the planned entry and nothing else.
+**`PlanView` is `view/model.ts`'s allowlist in the second direction**, and it refuses three
+things for reasons that file already knew. `before`/`after` are the whole text of a settings
+file, which is `SettingsFile.rest`'s hazard at full strength; the reviewed unit is the entry
+and not the byte (QM-46), which is what `applyPlan` binds its precondition to anyway.
+`project`/`target` are absolute paths, exactly as `ChainLink.source` is. And **no message
+crosses at all** — notes and refusals cross as their codes, because three of the eight note
+bodies interpolate a path and publishing prose composed elsewhere is a strip list in a
+different hat. The page glosses the codes; `ServeOptions.log` puts `describePlan` verbatim
+into the terminal, which is both the full-fidelity channel and the audit trail. Two of
+QM-30's three examples for that rule are about to be contingent, so the header now states
+the mechanism rather than the list.
+**QM-48, settled here because this is where the field would have landed:** `Attestation.basis`
+is **not** published. Its doc claimed it was printed and nothing in `src/` read it. It is
+three vocabularies wearing one type — `manifest`/`config`/`ever-connected` is a claim about
+how a name was built, `installed`/`not-installed` about a machine, `observed`/`stale` about a
+session listing — so a consumer cannot tell which it holds without knowing the axis, and the
+two facts a consumer needs are the fields beside it. The doc is corrected; it stays a
+discriminator for the gates.
+The day it fails: the workspace is read once at startup, so after a write the *model* is
+stale while the file is not — a second plan for the same row is refused `no-change` against
+a value that has moved, and the printed `from`/`to` can describe a chain that no longer
+holds. Safe (the entry `applyPlan` checks and writes is read off the file) and real. Four
+hand mutations left the suite green: `MAX_PLANS` never evicting (housekeeping behind the
+token), the path check moving ahead of the gate (an unauthenticated caller learns which paths
+write, and they are in the page source), and each of `columnPaths` and `planView`'s lookup
+widened **alone** — the two are one expression with two callers, so either one catches the
+other and only mutating `columnRecords` itself reddens. `renderTarget`'s "the axis did not
+build this path" branch is unreachable through the server and its case is constructed and
+labelled so.
 
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`

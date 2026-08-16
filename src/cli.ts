@@ -894,7 +894,17 @@ function undo(): void {
 async function serve(ctx: AuditContext, port: number): Promise<void> {
   let server;
   try {
-    server = await startServer(ctx, { port });
+    server = await startServer(ctx, {
+      port,
+      // Where the full text goes (QM-44). The browser is sent codes and closed value
+      // domains and no prose, so this window is the only place the whole diff, the effect
+      // sentence, the notes and every absolute path are written down -- and it is also
+      // the audit trail: nothing is planned or applied without a line appearing here.
+      log: (lines) => {
+        console.log();
+        for (const l of lines) console.log(`  ${l}`);
+      },
+    });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
       console.error(`qm: port ${port} is already in use. Free it, or pass --port <n>.`);
@@ -903,8 +913,15 @@ async function serve(ctx: AuditContext, port: number): Promise<void> {
     throw err;
   }
 
-  console.log(`\n${BOLD}quartermaster${RESET} ${DIM}· read-only · loopback only${RESET}`);
+  console.log(`\n${BOLD}quartermaster${RESET} ${DIM}· loopback only · plugin writes need the token below${RESET}`);
   console.log(`  ${server.url}`);
+  // The `#t=` is the write token, and saying so beats leaving it to look like noise. It
+  // is in the fragment because a fragment is never sent to a server: the page opened from
+  // this line can write, and a process that merely found the port cannot.
+  console.log(
+    `${DIM}  the #t= is a per-run write token — open this URL, not just the port. Every\n` +
+      `  plan and every write is printed here in full, and undone with qm undo.${RESET}`,
+  );
 
   // An absent filter must be reported rather than shown as an empty one: a category
   // dropdown offering nothing reads as "no plugin is categorised" instead of "the rubric
@@ -978,6 +995,15 @@ user server. Because that file is written by every live session, the diff is pri
 one read and the change is re-applied to the file as it is when you answer; the run says so
 when it had to. Undo puts back only the entries it changed there, never the whole document.
 Backups live beside the baseline in \${XDG_STATE_HOME:-~/.local/state}/claude-quartermaster.
+
+\`qm serve\` writes too, on the plugin axis only (QM-44). Its add/remove control plans
+through the same \`planToggles\` this command uses and applies a plan the server is holding,
+never one the browser sends — and both requests need a token this run prints in the URL
+fragment, because every process on the machine can reach 127.0.0.1 and none of them can
+read that fragment. Open the URL it prints, not the bare port. Every plan and every write
+appears in full in the terminal running it; the browser is sent codes and values and no
+paths. Without \`--full\` the target's settings file reads "not checked" there, exactly as
+it does here.
 
 Every other command is read-only. The first-party \`claude\` subcommands they invoke do
 create ~/.claude.json on a machine that has none, and the run says so when that happens.

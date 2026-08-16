@@ -166,7 +166,27 @@ export const targetFor = (projectPath: string): string =>
  * return that means "I did not ask".
  */
 export interface Attestation {
-  /** Where this spelling came from. Printed, so a note can say what it rests on. */
+  /**
+   * Where this spelling came from. **Internal, and deliberately so (QM-48, settled in
+   * QM-44).**
+   *
+   * Its doc used to say "printed", which was false: nothing in `src/` reads it --
+   * `keyProvenance` reads `guessed`, `notesFor` reads `note` -- and QM-47 found the field
+   * so unread that swapping `attestPluginId`'s two values left the whole suite green. Two
+   * halves could have been wrong and the wire settles which: `qm serve`'s plan payload is
+   * the first consumer that could have published it, and it does not.
+   *
+   * The reason is that `basis` is three different vocabularies wearing one type. `manifest`
+   * / `config` / `ever-connected` are claims about how a *name was built*; `installed` /
+   * `not-installed` is a claim about a machine; `observed` / `stale` is a claim about a
+   * session listing. A reader outside this module cannot tell which of the three it is
+   * holding without knowing the axis, so publishing it would put a per-axis vocabulary in
+   * a consumer with no way to interpret it -- and the two facts a consumer actually needs
+   * are already the two fields beside it: `guessed` refuses, `note` says.
+   *
+   * So it stays a discriminator for the gates, which is what it has always been, and the
+   * three `attest*` functions are pinned on it because that is the only place a swap shows.
+   */
   basis: string;
   /** Set when the spelling is this tool's own guess. A refusal body. */
   guessed: { message: string; evidence: string[]; fix: string } | null;

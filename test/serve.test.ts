@@ -239,11 +239,29 @@ describe('who may ask', () => {
     }
   });
 
-  test('read-only: anything but GET or HEAD is refused', async () => {
-    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']) {
+  /**
+   * `POST` left this list in QM-44 and nothing else joined it. The write path is two
+   * named routes and everything else about the method stack is unchanged -- so a `PUT`
+   * is still not a thing this server has an opinion about, and a `POST` is refused by
+   * the token rather than by the method.
+   */
+  test('anything but GET, HEAD or POST is refused on the method alone', async () => {
+    for (const method of ['PUT', 'PATCH', 'DELETE', 'OPTIONS']) {
       const res = await request(server.port, '/api/view', { method });
       assert.equal(res.status, 405, method);
     }
+  });
+
+  test('and a POST to a read route is a 404, not a write', async () => {
+    const res = await request(server.port, '/api/view', {
+      method: 'POST',
+      headers: {
+        origin: `http://127.0.0.1:${server.port}`,
+        'x-qm-token': server.token,
+        'content-type': 'application/json',
+      },
+    });
+    assert.equal(res.status, 404);
   });
 
   /** Absolute-form carries its own authority, which is not the one just checked. */
@@ -445,6 +463,11 @@ describe('error paths leak nothing', () => {
       await request(server.port, '/api/cost'),
       await request(server.port, '/api/cost?plugin=nope@nowhere'),
       await request(server.port, '/api/view', { method: 'POST' }),
+      await request(server.port, '/api/plan', { method: 'POST' }),
+      await request(server.port, '/api/plan', {
+        method: 'POST',
+        headers: { origin: `http://127.0.0.1:${server.port}`, 'x-qm-token': server.token },
+      }),
       await request(server.port, '/api/view', { headers: { host: 'evil.example.com' } }),
       await request(server.port, 'http://evil.example.com/api/view'),
       await request(server.port, '/api/view/../../../../etc/passwd'),
@@ -455,8 +478,11 @@ describe('error paths leak nothing', () => {
       assert.ok(!/\bat .+:\d+:\d+/.test(whole), `stack frame: ${whole}`);
       assert.ok(!whole.includes('node:internal'), whole);
       for (const s of stringsIn(res.body)) assert.ok(!looksAbsolute(s), s);
-      // One of five reasons, and nothing that came in with the request.
-      assert.match(res.body, /^\{"error":"(bad_request|forbidden|not_found|method_not_allowed|internal)"\}$/);
+      // One of the fixed reasons, and nothing that came in with the request.
+      assert.match(
+        res.body,
+        /^\{"error":"(bad_request|forbidden|not_found|method_not_allowed|unsupported_media_type|payload_too_large|stale_plan|internal)"\}$/,
+      );
     }
   });
 

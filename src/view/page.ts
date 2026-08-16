@@ -31,8 +31,19 @@
  * this, so the page draws from `/api/view` alone and prices land afterwards, a few in
  * flight at a time.
  *
- * Read-only. There is no write route to call, and the add/remove control is rendered inert
- * on purpose -- see `phase2`.
+ * **The write path is two requests, and this page owns neither decision (QM-44).** The
+ * control plans through `POST /api/plan` and applies through `POST /api/apply`, which
+ * names a plan by handle. Nothing about a plan is computed here and no plan is ever sent
+ * back: this script renders what the server decided and posts a handle at it. A browser
+ * that assembled its own diff and posted "apply" would be the least trustworthy
+ * participant holding the consent decision.
+ *
+ * What it does own is the **gloss**. Notes and refusals cross as codes, because their
+ * sentences are written for a terminal and interpolate absolute paths (see
+ * `view/model.ts`), so the tables below turn a code into a line of English. Presentation
+ * and not judgement: which code fires is entirely the server's, an unknown code renders
+ * as itself rather than as nothing, and the full text is in the terminal that ran
+ * `qm serve`.
  */
 
 /**
@@ -42,6 +53,10 @@
  * which is what lets `page.test.ts` establish that no absolute path can reach a browser
  * from here by reading the string itself. Everything the page shows arrives over
  * `/api/view`, through the allowlist in `view/model.ts`.
+ *
+ * The one thing that arrives by neither route is the write token, which `qm serve` puts in
+ * the URL fragment and this reads off `location.hash`. A fragment is never sent to a
+ * server, so a local process that knows the port still does not have it.
  */
 export const PAGE = `<!doctype html>
 <meta charset="utf-8">
@@ -82,6 +97,19 @@ label.ck{display:flex;gap:5px;align-items:center;cursor:pointer;
 label.ck input{margin:0}
 .badge{font-size:10px;color:var(--warn);border:1px solid rgba(232,179,57,.4);
   border-radius:3px;padding:0 4px}
+
+/* the write panel */
+.wr{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.wr button{background:var(--panel);border:1px solid var(--line);border-radius:4px;
+  padding:3px 10px;cursor:pointer}
+.wr button:hover:not(:disabled){border-color:#35496a;color:#cfe0ff}
+.wr button:disabled{opacity:.4;cursor:not-allowed}
+.wr button.go{border-color:#35496a;color:#cfe0ff;background:#233043}
+.wout{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+.wout .gl{color:var(--dim);margin:3px 0 0;line-height:1.5}
+.wout .gl b{color:var(--warn);font-weight:500}
+.wout .ok{color:var(--on)}
+.wout .bad{color:var(--warn)}
 
 .legend{display:flex;gap:14px;flex-wrap:wrap;padding:6px 14px;
   border-bottom:1px solid var(--line);color:var(--dim);font-size:11px;align-items:center}
@@ -238,6 +266,18 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
   var PSTATS = null;
   var GSTATS = null;
   var costDone = 0, costTotal = 0, paintedAt = 0;
+  var WRITE = null;     // {plugin, project} the panel is open on
+  var PLAN = null;      // the PlanView the server is holding, or null
+
+  /**
+   * The write token, from the fragment and from nowhere else.
+   *
+   * Pinned to the shape the server mints -- 64 hex characters -- so a fragment someone
+   * pasted cannot put anything else in a request header. Absent, the write controls are
+   * rendered disabled and say why: this page was opened without the URL \`qm serve\`
+   * printed, and no amount of clicking will make it a writer.
+   */
+  var TOKEN = (/(?:^#|[#&])t=([0-9a-f]{64})(?:&|$)/.exec(location.hash) || [])[1] || null;
 
   /**
    * One descriptor per extension kind.
@@ -283,6 +323,62 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
     ['inherited', 'inherited everywhere \\u2014 no project has an opinion']
   ];
   var UNCAT = 'uncategorised';
+
+  /**
+   * One line of English per code the server can send.
+   *
+   * Deliberately shorter than the sentence \`qm set\` prints: the full text, with the paths
+   * in it, goes to the terminal running \`qm serve\`. A code missing from these tables
+   * renders as the bare code, which is visible and wrong-looking rather than absent.
+   */
+  var NOTE_GLOSS = {
+    'not-validated': 'Nothing validated the target file, so whether Claude Code applies ' +
+      'it is unknown. Run qm serve --full to ask claude doctor.',
+    'tracked-path': 'git does not ignore the target, so the next git add -A commits this ' +
+      'machine\\u2019s local configuration.',
+    'gitignore-unchecked': 'Whether git ignores the target was not checked \\u2014 no git, ' +
+      'or not a repository.',
+    'would-restate': 'The entry lands on the value this project would inherit, and is ' +
+      'still in force: another project-scope entry says otherwise.',
+    'creates-file': 'The target does not exist and will be created. Undo restores it to ' +
+      'empty settings rather than removing it.',
+    'unattested-id': 'Nothing installed here has this id. It will be written, and it may ' +
+      'decide nothing.',
+    'value-unmoved': 'The entry changes and the resolved value does not.',
+    'shared-file': 'The target is shared by every project on this machine; only this ' +
+      'project\\u2019s key is touched.'
+  };
+
+  var REFUSAL_GLOSS = {
+    'no-such-project': 'The workspace does not cover that directory.',
+    'home-collision': 'That project is the home directory, whose project-scope local ' +
+      'settings file is the user-scope one \\u2014 the write would land everywhere.',
+    'target-discarded': 'Claude Code refuses the target file against its schema, so an ' +
+      'entry written into it would decide nothing.',
+    'target-unplaced': 'claude doctor reported on the target in words this release cannot ' +
+      'place, so whether the write would land was not decided.',
+    'target-ignores-key': 'Claude Code ignores enabledPlugins in that file.',
+    'no-change': 'It already resolves that way here, so there is nothing to write.',
+    'key-guessed': 'The key this would write is one the tool built rather than one it was ' +
+      'given.',
+    'unregistered-project': 'The target has no entry for this project.',
+    'contested-entry': 'Another entry contests this one, and which wins is not something ' +
+      'this tool has measured.',
+    'target-missing': 'The target does not exist and this axis does not create it.',
+    'edit-refused': 'The edit was refused rather than guessed at.',
+    // apply-side, and the two the transport can answer
+    'forbidden-target': 'The plan named a file its own axis does not own.',
+    'target-appeared': 'The target appeared between planning and applying.',
+    'precondition-moved': 'The entry is no longer what it was when the diff was shown.',
+    'preview-diverged': 'The edit does not put the entry where the diff said it would.',
+    'write-refused': 'The file moved, vanished, or the edit does not fit.',
+    'stale_plan': 'This server is not holding that plan. Plan the change again.',
+    'forbidden': 'Refused. This page has no write token \\u2014 open the URL qm serve printed.'
+  };
+
+  function gloss(table, code) {
+    return '<p class="gl"><b>' + esc(code) + '</b> ' + esc(table[code] || '') + '</p>';
+  }
 
   var ENT = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ENT[c]; }); }
@@ -399,6 +495,17 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
     nav.addEventListener('change', onNavChange);
     el('detail-x').addEventListener('click', function () { el('detail').hidden = true; });
     el('main').addEventListener('click', onMainClick);
+    el('main').addEventListener('change', onMainChange);
+    // The panel is an <aside>, outside <main>, so it needs its own delegate.
+    el('detail').addEventListener('click', onDetailClick);
+    el('detail').addEventListener('change', onDetailChange);
+  }
+
+  function onMainChange(e) {
+    if (e.target.id !== 'wsel' || !e.target.value) return;
+    var id = e.target.value;
+    e.target.value = '';
+    openWrite(id, HL || (PROJECTS[0] && PROJECTS[0].id));
   }
 
   function onNavClick(e) {
@@ -470,7 +577,7 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
         '<span class="n">' + rows.length + ' \\u00d7 ' + PROJECTS.length + ' projects</span>' +
         (sec.key === 'plugin' ? '' :
           '<span class="n catnote" hidden>\\u2014 the matrix names plugins only</span>') +
-        '<span class="sp"></span>' + phase2(sec) +
+        '<span class="sp"></span>' + control(sec) +
       '</div>' +
       '<div class="scroll" data-body="' + esc(sec.key) + '"></div>';
     el('view-ext').appendChild(s);
@@ -478,16 +585,34 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
   }
 
   /**
-   * The add/remove control, rendered and inert.
+   * The add/remove control: live on plugins, and honestly labelled on the other two.
    *
-   * Writes are Phase 2 (DEA-112). It is here because its absence changes the layout -- a
-   * header that grows a control later is a different header -- and disabled rather than
-   * hidden, because a control nobody can see is a control nobody can review.
+   * QM-44 wires the plugin axis and only that one. The other sections keep the control
+   * rendered and disabled for the reason it was rendered and disabled in the first place
+   * -- a header that grows a control later is a different header -- but the label now says
+   * something true: \`qm set --axis mcp|skill\` writes them today, from a CLI. The old title
+   * said writes were Phase 2, which stopped being true when DEA-112 shipped.
+   *
+   * Choosing an id opens the write panel. The project is the one being highlighted if any,
+   * and otherwise the first column -- the panel then lets it be changed, because a control
+   * in a section header has no column to mean.
    */
-  function phase2(sec) {
-    return '<span class="g2 p2" title="writes are Phase 2 (DEA-112); this control does ' +
-      'nothing yet"><select disabled><option>add / remove ' + esc(sec.title) +
-      '\\u2026</option></select><span class="badge">Phase 2</span></span>';
+  function control(sec) {
+    if (sec.key !== 'plugin') {
+      return '<span class="g2 hctl" title="qm set --axis ' + esc(sec.key) +
+        ' writes this axis from the CLI; the grid wires plugins only (QM-44)">' +
+        '<select disabled><option>add / remove ' + esc(sec.title) +
+        '\\u2026</option></select><span class="badge">CLI only</span></span>';
+    }
+    var opts = ['<option value="">add / remove plugins\\u2026</option>'];
+    S.plugins.forEach(function (r) {
+      opts.push('<option value="' + esc(r.id) + '">' + esc(r.id) + '</option>');
+    });
+    return '<span class="g2 hctl"' +
+      (TOKEN ? '' : ' title="this page was opened without the write token; open the URL ' +
+        'qm serve printed"') +
+      '><select id="wsel"' + (TOKEN ? '' : ' disabled') + '>' + opts.join('') + '</select>' +
+      (TOKEN ? '' : '<span class="badge">read-only</span>') + '</span>';
   }
 
   function fillSection(sec) {
@@ -729,10 +854,167 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
   }
 
   // -------------------------------------------------------------------------
+  // the write panel (QM-44)
+
+  /**
+   * Both POSTs, with the token and nothing else that identifies this page.
+   *
+   * A header rather than a query string: a query string ends up in histories and in any
+   * log an intermediary keeps, and a custom header cannot be sent cross-origin without a
+   * preflight this server fails. The two statuses that carry meaning are turned into the
+   * shape the renderers already read, so a transport refusal glosses like any other.
+   */
+  function post(path, body) {
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-QM-Token': TOKEN || '' },
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      if (r.status === 403) return { outcome: 'refused', code: 'forbidden', refusals: ['forbidden'] };
+      if (r.status === 409) return { outcome: 'refused', code: 'stale_plan', refusals: ['stale_plan'] };
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  function openWrite(pluginId, projectId) {
+    if (!TOKEN || !pluginId || !projectId) return;
+    WRITE = { plugin: pluginId, project: projectId };
+    PLAN = null;
+    renderWrite('');
+    el('detail').hidden = false;
+  }
+
+  /** What the id resolves to in that column, read off the snapshot the grid drew. */
+  function valueIn(pluginId, projectId) {
+    for (var i = 0; i < S.plugins.length; i++) {
+      if (S.plugins[i].id !== pluginId) continue;
+      var c = S.plugins[i].cells.filter(function (x) { return x.project === projectId; })[0];
+      return c ? c.value : null;
+    }
+    return null;
+  }
+
+  function renderWrite(out) {
+    var v = valueIn(WRITE.plugin, WRITE.project);
+    var h = ['<h2>', esc(WRITE.plugin), '</h2><table><tr><td class="k">project</td><td>',
+      '<select id="wproj">'];
+    PROJECTS.forEach(function (p) {
+      h.push('<option value="', esc(p.id), '"', p.id === WRITE.project ? ' selected' : '',
+        '>', esc(p.disp), '</option>');
+    });
+    h.push('</select></td></tr><tr><td class="k">resolves</td><td>',
+      GLYPH[String(v)] || '?', ' ', esc(VNAME[String(v)] || 'unknown'),
+      '</td></tr></table>',
+      '<div class="wr"><button data-set="on">set on</button>',
+      '<button data-set="off">set off</button></div>',
+      '<p class="gl">Planning changes nothing. The whole diff, the effect and every path ',
+      'are printed in the terminal running <code>qm serve</code>.</p>',
+      '<div class="wout">', out, '</div>');
+    el('detail-body').innerHTML = h.join('');
+  }
+
+  /**
+   * A plan, as the server projected it.
+   *
+   * The values are printed as the file will hold them, and the file's own entry is
+   * printed beside the resolved value, because on a settings key those two agree and the
+   * habit of showing only one is how an inverted container gets read wrong later.
+   */
+  function planHtml(body) {
+    if (body.outcome === 'refused') {
+      return '<p class="bad">Nothing was written.</p>' +
+        body.refusals.map(function (c) { return gloss(REFUSAL_GLOSS, c); }).join('');
+    }
+    var p = body.plan;
+    var h = ['<p>', esc(p.target), p.creates ? '  <b>(new file)</b>' : '',
+      '  \\u00b7  enabledPlugins</p><table>'];
+    p.changes.forEach(function (c) {
+      h.push('<tr><td class="k">', esc(c.id), '</td><td>', esc(String(c.from)),
+        ' \\u2192 ', esc(String(c.to)), '</td><td class="k">entry ',
+        c.wasInFile === null ? 'absent' : esc(String(c.wasInFile)), ' \\u2192 ',
+        c.willBeInFile === null ? 'absent' : esc(String(c.willBeInFile)), '</td></tr>');
+    });
+    h.push('</table><p class="gl">effect <b>', esc(p.effect), '</b></p>');
+    p.notes.forEach(function (n) { h.push(gloss(NOTE_GLOSS, n)); });
+    h.push('<div class="wr"><button class="go" data-apply="', esc(p.id),
+      '">apply</button><button data-cancel="1">cancel</button></div>');
+    return h.join('');
+  }
+
+  function appliedHtml(body) {
+    if (body.outcome === 'refused') {
+      return '<p class="bad">Nothing was written.</p>' + gloss(REFUSAL_GLOSS, body.code);
+    }
+    return '<p class="ok">Wrote ' + num(body.bytes) + ' bytes.</p>' +
+      (body.rebased
+        ? '<p class="gl">The file changed while the diff was on screen; the change was ' +
+          're-applied to it as it is now, and the entries above are what they said.</p>'
+        : '') +
+      '<p class="gl">The grid still shows the snapshot this server read at startup \\u2014 ' +
+      'restart <code>qm serve</code> to see the change. Undo with <code>qm undo</code>.</p>';
+  }
+
+  /** In flight: every button in the panel, so a second click cannot double-post. */
+  function busy(button) {
+    var all = button.closest('.wout, #detail-body').querySelectorAll('.wr button');
+    for (var i = 0; i < all.length; i++) all[i].disabled = true;
+  }
+
+  function settle(promise) {
+    return promise.catch(function (e) {
+      renderWrite('<p class="bad">' + esc(e.message) + '</p>');
+    });
+  }
+
+  function onDetailClick(e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+
+    var openId = b.getAttribute('data-open-id');
+    if (openId) return openWrite(openId, b.getAttribute('data-open-p'));
+    if (!WRITE) return;
+
+    var set = b.getAttribute('data-set');
+    if (set) {
+      busy(b);
+      return settle(
+        post('/api/plan', { project: WRITE.project, plugin: WRITE.plugin, value: set === 'on' })
+          .then(function (body) {
+            PLAN = body.outcome === 'planned' ? body.plan : null;
+            renderWrite(planHtml(body));
+          }));
+    }
+
+    var handle = b.getAttribute('data-apply');
+    if (handle) {
+      busy(b);
+      return settle(
+        post('/api/apply', { plan: handle }).then(function (body) {
+          PLAN = null;
+          renderWrite(appliedHtml(body));
+        }));
+    }
+
+    if (b.getAttribute('data-cancel')) {
+      PLAN = null;
+      renderWrite('');
+    }
+  }
+
+  function onDetailChange(e) {
+    if (e.target.id !== 'wproj' || !WRITE) return;
+    WRITE.project = e.target.value;
+    PLAN = null;
+    renderWrite('');
+  }
+
+  // -------------------------------------------------------------------------
   // interaction -- one listener for every cell, header and row
 
   function onMainClick(e) {
-    if (e.target.closest('.p2')) return;
+    // The control sits inside the section head, whose click toggles the section.
+    if (e.target.closest('.hctl')) return;
 
     var head = e.target.closest('.head');
     if (head) return toggleSection(head);
@@ -813,6 +1095,12 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
       h.push('</table>');
     }
     h.push(costDetail(kind, row.id));
+    // The cell is where a (plugin, project) pair exists, so it is the other way into the
+    // write panel. Absent without a token, rather than present and refusing.
+    if (kind === 'plugin' && TOKEN) {
+      h.push('<div class="wr"><button data-open-id="', esc(row.id), '" data-open-p="',
+        esc(pid), '">change\\u2026</button></div>');
+    }
     el('detail-body').innerHTML = h.join('');
     el('detail').hidden = false;
     setHighlight(pid);

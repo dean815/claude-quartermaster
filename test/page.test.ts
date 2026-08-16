@@ -162,9 +162,11 @@ describe('value and origin stay two axes', () => {
 describe('the grid is listened to once', () => {
   test('delegation, not a listener per cell', () => {
     const listeners = PAGE.match(/addEventListener\(/g) ?? [];
-    // nav click, nav change, detail close, main click. Anything growing with cell count
-    // would have to be added here first.
-    assert.ok(listeners.length <= 6, `${listeners.length} addEventListener calls`);
+    // nav click, nav change, detail close, main click, main change, detail click, detail
+    // change. Seven, all delegated: the last three arrived with the write panel (QM-44),
+    // which is one control per section and one panel, not one per cell. Anything growing
+    // with cell count would have to be added here first.
+    assert.ok(listeners.length <= 7, `${listeners.length} addEventListener calls`);
     assert.ok(PAGE.includes("el('main').addEventListener('click'"), 'no delegated grid handler');
   });
 
