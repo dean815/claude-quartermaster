@@ -513,10 +513,11 @@ function applyRoute(req: IncomingMessage, res: ServerResponse, state: State, bod
  * only shape this accepts is one that had to be preflighted.
  */
 function post(req: IncomingMessage, res: ServerResponse, state: State, pathname: string): void {
+  // Ahead of the path, so a caller with no token learns nothing about which paths write.
+  if (!tokenOk(req, state)) return send(req, res, 403, ERRORS.forbidden);
   if (pathname !== '/api/plan' && pathname !== '/api/apply') {
     return send(req, res, 404, ERRORS.notFound);
   }
-  if (!tokenOk(req, state)) return send(req, res, 403, ERRORS.forbidden);
   const type = (req.headers['content-type'] ?? '').split(';')[0]?.trim().toLowerCase();
   if (type !== 'application/json') return send(req, res, 415, ERRORS.unsupportedMedia);
 
