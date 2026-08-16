@@ -19,19 +19,57 @@
  * of. A strip list fails open that day; an allowlist fails closed. `rest` guarantees
  * the day comes.
  *
- * Read-only, like the rest of the tool. Nothing here touches a config file.
+ * **The rule outlives its examples (QM-44).** Two of those three fields are contingent --
+ * QM-30 retires `rest`, and a release that stopped putting credentials in `env` would take
+ * a second with it. What does not change is that a payload is built out of a structure
+ * somebody else's release decides the shape of. So the discipline is stated as the
+ * mechanism (allowlist, field by field, closed value domains) rather than as the list, and
+ * losing an example is not evidence that the mechanism can be relaxed.
+ *
+ * ## The second direction (QM-44)
+ *
+ * `PlanView` is the same boundary with a plan on it. A `TogglePlan` cannot go on a wire at
+ * all -- `TogglePlan.axis` is a record of functions -- so the question was never "serialise
+ * and strip", and what crosses is chosen here field by field like everything above. Three
+ * of its fields are refused for reasons the workspace payload already knows:
+ *
+ *   - `before` / `after`        the whole text of a settings file, which is `rest`'s hazard
+ *                               at full strength: every key the readers do not name,
+ *                               verbatim, plus whatever the next release adds. The reviewed
+ *                               unit is the *entry* and not the byte (QM-46), which is also
+ *                               what `applyPlan` binds its precondition to, so the diff is
+ *                               not what the consent rests on.
+ *   - `project` / `target`      absolute paths, exactly as `ChainLink.source` is. They cross
+ *                               as `projectId` and as a display form.
+ *   - `edits`                   `Edit.value` is `unknown` by construction -- whatever
+ *                               `write.ts` was asked to splice. `changes` already says what
+ *                               the entries become, in a closed domain.
+ *
+ * And **no message crosses at all** -- notes and refusals cross as their codes. Those
+ * sentences are composed for a terminal and three of the eight note bodies interpolate an
+ * absolute path (`creates-file`, `tracked-path`, `would-restate`); publishing prose built
+ * elsewhere and hoping it stays path-free is a strip list wearing a different hat. The
+ * codes are closed unions, the page glosses them, and `ServeOptions.log` puts the full
+ * `describePlan` text in the terminal that started the server -- which is the trusted
+ * channel, and the one place the whole diff belongs.
+ *
+ * This module still writes nothing. `planView` projects a plan; `apply.ts` is what applies
+ * one.
  */
 import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 
 import type { AuditContext } from '../detect.ts';
 import { distribution, type Distribution } from '../cost/summary.ts';
+import type { Effect } from '../effect.ts';
 import type { Cell, McpValue, Origin, PluginValue, Scope, SkillValue } from '../model.ts';
 import { allMcpServerNames, buildMcpCatalog } from '../mcp.ts';
 import { allPluginIds, resolveMcpServer, resolvePlugin, resolveSkill } from '../resolve.ts';
 import { allSkillIds, buildSkillCatalog } from '../skills.ts';
 import { memorySlug } from '../surfaces/read.ts';
 import type { ProjectRecord, Workspace } from '../surfaces/types.ts';
+import { planEffect, type EntryValue, type ToggleNoteCode, type TogglePlan } from '../toggle.ts';
+import type { ApplyResult } from '../apply.ts';
 
 /** Which surface decided this row. A flattened grid still knows what it is looking at. */
 export type ExtensionKind = 'plugin' | 'mcp' | 'skill';
@@ -288,6 +326,30 @@ function rowsFor<V>(
 }
 
 /**
+ * The projects that become columns.
+ *
+ * One expression, two callers (QM-44). `columnPaths` has to answer for exactly the set
+ * `viewFrom` drew, because a digest the grid never published must not be writable and a
+ * column it did publish must be -- and a second copy of the filter agrees with the first
+ * until someone edits one of them.
+ */
+function columnRecords(ctx: AuditContext): ProjectRecord[] {
+  return ctx.ws.projects.filter((p) => p.alive && (!ctx.scope || p.path === ctx.scope));
+}
+
+/**
+ * The path each column stands for. Server-side only, and never part of a payload.
+ *
+ * The grid keys everything to `projectId`, which is a digest precisely so the path stays
+ * off the wire; a write has to name a directory, so the inverse lives here beside the
+ * function that built the digests. Held by the server, never sent: a caller names a
+ * column, and the server -- not the caller -- decides which directory that is.
+ */
+export function columnPaths(ctx: AuditContext): Map<string, string> {
+  return new Map(columnRecords(ctx).map((r) => [projectId(r.path), r.path]));
+}
+
+/**
  * The whole grid, projected from the resolved model.
  *
  * Every pair the resolver decides for a project in view appears here with the same
@@ -312,20 +374,18 @@ export function viewFrom(ctx: AuditContext): GridView {
     else charsBySlug.set(slug, [m.totalChars]);
   }
 
-  const columns: Column[] = ws.projects
-    .filter((p) => p.alive && (!ctx.scope || p.path === ctx.scope))
-    .map((record) => {
-      const chars = charsBySlug.get(memorySlug(record.path)) ?? [];
-      return {
-        record,
-        sources: sourceDisplays(ws, record),
-        project: {
-          id: projectId(record.path),
-          label: labelFor(record, ws),
-          cost: { sessions: chars.length, baselineChars: viewDistribution(distribution(chars)) },
-        },
-      };
-    });
+  const columns: Column[] = columnRecords(ctx).map((record) => {
+    const chars = charsBySlug.get(memorySlug(record.path)) ?? [];
+    return {
+      record,
+      sources: sourceDisplays(ws, record),
+      project: {
+        id: projectId(record.path),
+        label: labelFor(record, ws),
+        cost: { sessions: chars.length, baselineChars: viewDistribution(distribution(chars)) },
+      },
+    };
+  });
 
   // All three axes enumerate what is *installed*, not what some settings file happens to
   // mention (DEA-134, and DEA-143 for MCP). Deriving rows from `skillOverrides` or from
@@ -358,4 +418,127 @@ export function viewFrom(ctx: AuditContext): GridView {
       noCost,
     ),
   };
+}
+
+// ---------------------------------------------------------------------------
+// A plan, projected (QM-44)
+// ---------------------------------------------------------------------------
+
+/**
+ * How one id's entry moves, and what the change needs before it is live.
+ *
+ * Every field is a closed domain: `EntryValue` is `boolean | SkillValue`, `Effect` is four
+ * words, and `id` is a row id `/api/view` already published. Nothing here is text some
+ * other module composed.
+ *
+ * `from`/`to` are the *resolved* values and `wasInFile`/`willBeInFile` the file's own
+ * entry, kept apart for the reason `EntryChange` keeps them apart -- on an inverted
+ * container they disagree, and a reviewer of a write is owed both.
+ */
+export interface PlanChangeView {
+  id: string;
+  from: EntryValue;
+  to: EntryValue;
+  wasInFile: EntryValue | null;
+  willBeInFile: EntryValue | null;
+  effect: Effect;
+}
+
+/** A plan, as the grid may see it. See the header for the three fields it refuses. */
+export interface PlanView {
+  /**
+   * The handle an apply names. Minted by the server and opaque here.
+   *
+   * A parameter rather than something this file generates, because it is the server's
+   * state and not the model's: the projection describes a plan, and which plan the server
+   * is holding is the server's question.
+   */
+  id: string;
+  /** `Axis.name` -- the word `--axis` takes. Never the record, which is functions. */
+  axis: string;
+  /** `projectId` of the directory written, matching the grid's column key. */
+  project: string;
+  /** The column's own label: a directory name or `~`, never a path. */
+  projectLabel: string;
+  /** Display form of the file written, by the same rule `renderSource` follows. */
+  target: string;
+  creates: boolean;
+  changes: PlanChangeView[];
+  /** Codes, never messages. See the header. */
+  notes: ToggleNoteCode[];
+  /** The worst verdict across the batch, from `planEffect` rather than restated here. */
+  effect: Effect;
+}
+
+/**
+ * How each axis writes the file it declares.
+ *
+ * A table keyed by `Axis.name`, checked against the path the axis itself builds -- so this
+ * is a lookup by identity, exactly as `renderSource` is, and a fourth axis renders
+ * `(unrecognised source)` rather than publishing a path nobody reviewed. The filesystem is
+ * deliberately not consulted: the target of a plan that creates its file does not exist
+ * yet, so a table built from files that do would fall through on exactly the plan that is
+ * about to make one.
+ */
+const AXIS_TARGETS: ReadonlyMap<string, string> = new Map([
+  ['plugin', '<project>/.claude/settings.local.json'],
+  ['skill', '<project>/.claude/settings.local.json'],
+  ['mcp', '~/.claude.json'],
+]);
+
+function renderTarget(ws: Workspace, plan: TogglePlan): string {
+  if (plan.target !== plan.axis.target(ws, plan.project)) return UNRECOGNISED_SOURCE;
+  return AXIS_TARGETS.get(plan.axis.name) ?? UNRECOGNISED_SOURCE;
+}
+
+/**
+ * A plan, field by field.
+ *
+ * The project is looked up rather than derived, so a plan for a directory that is not a
+ * column cannot be described: the grid's own column set is what `projectId` and `labelFor`
+ * are defined against, and a label for anything else would be a basename this module has
+ * no display rule for. `null` is the answer, and the caller's answer to `null` is to refuse
+ * -- which it can only do if this returns one rather than inventing a column.
+ */
+export function planView(ctx: AuditContext, plan: TogglePlan, id: string): PlanView | null {
+  const record = columnRecords(ctx).find((r) => r.path === plan.project);
+  if (!record) return null;
+
+  return {
+    id,
+    axis: plan.axis.name,
+    project: projectId(record.path),
+    projectLabel: labelFor(record, ctx.ws),
+    target: renderTarget(ctx.ws, plan),
+    creates: plan.creates,
+    changes: plan.changes.map((c) => ({
+      id: c.id,
+      from: c.from,
+      to: c.to,
+      wasInFile: c.wasInFile,
+      willBeInFile: c.willBeInFile,
+      effect: c.effect.effect,
+    })),
+    notes: plan.notes.map((n) => n.code),
+    effect: planEffect(plan),
+  };
+}
+
+/**
+ * What an apply says afterwards.
+ *
+ * `bytes` and `rebased` are the two facts a person watching a write wants and neither is
+ * a path. `backup` is deliberately absent -- it is an absolute path into this tool's state
+ * directory, and the terminal that started the server prints it (`ServeOptions.log`), which
+ * is where a path belongs. `ApplyRefusalCode` crosses; `message` and `evidence` do not,
+ * for the reason notes do not.
+ */
+export type ApplyView =
+  | { outcome: 'written'; bytes: number; rebased: boolean }
+  | { outcome: 'refused'; code: string };
+
+export function applyView(result: ApplyResult): ApplyView {
+  return result.outcome === 'written'
+    ? { outcome: 'written', bytes: result.bytes, rebased: result.rebased }
+    : { outcome: 'refused', code: result.code };
 }
