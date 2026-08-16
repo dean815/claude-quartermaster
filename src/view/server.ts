@@ -431,7 +431,7 @@ export interface PostCheck {
  * `json-body` is what stops the one content type a cross-origin form can send without a
  * preflight this server would fail.
  */
-const POST_GATE: readonly PostCheck[] = [
+export const POST_CHECKS: readonly PostCheck[] = [
   {
     name: 'origin-present',
     run: (req) => (req.headers.origin === undefined ? 'forbidden' : null),
@@ -452,8 +452,6 @@ const POST_GATE: readonly PostCheck[] = [
     run: (req) => (contentTypeOf(req) === 'application/json' ? null : 'unsupportedMedia'),
   },
 ];
-
-export const POST_CHECKS = POST_GATE;
 
 const REFUSAL_STATUS = { forbidden: 403, unsupportedMedia: 415 } as const;
 
