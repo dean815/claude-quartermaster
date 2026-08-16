@@ -98,6 +98,7 @@ import {
   type SkillValue,
 } from './model.ts';
 import { resolveMcpServer, resolvePlugin, resolveSkill } from './resolve.ts';
+import { buildSkillCatalog } from './skills.ts';
 import { applyEdits, stageEdits, type Edit, type Stage } from './surfaces/write.ts';
 import type { ProjectRecord, SettingsFile, Workspace } from './surfaces/types.ts';
 
@@ -152,9 +153,17 @@ export const targetFor = (projectPath: string): string =>
  *
  * The key a write emits has to be the key Claude Code matches (DEA-145): a
  * `plugin:<marketplace id>:<server>` is a string no config file acts on, and emitting one
- * into a deny-list is that defect with a write attached. `null` from `Axis.attest` is an
- * axis that does not ask -- see the settings axes for why, which is QM-45's reasoning and
- * not an omission.
+ * into a deny-list is that defect with a write attached.
+ *
+ * **Every axis answers, and that is QM-47 (QM-47).** `Axis.attest` used to be nullable so
+ * the settings axes could decline to ask. The reasoning behind that was sound and its
+ * conclusion did not follow: the catalogs those axes would consult exclude `stale` and
+ * `unmeasured` rows, so an unknown-id *refusal* built on them would refuse real writes --
+ * measured, 2 of the 45 plugin ids this machine's settings files name are not installed --
+ * and none of that is an argument for saying nothing. `guessed` and `note` are separate
+ * fields precisely so an axis can report what it cannot refuse on. So the type is no
+ * longer nullable: a fourth axis has to say what it checked, and there is no value it can
+ * return that means "I did not ask".
  */
 export interface Attestation {
   /** Where this spelling came from. Printed, so a note can say what it rests on. */
@@ -254,8 +263,8 @@ export interface Axis {
   stored: 'project-file' | 'user-file';
   /** The settings file whose schema validity gates this write, where one gates it. */
   validated(record: ProjectRecord): SettingsFile | null;
-  /** Whether the workspace attests this id's spelling. `null` where the axis does not ask. */
-  attest(ctx: AuditContext, id: string): Attestation | null;
+  /** What this workspace can say about the id's spelling, and what that is worth. */
+  attest(ctx: AuditContext, id: string): Attestation;
   /**
    * Another entry that would contest this write, where the axis has one to contest it.
    *
@@ -309,14 +318,20 @@ export interface Axis {
 /**
  * A settings axis: one key of `<project>/.claude/settings.local.json`.
  *
- * The two share every field but `writtenKey`, `fallback`, `spellings`, `noun`, `resolve`
- * and `pending`, so the shape is built once here. Spelled out as a function rather than
- * a spread of one axis over another, so neither is the other's special case.
+ * The two share every field but `writtenKey`, `fallback`, `spellings`, `noun`, `resolve`,
+ * `pending` and `attest`, so the shape is built once here. Spelled out as a function
+ * rather than a spread of one axis over another, so neither is the other's special case.
+ *
+ * `attest` joined that list in QM-47 rather than staying a shared `() => null`, and the
+ * two answers are deliberately not one sentence with a noun swapped: an id absent from 42
+ * installed plugins and an id absent from a skill catalog built out of what some session
+ * happened to list are different strengths of claim, and flattening them is the failure
+ * this repo keeps correcting one axis at a time.
  */
 function settingsAxis(
   base: Pick<
     Axis,
-    'name' | 'writtenKey' | 'noun' | 'fallback' | 'spellings' | 'resolve' | 'pending'
+    'name' | 'writtenKey' | 'noun' | 'fallback' | 'spellings' | 'resolve' | 'pending' | 'attest'
   >,
 ): Axis {
   const key = base.writtenKey;
@@ -329,11 +344,6 @@ function settingsAxis(
     stored: 'project-file',
     validated: (record) => record.localSettings,
     contested: () => null,
-    // QM-45's call, unchanged: the catalogs that would answer exclude `stale` and
-    // `unmeasured` rows, so an unknown-id refusal built on them would refuse real writes.
-    // A mistyped id still writes a key nothing matches, and that is reported as the cost of
-    // this rather than fixed here.
-    attest: () => null,
     entryIn: (doc, _project, id) => {
       const block = (doc as Record<string, unknown> | null)?.[key];
       if (block === null || typeof block !== 'object') return null;
@@ -377,6 +387,7 @@ export const PLUGIN_AXIS: Axis = settingsAxis({
   noun: 'plugin',
   fallback: false,
   resolve: (ws, project, id) => resolvePlugin(ws, project, id),
+  attest: (ctx, id) => attestPluginId(ctx, id),
   pending: (id, project, target) => ({
     kind: 'plugin',
     id,
@@ -408,6 +419,7 @@ export const SKILL_AXIS: Axis = settingsAxis({
   noun: 'skill',
   fallback: 'on',
   resolve: (ws, project, id) => resolveSkill(ws, project, id),
+  attest: (ctx, id) => attestSkillId(ctx, id),
   pending: (id, project, target) => ({
     kind: 'skill',
     id,
@@ -622,6 +634,111 @@ export function attestMcpName(ctx: AuditContext, id: string): Attestation {
 }
 
 /**
+ * Whether any plugin installed here carries this id (QM-47).
+ *
+ * `readInventories` reads `installed_plugins.json`, which is the set Claude Code resolves
+ * `enabledPlugins` against -- so "no installed plugin has this id" is a reasonably strong
+ * statement about what the entry will do, and much stronger than the skill axis can make.
+ *
+ * **It is a note because an uninstalled id is an ordinary thing to hold.** Measured across
+ * this machine's live config on 2026-08-14: 44 distinct plugin ids appear in settings files
+ * against 42 installed, and 2 of the 44 -- `coderabbit@claude-plugins-official` and
+ * `minutes@minutes` -- are named by no installed build. (QM-47's brief said 2 of 45 against
+ * 43 installed; the pair is the same and the totals have each moved by one since.) A
+ * marketplace that is not currently added produces exactly that state, so a refusal would
+ * reject configuration the user legitimately holds while claiming to reject a typo. Both
+ * are `test/toggle.test.ts`'s fixture for flagged-but-legitimate, and a version that
+ * refuses them goes red there.
+ *
+ * The count in the message is read off the inventory rather than written down, because the
+ * "43 installed" this was built against is a property of one machine (CLAUDE.md's own
+ * correction to the gitignore line) and a sentence carrying it would be wrong everywhere
+ * else.
+ *
+ * The day it fails: `readInventories` reads one file, so a plugin installed by a mechanism
+ * that does not record itself there reads `not-installed` and is flagged. And a genuinely
+ * mistyped id is still written -- deliberately, since the alternative is the refusal above.
+ */
+export function attestPluginId(ctx: AuditContext, id: string): Attestation {
+  if (ctx.inventories.has(id)) return { basis: 'installed', guessed: null, note: null };
+  return {
+    basis: 'not-installed',
+    guessed: null,
+    note:
+      `No plugin installed here has the id ${JSON.stringify(id)} — installed_plugins.json ` +
+      `lists ${ctx.inventories.size} and this is not one of them. Uninstalled is not the ` +
+      `same as wrong: a plugin whose marketplace is not currently added reads exactly this ` +
+      `way, which is why this is a note. If it is a typo instead, enabledPlugins takes any ` +
+      `string — the entry will be written, the file will apply, and the entry will decide ` +
+      `nothing.`,
+  };
+}
+
+/**
+ * What the skill catalog can say about a skill id, which is less than the plugin axis can
+ * say about a plugin one (QM-47).
+ *
+ * The four bases are `SkillPresence` plus the absence it has no value for, and the split
+ * between silent and noted follows the same line `attestMcpName` draws:
+ *
+ * - `observed`             a current listing names it. Claude Code published this spelling.
+ * - `installed-unobserved` a disk directory, an installed plugin's catalog or an existing
+ *                          override names it. Copied from a source, not built here.
+ * - `stale`                only a listing that is no longer current names it. This is
+ *                          `ever-connected` on the other axis: a record that it was there
+ *                          once and nothing that says it still is, so the note says so.
+ * - `unattested`           no source here produces this id at all.
+ *
+ * **The weakness is stated in the note rather than hidden in the basis.** `buildSkillCatalog`
+ * knows what a measured session listed, plus `~/.claude/skills`, plus the plugin catalog,
+ * and nothing else -- and `qm set --project <p>` measures that one project, so the catalog a
+ * write is checked against is thinner again than the whole-workspace one. Measured
+ * 2026-08-14 over 571 sessions and 26 measured projects: 797 ids, of which 459 are not
+ * `stale`. A skill that exists and has loaded in no measured session is therefore
+ * indistinguishable here from a typo, which is exactly why this is worth a sentence and not
+ * a refusal, and why the sentence carries the catalog's own size.
+ *
+ * The day it fails: an override already in a settings file makes `configured` true and the
+ * presence `installed-unobserved`, so a second `qm set` for a state this tool wrote is
+ * silent about an id the first one flagged. That is `attestMcpName`'s `config` basis
+ * exactly -- a deny-list this tool wrote attests the name for the next write -- and it is
+ * accepted here for the same reason and no better one. `noChange` closes the narrow version
+ * of it (the same id at the same value), never the wider one.
+ */
+export function attestSkillId(ctx: AuditContext, id: string): Attestation {
+  const catalog = buildSkillCatalog(ctx.ws, ctx.measurements, ctx.inventories);
+  const entry = catalog.entries.find((e) => e.id === id);
+
+  if (entry && entry.presence !== 'stale') {
+    return { basis: entry.presence, guessed: null, note: null };
+  }
+  if (entry) {
+    return {
+      basis: 'stale',
+      guessed: null,
+      note:
+        `The only thing here that names the skill ${JSON.stringify(id)} is a listing that is ` +
+        `no longer current — a measured session listed it, and nothing on disk, in an ` +
+        `installed plugin's catalog or in a settings file says it is still there. The ` +
+        `spelling is one Claude Code published, so it is not a typo; whether there is still ` +
+        `a skill for the override to scope is what nothing here can say.`,
+    };
+  }
+  return {
+    basis: 'unattested',
+    guessed: null,
+    note:
+      `Nothing here names a skill ${JSON.stringify(id)} — not a measured session's listing, ` +
+      `not ~/.claude/skills, not an installed plugin's catalog and no settings file's ` +
+      `skillOverrides. That says less than the same sentence would about a plugin: between ` +
+      `them those sources reach only what has loaded in a session this run measured or is ` +
+      `installed where this can see it (catalog size here: ${catalog.entries.length}), and ` +
+      `a skill neither of them reaches looks exactly like a typo. The entry will be written ` +
+      `either way, and skillOverrides silently ignores a key it does not match.`,
+  };
+}
+
+/**
  * A value as the diff, the change line and the notes print it.
  *
  * `String` and not `JSON.stringify`, so a skill reads `on -> off` rather than
@@ -685,8 +802,22 @@ export type ToggleNoteCode =
   | 'would-restate'
   /** The target does not exist and will be created. */
   | 'creates-file'
-  /** The name written is one this tool reconstructed rather than copied. */
-  | 'minted-key'
+  /**
+   * The id written is attested by nothing here, or by nothing current (QM-47).
+   *
+   * One code and three axes' worth of reasons, because what the reader has to act on is
+   * the same in all of them: the string about to land in the file is not one this
+   * workspace can match to anything, so whether Claude Code acts on it is unknown. Which
+   * kind of unattested it is -- a name this tool reconstructed, an uninstalled plugin, a
+   * skill no listing names -- is the message's job, and the message says so verbatim.
+   *
+   * It was `minted-key` until QM-47, when two more axes started answering. "Minted" is
+   * true of `attestMcpName`'s reconstructed connector names and false of an id the user
+   * typed on the command line, and a printed label that says this tool built the string
+   * when it did not is the kind of confidently-wrong output the rest of this file exists
+   * to avoid. The MCP message still says "mints", which is where that claim belongs.
+   */
+  | 'unattested-id'
   /** The entry moves and the resolved value does not, because no source declares the id. */
   | 'value-unmoved'
   /** The target is shared by every project, and this write decides one of them. */
@@ -775,8 +906,8 @@ export interface CheckInput {
   requests: readonly ToggleRequest[];
   /** Per requested id: how it resolves now, and how it would resolve after. */
   resolved: ReadonlyMap<string, ResolvedPair>;
-  /** Per requested id, once: where its spelling came from. `null` where the axis is silent. */
-  attested: ReadonlyMap<string, Attestation | null>;
+  /** Per requested id, once: where its spelling came from, on every axis (QM-47). */
+  attested: ReadonlyMap<string, Attestation>;
   /**
    * Per requested id: the entry the target document holds for it today, `null` for none.
    *
@@ -871,14 +1002,19 @@ const contestedEntry: PlanCheck = {
  * A name this tool built rather than one it was given (DEA-145).
  *
  * The refusal body comes from the axis, because what makes a spelling a guess differs by
- * axis and two of the three decline to ask at all. See `attestMcpName` for what the four
- * bases mean and for the measurement showing this fires on nothing today.
+ * axis. See `attestMcpName` for what its bases mean and for the measurement showing this
+ * fires on nothing today.
+ *
+ * Every axis now answers `attest` (QM-47) and only one of them can fill `guessed`, which
+ * is the distinction the two fields exist for: the settings axes have plenty to say about
+ * an id nothing recognises and nothing they could refuse on, because an uninstalled plugin
+ * id and an unlisted skill are both states a user legitimately holds.
  */
 const keyProvenance: PlanCheck = {
   name: 'key-provenance',
   run: ({ attested }) =>
     [...attested.values()].flatMap((a) =>
-      a?.guessed ? [{ code: 'key-guessed' as const, ...a.guessed }] : [],
+      a.guessed ? [{ code: 'key-guessed' as const, ...a.guessed }] : [],
     ),
 };
 
@@ -1135,7 +1271,7 @@ export function planToggles(
   }
 
   const resolved = new Map<string, ResolvedPair>();
-  const attested = new Map<string, Attestation | null>();
+  const attested = new Map<string, Attestation>();
   const entries = new Map<string, EntryValue | null>();
   for (const req of requests) {
     const now = axis.resolve(ctx.ws, record, req.id);
@@ -1289,8 +1425,8 @@ function notesFor(
   }
 
   for (const [id, attestation] of input.attested) {
-    if (!attestation?.note) continue;
-    notes.push({ code: 'minted-key', message: `${id}: ${attestation.note}` });
+    if (!attestation.note) continue;
+    notes.push({ code: 'unattested-id', message: `${id}: ${attestation.note}` });
   }
 
   // The entry moves and the cell does not. Only reachable where `fallbackDecides` is false
