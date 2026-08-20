@@ -1,0 +1,561 @@
+{
+  "_note": "Model-written. 'stamp' and 'turns' are the session's values when this was written; render.py flags the entry stale when either has moved. Bullet types: q = open question awaiting Dean, a = action for Dean, i = informational.",
+  "entries": {
+    "local_597d5790-54ef-4480-873b-6bd72f0e8512": {
+      "stamp": "2026-08-15T07:30:16.073000Z",
+      "turns": 5,
+      "purpose": "Automated daily-brief run for the tool stack; this run also reconciled the SKILL.md and prompt.md copies.",
+      "next": [
+        {
+          "type": "i",
+          "text": "You approved syncing the drifted paragraph and committing. Claude is finishing that now."
+        }
+      ]
+    },
+    "local_a32a70d7-db5e-472e-9285-e1830dd513f9": {
+      "stamp": "2026-08-16T04:50:03.129000Z",
+      "turns": 7,
+      "purpose": "Count Airtable API calls from session transcripts, then stop normal usage from blocking unattended runs — and prove the guard actually fires.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Set the override in the environment of any cron or SDK run — it is inert otherwise, which is the whole point of the design."
+        },
+        {
+          "type": "i",
+          "text": "Verified end to end in production, which earlier tests couldn't do: two identical list_bases calls, the second served entirely from cache. Per-agent keying is live — state keys on transcript_path, not session_id, so parallel subagents no longer share a ledger."
+        },
+        {
+          "type": "i",
+          "text": "A verification run is scheduled for Sun Aug 23, 9:00 AM against a locked baseline (91 calls, 68 billed, 24 avoidable), and the analysis script now lives at ~/.claude/user-scripts/airtable-usage-report.py rather than in scratchpad."
+        }
+      ]
+    },
+    "a2324028-6a0d-4f72-977b-dd5e7fe62891": {
+      "stamp": "2026-08-19T09:20:27.415Z",
+      "turns": 7,
+      "purpose": "Pick chord-chart-maker back up after a context break, which became the M7 Phase A discovery run.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Phase A finished and then the session died on an API error (ENOTFOUND) before Claude could report it, so the findings were never delivered. The raw result is on disk in the session's task output; re-open and ask for the readout rather than re-running the fan-out."
+        },
+        {
+          "type": "q",
+          "text": "Worth checking before you trust it: the workflow returned **130 avenues and 88 corrections but a null document and zero ranked items**, so the discovery half landed and the ranking half did not."
+        },
+        {
+          "type": "i",
+          "text": "Housekeeping is clean: PR #3 (the M7 spec) merged, `main` at edddceb, and the `m3-import-probe` branch deleted local and remote after verifying it held no commits that weren't already merged."
+        },
+        {
+          "type": "i",
+          "text": "`.claude/settings.json` is modified in your working tree and was left alone — it isn't from this session."
+        },
+        {
+          "type": "i",
+          "text": "Next after M7 is M4, auto-fit and print."
+        }
+      ],
+      "title": "chord-chart-maker — M7 Phase A"
+    },
+    "local_cf24f1e7-7602-44e0-bdfb-57c680cb4dcd": {
+      "stamp": "2026-08-16T06:19:40.063000Z",
+      "turns": 198,
+      "purpose": "Main working chat for Claude Quartermaster — design, build and issue triage.",
+      "next": [
+        {
+          "type": "q",
+          "text": "QM-8 / Phase 3 is still blocked on your scoping call: is encoding first-party guidance a fact the tool reports, or the judgement it hands back?"
+        },
+        {
+          "type": "a",
+          "text": "Close QM-48 as Done pointing at PR #43 — it was decided inside QM-44 (`Attestation.basis` is not published, doc corrected) but left open in Linear for you. Reopen it instead if you disagree with not publishing."
+        },
+        {
+          "type": "i",
+          "text": "QM-44 merged: the grid writes now, 697 tests, clean tree, no open PRs. The Phase 2 badge is gone."
+        },
+        {
+          "type": "i",
+          "text": "QM-30 (retire `SettingsFile.rest`) is the suggested next one — it shares src/view/model.ts with the write path that just landed."
+        }
+      ]
+    },
+    "local_7f3d1925-f4bd-46d1-9879-d07f6646853e": {
+      "stamp": "2026-08-19T13:49:13.374000Z",
+      "turns": 38,
+      "purpose": "The running career-ops chat — job scans and tracker upkeep, now redesigning deanhicks.com because the site reads boring.",
+      "next": [
+        {
+          "type": "q",
+          "text": "Four visual directions are rendered with your real content and waiting on your reaction, not a pick: A Editorial, B Technical, C Bold modern, D Refined. The read was that “boring” rules out D, and the honest split is A saying *I document things carefully* against C saying *I am not a document*. Mixing is on the table."
+        },
+        {
+          "type": "i",
+          "text": "B was flagged against on purpose: mono-on-dark is the default look for DevRel personal sites, so the exact people you're targeting have seen it a lot."
+        },
+        {
+          "type": "i",
+          "text": "Scope is bounded to the visual layer with content frozen, which keeps the two-page print guarantee intact. Nothing ships until you approve a design; the mockups are throwaway."
+        },
+        {
+          "type": "a",
+          "text": "JOBS-38 is still open: wind deanhicks.me down to Email Routing before the 2026-11-11 expiry."
+        },
+        {
+          "type": "i",
+          "text": "The last scan evaluated 14 roles and every report said don't apply, ceiling 3.9. Glean #557 contradicts itself — Greenhouse says remote, the JD says hybrid four days in SF or Mountain View."
+        }
+      ]
+    },
+    "b50d1a54-3cfe-4033-bd63-a06e9ce27c24": {
+      "stamp": "2026-08-15T07:29:31.120Z",
+      "turns": 13,
+      "purpose": "Draft answers to Cursor's application questions, stress-test them with peer agents, then research Cursor's recent marketing positioning to aim the rewrite.",
+      "next": [
+        {
+          "type": "q",
+          "text": "Abstract or concrete? You asked for mostly-abstract drafts; four independent analyses then called missing concrete detail the biggest AI tell. One concrete failure was added and flagged as unresolved rather than silently overriding you."
+        },
+        {
+          "type": "a",
+          "text": "Rework the drafts against Cursor's actual direction — agent swarms, cloud agents, production monitoring. Your current framing is single-developer, single-agent."
+        },
+        {
+          "type": "i",
+          "text": "A handoff is written for a fresh session. Tracker and Airtable untouched since nothing is submitted; step 5 has the exact command and record id."
+        }
+      ]
+    },
+    "local_7d1383a1-0b56-4def-900e-460da7e7996e": {
+      "stamp": "2026-08-19T03:53:23.544000Z",
+      "turns": 16,
+      "purpose": "Reconfigure Gmail labels and filters around a deny-by-default design, and build the digest pipeline that rides on it.",
+      "next": [
+        {
+          "type": "a",
+          "text": "The verification gate runs itself today at 10:30. Read that report before anything touches the 181k backlog — archiving is explicitly forbidden to the scheduled run, so the call stays yours."
+        },
+        {
+          "type": "i",
+          "text": "Your mislabel is now a working feedback loop: `gmailops corrections` reads the label, proposes carve-out entries, restores the messages and rebuilds. It edits senders.yml by textual insert so the comments survive, and refuses to write if anything but the corrections key changed."
+        },
+        {
+          "type": "i",
+          "text": "Two live changes shipped: the bulk rule now requires the word “unsubscribe” before archiving (about 2 more messages a day stay in your inbox), and lennyrachitsky.com is carved out so Product Pass mail stops being archived."
+        },
+        {
+          "type": "i",
+          "text": "That fix exposed a bug that would have silently undone every future correction — Gmail has no filter-update operation, so changing the carve-out was creating a second bulk filter beside the old one. 122 tests passing."
+        }
+      ]
+    },
+    "bddc3c0f-46f7-4c79-a8f4-c2dc210c8851": {
+      "stamp": "2026-08-14T18:28:21.990Z",
+      "turns": 35,
+      "purpose": "Find why duplicate MCP servers appear across CLI, Desktop and Cyrus, and pin the mechanism.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Finished — mechanism observed and the guide republished. No open asks."
+        }
+      ],
+      "title": "MCP duplicate-server investigation"
+    },
+    "5b91eaa3-caa5-4eac-b343-224065a0cb72": {
+      "stamp": "2026-08-18T07:38:07.299Z",
+      "turns": 6,
+      "purpose": "Deep dive on ChordPro as the app's backing format — now a 73-item survey artifact plus feature suggestions and five proposals for reshaping the roadmap.",
+      "next": [
+        {
+          "type": "q",
+          "text": "Five roadmap proposals are on the table and Claude is waiting on which ones you want written into the design doc as a branch. The biggest is turning M6 into a playable stage view — pedals, autoscroll, minimal setlist — which roughly doubles M6 and pushes v1 out."
+        },
+        {
+          "type": "q",
+          "text": "Decide 'personal tool or product' before something forces it: ChordSheetJS is GPL-2.0-only and a shipped PWA bundle counts as distribution."
+        },
+        {
+          "type": "a",
+          "text": "Spend an evening with iReal Pro (~$20) and OnSong's free tier before M4 — they're your two nearest competitors and the feel is the point."
+        },
+        {
+          "type": "i",
+          "text": "The catalogue is done: 105 items trimmed to 73, scored across 10 columns in a sortable artifact. Original numbers kept, so earlier notes still resolve."
+        }
+      ],
+      "title": "ChordPro format deep dive"
+    },
+    "7e267d09-6a88-40d8-8d25-5ca279423961": {
+      "stamp": "2026-08-14T14:50:07.544Z",
+      "turns": 2,
+      "purpose": "One-off question: which output style this session runs.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Fix the naming mismatch Claude flagged — the output-style file's frontmatter says name: Rundown, but the settings key and filename say attention-kind."
+        }
+      ]
+    },
+    "local_77427ab3-a2f8-4a17-b43e-e6aeddbca875": {
+      "stamp": "2026-08-14T08:22:53.738000Z",
+      "turns": 7,
+      "purpose": "Automated daily-brief run for the tool stack, which also pushed six pending commits.",
+      "next": [
+        {
+          "type": "a",
+          "text": "~/.claude/settings.json is modified locally and unpushed — the task left it alone on purpose. Commit it or revert it."
+        }
+      ]
+    },
+    "a43fcf80-9b8b-45c6-afa6-b464e106640b": {
+      "stamp": "2026-08-14T02:52:14.707Z",
+      "turns": 18,
+      "purpose": "Debug MCP server connections from the CLI, chasing a google-sheets reconnect failure.",
+      "next": [
+        {
+          "type": "a",
+          "text": "google-sheets times out after 30s. Re-authorize it or remove the server."
+        }
+      ],
+      "title": "MCP reconnect debugging"
+    },
+    "ed7a7704-9d85-434a-b2f1-cfc5829ad78e": {
+      "stamp": "2026-08-14T02:37:15.241Z",
+      "turns": 6,
+      "purpose": "Earlier attempt at the same google-sheets reconnect problem.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Superseded by the later session. Close it."
+        }
+      ],
+      "title": "MCP auth failure (google-sheets)"
+    },
+    "6a504aa3-396f-4e7a-afe9-a48669d2ee5f": {
+      "stamp": "2026-08-13T22:43:41.854Z",
+      "turns": 2,
+      "purpose": "Orientation pass on chord-chart-maker that surfaced two loose threads.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Push 213c048 — it's local-only right now."
+        },
+        {
+          "type": "a",
+          "text": "Write the M3 findings doc. PR #1 merged without it, and the handoff called that doc M3's actual deliverable."
+        }
+      ],
+      "title": "chord-chart-maker orientation"
+    },
+    "5946e358-9c0d-4119-a5fb-068e2e47a9b7": {
+      "stamp": "2026-08-13T20:58:42.899Z",
+      "turns": 4,
+      "purpose": "Plan the next chord-chart-maker milestone and scope the deep import probe.",
+      "next": [
+        {
+          "type": "q",
+          "text": "Does audio analysis get to break the no-backend rule? In-browser WASM, a local service, and an MCP seam to music-analysis are architecturally different answers — this is the biggest fork in the plan."
+        },
+        {
+          "type": "q",
+          "text": "How public is this project becoming?"
+        },
+        {
+          "type": "a",
+          "text": "Upload the sample charts you said you'd send."
+        },
+        {
+          "type": "a",
+          "text": "Push the docs/deep-import-probe branch — committed but never pushed."
+        }
+      ]
+    },
+    "b994fc42-7253-4e5d-a776-b35426bfdd83": {
+      "stamp": "2026-08-13T20:54:49.521Z",
+      "turns": 2,
+      "purpose": "Fix a ChordPro CLI install that looked broken on Apple Silicon.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Eject and delete the ChordPro (Apple Silicon) DMG — it isn't needed."
+        },
+        {
+          "type": "i",
+          "text": "Worth remembering: the packaged launcher never flushes stdout when stdout isn't a terminal, so piping chordpro output silently produces nothing with exit code 0."
+        }
+      ]
+    },
+    "6670ab65-8101-4192-83a0-29ce45236cbd": {
+      "stamp": "2026-08-13T19:16:37.521Z",
+      "turns": 10,
+      "purpose": "Check the Vercel tier and pricing, and land the layout fixes that missed the previous merge.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Merge PR #2 — it's open with green checks, and production doesn't have the fixes until you do."
+        }
+      ]
+    },
+    "local_5ec2eb98-7256-4012-94d8-1e77ab2b5786": {
+      "stamp": "2026-08-13T05:05:34.090000Z",
+      "turns": 21,
+      "purpose": "Build and ship the Carnevil VII attendee info form, backed by Airtable.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Commit the 1 modified and 1 untracked file left in the tree."
+        }
+      ]
+    },
+    "5453e345-c045-4333-8b5a-74a0f3706c2c": {
+      "stamp": "2026-08-13T05:05:29.703Z",
+      "turns": 14,
+      "purpose": "Run project-optimizer onboarding on chord-chart-maker and verify the handoff loads in a fresh session.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Confirmed working. Note that plugin changes only apply to sessions started after that one."
+        }
+      ]
+    },
+    "98d7c023-ed33-4890-9295-d51775d206dd": {
+      "stamp": "2026-08-13T03:59:59.866Z",
+      "turns": 10,
+      "purpose": "First half of the chord-chart-maker onboarding pass — setup hardening and getting CI green.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Optional one-liner: bump actions/checkout, setup-node and pnpm/action-setup to v5. GitHub warns the v4 pins target Node 20, now deprecated on their runners."
+        }
+      ]
+    },
+    "cab7ab36-7162-4dfa-b189-cae975537f02": {
+      "stamp": "2026-08-12T15:42:25.092Z",
+      "turns": 4,
+      "purpose": "Answer what a Nimbalyst .mindmap file is — an SDK lookup, not interactive work.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Answered. Nothing pending."
+        }
+      ],
+      "title": "Nimbalyst mindmap format lookup"
+    },
+    "ed401f56-661e-44c6-ae11-149032db9535": {
+      "stamp": "2026-08-12T14:30:08.122Z",
+      "turns": 2,
+      "purpose": "One-off version check on the running Claude session.",
+      "next": [
+        {
+          "type": "q",
+          "text": "Claude offered to run project onboarding for ~/claude/general and you never answered. Still want it?"
+        }
+      ]
+    },
+    "22d52a6a-2d63-48f4-8ec3-673be59cd05c": {
+      "stamp": "2026-08-12T14:12:48.679Z",
+      "turns": 19,
+      "purpose": "Long-running Airtable MCP connection session, latterly just being told to “continue”.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Genuinely empty — the last open item (Linear MCP re-auth) is done. Close it."
+        }
+      ],
+      "title": "Airtable MCP connection (long-running)"
+    },
+    "local_90cb9bce-b954-4aac-8ad3-34a8e282904c": {
+      "stamp": "2026-08-18T08:04:13.769000Z",
+      "turns": 18,
+      "purpose": "Design an ADHD-friendly workflow system — now an eight-agent audit of whether the board matches reality.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Carnevil's town-board permit is filed as “2027 town board approval” with no owner and no due date, for an event 37 days out. Three siblings share the bug, including “Set 2027 ticket price”, 18 days overdue — and Price 1-day and Price 2-day are blank on all three festival records."
+        },
+        {
+          "type": "q",
+          "text": "The arithmetic is the real finding and it needs a decision, not a re-rank: 385 hours of work require you present, against 53–106 hours before Sept 26. Only 30 of those hours are Carnevil-critical. Nothing on the board covers rehearsals, load-in, or performing in two bands."
+        },
+        {
+          "type": "i",
+          "text": "The board is wrong in both directions: music-analysis is already public while MUSA-6 sits in Todo, and cashortrade-search is still private while its project reads 100%."
+        }
+      ]
+    },
+    "866d4f5d-7952-4a6d-9e42-e0c63b665033": {
+      "stamp": "2026-08-18T00:03:15.052Z",
+      "turns": 37,
+      "purpose": "Settle, once and for all, how Claude Code deduplicates MCP servers — the research behind claude-project-optimizer and the quartermaster plugin.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Answered on live evidence, not docs: on 2.1.232 a lazy dedup suppresses plugin servers that duplicate claude.ai connectors, then suppresses the connector back — a mechanism neither of you predicted. Written into the guide artifact."
+        },
+        {
+          "type": "i",
+          "text": "The interactive TUI path stayed unobservable under `script`; only the headless path is proven. No config drift resulted from any of the experiments."
+        },
+        {
+          "type": "a",
+          "text": "Session is live and just compacted — pick it back up or close it; nothing is waiting on an answer."
+        }
+      ],
+      "title": "MCP dedup mechanism — headless proof"
+    },
+    "767546c7-2d8d-411c-9c71-16d31ad7167b": {
+      "stamp": "2026-08-17T22:55:57.109Z",
+      "turns": 10,
+      "purpose": "Opened /skill-creator and never said what to build.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Empty shell — the skill loaded, you logged in, and nothing followed. Say what skill you want or close it."
+        }
+      ],
+      "title": "skill-creator, opened and left"
+    },
+    "143c9783-1433-4be2-b7af-cc98db2a9afa": {
+      "stamp": "2026-08-17T22:05:00.161Z",
+      "turns": 36,
+      "purpose": "A console session — nothing but /mcp and /plugin runs, no conversation.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Vercel MCP authenticated, oz-harness-support installed, two marketplaces removed. No model work happened here; safe to close."
+        }
+      ],
+      "title": "Plugin and MCP console session"
+    },
+    "677cc1ea-5bdb-4cd8-bd1a-08a5a61e1bc0": {
+      "stamp": "2026-08-17T14:34:02.658Z",
+      "turns": 6,
+      "purpose": "Nothing happened here — a /login that was interrupted.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Three messages, no conversation. Close it."
+        }
+      ],
+      "title": "Interrupted login"
+    },
+    "local_8f672474-ae9d-432b-99a0-c4b396b03255": {
+      "stamp": "2026-08-17T14:17:55.519000Z",
+      "turns": 2,
+      "purpose": "Automated Tool Stack daily-brief run, which you then answered live to correct an Airtable record.",
+      "next": [
+        {
+          "type": "a",
+          "text": "The commit is local — `916759c` (Warp Build: Claude Usable no → yes) has not been pushed."
+        },
+        {
+          "type": "i",
+          "text": "Both research tiers were empty for the window; the only finding was your own data being wrong. Claude Code still 2.1.233."
+        },
+        {
+          "type": "i",
+          "text": "It declined to invent an `Access` value for 'Claude Code plugin' — the schema has no such choice and adding one is outside lane 2."
+        }
+      ]
+    },
+    "2069bab7-8a36-4f18-8c7f-352b851e28b2": {
+      "stamp": "2026-08-17T05:53:22.883Z",
+      "turns": 4,
+      "purpose": "Find what was stealing mouse focus in Logic Pro.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Two suspects cleared, four still live if it recurs: Wispr Flow (11 processes with a global key listener), Universal Control, Granola, BetterDisplay."
+        },
+        {
+          "type": "i",
+          "text": "Five LogicProMCP processes are gone, so the logic-pro MCP tools are disconnected for that session until it reconnects. Loom uninstalled — 824MB, no recordings lost; its Screen Recording and Accessibility entries survive in the TCC database and can only be removed from System Settings."
+        }
+      ],
+      "title": "Logic mouse-focus suspects"
+    },
+    "8a64dbf3-6489-4595-bb71-ece59e77332c": {
+      "stamp": "2026-08-16T00:51:38.121Z",
+      "turns": 2,
+      "purpose": "Answer why a shared Google Drive folder downloads as several incomplete-looking zips.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Answered — they're parts, not duplicates; Drive splits anything over ~2GB. Advice was to add a shortcut and use Drive for desktop. Nothing pending."
+        }
+      ],
+      "title": "Google Drive multi-part zip question"
+    },
+    "local_80f5f8b4-33a6-445b-98d3-53b0e8e769e7": {
+      "stamp": "2026-08-19T13:51:39.948000Z",
+      "turns": 8,
+      "purpose": "Keep Session Fleet current — rewrite stale summaries, and work the comment threads left on the published page.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Flip Linear to dark for a moment if you want Magic Blue exact. Its base #191a23 and border #2d2e39 were read from your app; the surfaces and text are derived on the same LCH hue, because reading the real ones meant changing your theme setting."
+        },
+        {
+          "type": "a",
+          "text": "The eight comment threads are all acted on but still show open — resolving them needs a claude.ai session, which this one isn't."
+        },
+        {
+          "type": "i",
+          "text": "Pure Light is verbatim from your app; accent and the six state colours were left alone. Every subteam chip was refit against the new grounds and still clears AA, worst case 4.55:1 light and 4.59:1 dark."
+        },
+        {
+          "type": "i",
+          "text": "`author_summaries.py` had accumulated 3 duplicate entries — the splice matched on blank lines that an earlier splice had collapsed, so it appended instead of replacing. It's parser-based now, 56 unique entries, output verified identical."
+        },
+        {
+          "type": "i",
+          "text": "Dropping the Total tile means `?monitor=1` shows no session count at all, since monitor mode hides the toolbar where the count lives."
+        }
+      ]
+    },
+    "local_ee75a028-de17-4750-bb38-6e797c0e31b6": {
+      "stamp": "2026-08-19T12:02:41.836000Z",
+      "turns": 9,
+      "purpose": "Design hooks that surface the right tool at the right moment, plus a weekly routine that spends each service's unused allotment — latterly, wiring Cursor in as a code reviewer.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Run `cursor-agent login`. The CLI is installed (2026.08.11, the build with the wedged-session fix) and the test is staged, but signing you into an account isn't something Claude will do for you and no `CURSOR_API_KEY` is set."
+        },
+        {
+          "type": "i",
+          "text": "The other two homes for this are both blocked: GitHub's Bugbot needs Cursor Business and you're on Pro, and Linear's @Cursor agent is an implementation agent, not a reviewer. The headless CLI is the one that fits."
+        },
+        {
+          "type": "i",
+          "text": "The test is deliberately a calibration, not a smoke test — it points at `toolstack-regen.py`, whose bare `IndexError` on a wrong call your CLAUDE.md already documents. If Cursor finds that, the tool works; if it returns generic advice, that's worth knowing too."
+        },
+        {
+          "type": "q",
+          "text": "The original hooks design still isn't approved, and it now carries the two extra workstreams you added — Linear Business with Loops, and Cursor Pro."
+        },
+        {
+          "type": "a",
+          "text": "Google AI Pro was downgraded on 2026-05-17: the 1,000 monthly AI credits left the base plan. `claimed-unused` also moved the wrong way, 8 → 10, with Supabase and ElevenLabs starting fresh clocks at zero extraction."
+        }
+      ]
+    },
+    "local_ecfc7982-fae6-468f-b115-b05af4a3ad16": {
+      "stamp": "2026-08-19T13:27:05.583000Z",
+      "turns": 2,
+      "purpose": "Automated session-name-date-sweep run.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Automated — 37 renames, the biggest run yet: 1 Desktop plus a 36-session backfill of this task's own past runs, which had been sitting bare with no code or dates."
+        },
+        {
+          "type": "a",
+          "text": "Those leftovers accumulate at roughly 5–6 a day. They're the ones you archive in bulk, so the pile rebuilds itself between clean-ups."
+        }
+      ]
+    }
+  }
+}

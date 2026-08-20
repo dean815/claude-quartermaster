@@ -1,0 +1,10 @@
+.env
+.linear-cache.json
+.watch-state.json
+.menubar.lock
+.agent.log
+.venv/
+data.json
+local.html
+fleetview.html
+links.json
