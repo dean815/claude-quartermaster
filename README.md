@@ -77,7 +77,10 @@ Then ask Claude to republish `fleetview.html` to the existing artifact URL.
 Only the last one needs Claude. A summary goes stale when the session's
 **last-activity time or turn count** moves; the page flags those and the
 "Re-summarize" button copies a prompt naming exactly which ids need rewriting.
-Nothing spends tokens without you pasting that prompt.
+Nothing spends tokens without you asking for it.
+
+From a Claude session in this directory, `/session-fleet refresh` does the whole
+loop — rescan, read the excerpts for the stale ids, write the bullets, republish.
 
 ## States
 
@@ -214,6 +217,8 @@ them to that. If nothing appears, enable it under System Settings → Notificati
 | `render.py` | `data.json` + `summaries.json` → HTML (`--local` adds controls) |
 | `serve.py` | Local server, rebuilds on every load |
 | `refresh.sh` | One-shot rebuild + stale report |
+| `stale.py` | Which summaries need rewriting — the one definition of "stale" |
+| `.claude/skills/session-fleet/` | `/session-fleet refresh` — rescan and rewrite the stale summaries |
 | `linear.py` | Linear GraphQL client, disk cache, fail-soft |
 | `linear-map.json` | repo/folder → Linear team key |
 | `links.json` | optional session id → issue identifier pins |
@@ -233,6 +238,13 @@ them to that. If nothing appears, enable it under System Settings → Notificati
 
 Archived sessions, anything under `/tmp` or `/private/tmp`, `cwd` of `/`, and
 single-turn probes. Override with `--include-archived` and `--include-noise`.
+
+Also dropped: a scheduled task's own run, when you never replied in the thread
+and it did not end on a question. The routine posts its prompt, works, and stops
+— nothing is expected back, so it is noise on a board about what needs you. It
+reappears the moment either of those is untrue. `--include-routines` keeps them.
+Detected from `scheduledTaskId` on the Desktop record, or the `<scheduled-task>`
+prompt the harness injects as the opening user message.
 
 ## State values
 

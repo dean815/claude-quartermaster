@@ -35,6 +35,10 @@ LIVE = HOME / ".claude/sessions"
 TAIL_BYTES = 400_000
 EXCERPT_CHARS = 700
 
+# A routine's opening prompt is injected as if the user typed it. This is how a
+# routine-launched session is told apart from one Dean actually started.
+SCHEDULED_RE = re.compile(r'<scheduled-task name="([^"]+)"')
+
 
 # --------------------------------------------------------------------------- utils
 
@@ -186,9 +190,13 @@ def read_transcript(path):
            "sidechain": False, "first_user": "", "recent_user": [],
            "last_assistant": "", "last_assistant_tail": "",
            "turns": 0, "first_ts": None, "last_ts": None,
-           "skills": [], "title": None}
+           "skills": [], "title": None,
+           "scheduled_task": None, "human_turns": 0}
 
     size = path.stat().st_size
+    # Head and tail overlap on short transcripts, so every user message gets fed
+    # twice. human_turns has to be exact, hence the uuid guard.
+    seen_user = set()
 
     def feed(line, head):
         try:
@@ -220,6 +228,14 @@ def read_transcript(path):
                     res["first_user"] = txt
                 if not head:
                     res["recent_user"].append(txt)
+                key = d.get("uuid") or (ts, txt[:60])
+                if key not in seen_user:
+                    seen_user.add(key)
+                    m = SCHEDULED_RE.match(txt)
+                    if m:
+                        res["scheduled_task"] = m.group(1)
+                    else:
+                        res["human_turns"] += 1
         elif t == "assistant" and not head:
             txt = clean(text_of(d.get("message")), 4000)
             if txt:
@@ -280,6 +296,17 @@ def is_noise(cwd, turns):
     return turns < 2
 
 
+def is_unattended_routine(routine, human_turns, waiting):
+    """True for a routine's own run that never turned into a conversation.
+
+    A routine posts its prompt, works, and stops — nothing is expected back, so
+    the run is noise on a board about what needs Dean. It stops being noise the
+    moment either of two things happens: Dean replies in the thread, or the run
+    ends on something addressed to him.
+    """
+    return bool(routine) and not human_turns and not waiting
+
+
 def classify(cwd, entrypoint, kind):
     """Best-effort mapping to a human-facing interface name."""
     cwd = cwd or ""
@@ -326,6 +353,7 @@ def collect_desktop(cutoff, transcripts):
             "permission_mode": d.get("permissionMode"),
             "turns": d.get("completedTurns"),
             "entrypoint": "claude-desktop",
+            "scheduled_task": d.get("scheduledTaskId"),
         })
     return sessions
 
@@ -358,6 +386,7 @@ def collect_transcript_only(cutoff, transcripts, claimed):
             "permission_mode": None,
             "turns": t["turns"],
             "entrypoint": t["entrypoint"],
+            "scheduled_task": t["scheduled_task"],
             "_transcript": t,
         })
     return sessions
@@ -368,6 +397,8 @@ def main():
     ap.add_argument("--days", type=float, default=7)
     ap.add_argument("--out", default=str(Path(__file__).parent / "data.json"))
     ap.add_argument("--include-archived", action="store_true")
+    ap.add_argument("--include-routines", action="store_true",
+                    help="keep routine runs nobody is expected to answer")
     ap.add_argument("--include-noise", action="store_true",
                     help="keep scratchpad and single-turn probe sessions")
     args = ap.parse_args()
@@ -425,6 +456,13 @@ def main():
         state = watcher.classify_state(phase, len(subs), waiting, age_h,
                                        live=bool(proc))
 
+        routine = s.get("scheduled_task") or t.get("scheduled_task")
+        if (proc or {}).get("kind") == "scheduled":
+            routine = routine or "scheduled"
+        if (is_unattended_routine(routine, t.get("human_turns", 0), waiting)
+                and not args.include_routines):
+            continue
+
         # claude://resume?session=<id> calls importCliSession, which looks the
         # session up as "local_<id>". If that record already exists it focuses it;
         # if not it imports a fresh one. So the link is only safe when no
@@ -449,6 +487,7 @@ def main():
             "subagents": subs,
             "question": question,
             "waiting": waiting,
+            "routine": routine,
             "pid": (proc or {}).get("pid"),
             "archived": s["archived"],
             "cwd": cwd,

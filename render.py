@@ -14,6 +14,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import stale as stale_mod
+
 HERE = Path(__file__).parent
 
 # key, label, tooltip. Order is the tile order and the display order.
@@ -28,7 +30,6 @@ STATES = [
 STATE_LABEL = {k: v for k, v, _ in STATES}
 STATE_TIP = {k: t for k, _, t in STATES}
 
-TOKENS_PER_SUMMARY = 1500
 
 # Nerd Font private-use glyphs, embedded as a 3-glyph subset so the published
 # artifact does not depend on the viewer having a patched font installed.
@@ -95,16 +96,10 @@ def build(data, summaries):
     entries = summaries.get("entries", {})
     rows = []
     for s in data["sessions"]:
-        # Key on the transcript id, not the wrapper id: importing a CLI session
-        # into the Desktop app renames it local_<cliSessionId>, which would
-        # otherwise orphan a perfectly good summary.
-        e = entries.get(s.get("cli_session_id") or "") or entries.get(s["id"]) or {}
+        e = stale_mod.summary_of(entries, s)
 
         g = s.get("git") or {}
-        stale = bool(e) and (e.get("stamp") != s.get("last_activity_at")
-                             or e.get("turns") != s.get("turns"))
-        if s["state"] in ("running", "subagents"):
-            stale = False        # mid-turn sessions are supposed to be moving
+        stale = bool(e) and stale_mod.staleness(s, e) is not None
 
         rows.append({
             "id": s["id"],
@@ -367,6 +362,12 @@ select{cursor:pointer; max-width:150px}
   background:var(--accent-soft); color:var(--accent); text-decoration:none}
 .lin:hover{text-decoration:underline}
 
+/* Actions ride the meta line, right-aligned under the team and client chips.
+   They used to sit at the foot of the aside, which set a tall floor on every
+   row: a session with two lines of prose still got a 267px card. */
+.subhead{display:flex; align-items:center; justify-content:space-between;
+  gap:8px 16px; flex-wrap:wrap; margin-top:7px}
+.subhead .meta{margin-top:0}
 .meta{display:flex; flex-wrap:wrap; gap:3px 0; align-items:center; margin-top:7px;
   font-size:12px; color:var(--ink-2)}
 .meta > * + *::before{content:"·"; color:var(--ink-3); margin:0 7px; font-weight:400}
@@ -378,7 +379,7 @@ select{cursor:pointer; max-width:150px}
 .gitc .clean{color:var(--ink-3)}
 
 .prose{margin-top:10px; display:flex; flex-direction:column; gap:8px}
-.row.compact .prose, .row.compact .started, .row.compact .acts,
+.row.compact .prose, .row.compact .started, .row.compact .subhead,
 .row.compact .aside, .row.compact .meta{display:none}
 .row.compact{grid-template-columns:1fr}
 .row.compact .main{padding:9px 14px}
@@ -393,7 +394,7 @@ select{cursor:pointer; max-width:150px}
 .flag{align-self:flex-start; font-size:11px; color:var(--your-turn);
   background:var(--your-turn-soft); padding:2px 7px; border-radius:5px; font-weight:560}
 
-.acts{display:flex; gap:5px; flex-direction:column; align-items:stretch; margin-top:auto}
+.acts{display:flex; gap:5px; flex-wrap:wrap; align-items:center; margin-left:auto}
 .act{font-size:11.5px; font-weight:530; padding:3.5px 9px; border-radius:6px;
   border:1px solid var(--line); background:var(--surface-2); color:var(--ink-2);
   cursor:pointer; text-decoration:none; font-family:inherit; display:inline-block}
@@ -427,7 +428,7 @@ body.monitor .mast .sub{display:none}
   .row, .row.compact{grid-template-columns:1fr}
   .aside{border-left:0; border-top:1px solid var(--line-2); flex-direction:row;
     flex-wrap:wrap; gap:16px}
-  .aside .acts{flex-basis:100%; flex-direction:row; flex-wrap:wrap; margin-top:0}
+  .acts{margin-left:0}
   .bar{position:static}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -542,10 +543,21 @@ function card(r){
         </span>
       </div>
 
-      <div class="meta mono">
-        <span class="folder">${esc(r.folder)}</span>
-        ${r.branch ? `<span>${esc(r.branch)}</span>` : ""}
-        ${gitCounters(r) ? `<span>${gitCounters(r)}</span>` : ""}
+      <div class="subhead">
+        <div class="meta mono">
+          <span class="folder">${esc(r.folder)}</span>
+          ${r.branch ? `<span>${esc(r.branch)}</span>` : ""}
+          ${gitCounters(r) ? `<span>${gitCounters(r)}</span>` : ""}
+        </div>
+        <div class="acts">
+          ${LOCAL && r.deeplink
+            ? `<a class="act primary" href="${esc(r.deeplink)}">Open in Claude</a>` : ""}
+          ${LOCAL && !r.deeplink
+            ? `<span class="act" tabindex="0" style="cursor:help"
+                 data-tip="No safe deep link: this session was created in the Desktop app, and claude://resume would import a duplicate rather than focus it.">Open — n/a</span>` : ""}
+          ${r.resumeCmd ? `<button class="act" type="button" data-copy="${esc(r.resumeCmd)}">Copy resume cmd</button>` : ""}
+          ${r.cwd ? `<button class="act" type="button" data-copy="${esc(r.cwd)}">Copy path</button>` : ""}
+        </div>
       </div>
 
       <div class="prose">
@@ -575,16 +587,6 @@ function card(r){
       <div class="stat started">
         <dt>Turns</dt>
         <dd class="mono">${r.turns}${r.repo !== r.folder ? `<small>${esc(r.repo)}</small>` : ""}</dd>
-      </div>
-
-      <div class="acts">
-        ${LOCAL && r.deeplink
-          ? `<a class="act primary" href="${esc(r.deeplink)}">Open in Claude</a>` : ""}
-        ${LOCAL && !r.deeplink
-          ? `<span class="act" tabindex="0" style="cursor:help"
-               data-tip="No safe deep link: this session was created in the Desktop app, and claude://resume would import a duplicate rather than focus it.">Open — n/a</span>` : ""}
-        ${r.resumeCmd ? `<button class="act" type="button" data-copy="${esc(r.resumeCmd)}">Copy resume cmd</button>` : ""}
-        ${r.cwd ? `<button class="act" type="button" data-copy="${esc(r.cwd)}">Copy path</button>` : ""}
       </div>
     </div>
   </article>`;
@@ -838,7 +840,7 @@ def main():
                 f' Linear unavailable ({lin.get("error") or "no key"}); '
                 f'priority sort and subteam filter are inert.')
 
-    est_k = round(len(stale) * TOKENS_PER_SUMMARY / 1000, 1)
+    est_k = round(len(stale) * stale_mod.TOKENS_PER_SUMMARY / 1000, 1)
     resummarize_prompt = ("Re-summarize the stale fleetview sessions and republish. Stale ids:\n"
                           + "\n".join(f"  {r['id']}" for r in stale))
 
