@@ -80,6 +80,14 @@ The second `refresh.sh` re-renders both pages.
 Confirm the stale count is now zero, and report what you wrote — one line per
 session, plus anything you found that Dean should know about.
 
+## Headless
+
+`./resummarize.sh` runs this same skill through `claude -p`, which is what the
+menu bar's **Re-summarize** item shells out to. It exits early and free when
+nothing is stale. Nothing about the steps above changes — a headless run is the
+same work with no one watching, so be more careful, not less, about only writing
+`a` and `q` bullets for things that genuinely need Dean.
+
 ## Bare `/session-fleet`
 
 Rescan only (`./refresh.sh`) and report the counts and the stale list. Costs

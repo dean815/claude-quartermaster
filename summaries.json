@@ -32,8 +32,8 @@
       ]
     },
     "a2324028-6a0d-4f72-977b-dd5e7fe62891": {
-      "stamp": "2026-08-19T09:20:27.415Z",
-      "turns": 7,
+      "stamp": "2026-08-20T21:27:57.122Z",
+      "turns": 13,
       "purpose": "Pick chord-chart-maker back up after a context break, which became the M7 Phase A discovery run.",
       "next": [
         {
@@ -83,25 +83,25 @@
       ]
     },
     "local_7f3d1925-f4bd-46d1-9879-d07f6646853e": {
-      "stamp": "2026-08-19T13:49:13.374000Z",
-      "turns": 38,
-      "purpose": "The running career-ops chat — job scans and tracker upkeep, now redesigning deanhicks.com because the site reads boring.",
+      "stamp": "2026-08-20T18:15:03.677000Z",
+      "turns": 44,
+      "purpose": "The running career-ops chat — job scans and tracker upkeep; the deanhicks.com redesign is now shipped.",
       "next": [
         {
-          "type": "q",
-          "text": "Four visual directions are rendered with your real content and waiting on your reaction, not a pick: A Editorial, B Technical, C Bold modern, D Refined. The read was that “boring” rules out D, and the honest split is A saying *I document things carefully* against C saying *I am not a document*. Mixing is on the table."
-        },
-        {
-          "type": "i",
-          "text": "B was flagged against on purpose: mono-on-dark is the default look for DevRel personal sites, so the exact people you're targeting have seen it a lot."
-        },
-        {
-          "type": "i",
-          "text": "Scope is bounded to the visual layer with content frozen, which keeps the two-page print guarantee intact. Nothing ships until you approve a design; the mockups are throwaway."
+          "type": "a",
+          "text": "Your GitHub profile still points at deanhicks.me. Ten seconds in profile settings, and it's the link recruiters actually click."
         },
         {
           "type": "a",
-          "text": "JOBS-38 is still open: wind deanhicks.me down to Email Routing before the 2026-11-11 expiry."
+          "text": "JOBS-38 is still open: wind deanhicks.me down to Cloudflare Email Routing before the 2026-11-11 expiry."
+        },
+        {
+          "type": "i",
+          "text": "The redesign is live and verified against the real URL, not localhost — valid cert, HTTP/2 200, both self-hosted fonts actually loading, four requests total and zero off-site, so the no-external-requests promise in your README still holds."
+        },
+        {
+          "type": "i",
+          "text": "Résumé content and markup are byte-identical to before; index.html changed by one line. Dark for OS-dark, light paper otherwise, both measured at WCAG AA (worst pair 4.97:1), and print still gives the two-page CV."
         },
         {
           "type": "i",
@@ -164,8 +164,8 @@
       "title": "MCP duplicate-server investigation"
     },
     "5b91eaa3-caa5-4eac-b343-224065a0cb72": {
-      "stamp": "2026-08-18T07:38:07.299Z",
-      "turns": 6,
+      "stamp": "2026-08-20T21:27:57.622Z",
+      "turns": 7,
       "purpose": "Deep dive on ChordPro as the app's backing format — now a 73-item survey artifact plus feature suggestions and five proposals for reshaping the roadmap.",
       "next": [
         {
@@ -248,123 +248,6 @@
         }
       ],
       "title": "chord-chart-maker orientation"
-    },
-    "5946e358-9c0d-4119-a5fb-068e2e47a9b7": {
-      "stamp": "2026-08-13T20:58:42.899Z",
-      "turns": 4,
-      "purpose": "Plan the next chord-chart-maker milestone and scope the deep import probe.",
-      "next": [
-        {
-          "type": "q",
-          "text": "Does audio analysis get to break the no-backend rule? In-browser WASM, a local service, and an MCP seam to music-analysis are architecturally different answers — this is the biggest fork in the plan."
-        },
-        {
-          "type": "q",
-          "text": "How public is this project becoming?"
-        },
-        {
-          "type": "a",
-          "text": "Upload the sample charts you said you'd send."
-        },
-        {
-          "type": "a",
-          "text": "Push the docs/deep-import-probe branch — committed but never pushed."
-        }
-      ]
-    },
-    "b994fc42-7253-4e5d-a776-b35426bfdd83": {
-      "stamp": "2026-08-13T20:54:49.521Z",
-      "turns": 2,
-      "purpose": "Fix a ChordPro CLI install that looked broken on Apple Silicon.",
-      "next": [
-        {
-          "type": "a",
-          "text": "Eject and delete the ChordPro (Apple Silicon) DMG — it isn't needed."
-        },
-        {
-          "type": "i",
-          "text": "Worth remembering: the packaged launcher never flushes stdout when stdout isn't a terminal, so piping chordpro output silently produces nothing with exit code 0."
-        }
-      ]
-    },
-    "6670ab65-8101-4192-83a0-29ce45236cbd": {
-      "stamp": "2026-08-13T19:16:37.521Z",
-      "turns": 10,
-      "purpose": "Check the Vercel tier and pricing, and land the layout fixes that missed the previous merge.",
-      "next": [
-        {
-          "type": "a",
-          "text": "Merge PR #2 — it's open with green checks, and production doesn't have the fixes until you do."
-        }
-      ]
-    },
-    "local_5ec2eb98-7256-4012-94d8-1e77ab2b5786": {
-      "stamp": "2026-08-13T05:05:34.090000Z",
-      "turns": 21,
-      "purpose": "Build and ship the Carnevil VII attendee info form, backed by Airtable.",
-      "next": [
-        {
-          "type": "a",
-          "text": "Commit the 1 modified and 1 untracked file left in the tree."
-        }
-      ]
-    },
-    "5453e345-c045-4333-8b5a-74a0f3706c2c": {
-      "stamp": "2026-08-13T05:05:29.703Z",
-      "turns": 14,
-      "purpose": "Run project-optimizer onboarding on chord-chart-maker and verify the handoff loads in a fresh session.",
-      "next": [
-        {
-          "type": "i",
-          "text": "Confirmed working. Note that plugin changes only apply to sessions started after that one."
-        }
-      ]
-    },
-    "98d7c023-ed33-4890-9295-d51775d206dd": {
-      "stamp": "2026-08-13T03:59:59.866Z",
-      "turns": 10,
-      "purpose": "First half of the chord-chart-maker onboarding pass — setup hardening and getting CI green.",
-      "next": [
-        {
-          "type": "a",
-          "text": "Optional one-liner: bump actions/checkout, setup-node and pnpm/action-setup to v5. GitHub warns the v4 pins target Node 20, now deprecated on their runners."
-        }
-      ]
-    },
-    "cab7ab36-7162-4dfa-b189-cae975537f02": {
-      "stamp": "2026-08-12T15:42:25.092Z",
-      "turns": 4,
-      "purpose": "Answer what a Nimbalyst .mindmap file is — an SDK lookup, not interactive work.",
-      "next": [
-        {
-          "type": "i",
-          "text": "Answered. Nothing pending."
-        }
-      ],
-      "title": "Nimbalyst mindmap format lookup"
-    },
-    "ed401f56-661e-44c6-ae11-149032db9535": {
-      "stamp": "2026-08-12T14:30:08.122Z",
-      "turns": 2,
-      "purpose": "One-off version check on the running Claude session.",
-      "next": [
-        {
-          "type": "q",
-          "text": "Claude offered to run project onboarding for ~/claude/general and you never answered. Still want it?"
-        }
-      ]
-    },
-    "22d52a6a-2d63-48f4-8ec3-673be59cd05c": {
-      "stamp": "2026-08-12T14:12:48.679Z",
-      "turns": 19,
-      "purpose": "Long-running Airtable MCP connection session, latterly just being told to “continue”.",
-      "next": [
-        {
-          "type": "i",
-          "text": "Genuinely empty — the last open item (Linear MCP re-auth) is done. Close it."
-        }
-      ],
-      "title": "Airtable MCP connection (long-running)"
     },
     "local_90cb9bce-b954-4aac-8ad3-34a8e282904c": {
       "stamp": "2026-08-18T08:04:13.769000Z",
@@ -489,8 +372,8 @@
       "title": "Google Drive multi-part zip question"
     },
     "local_80f5f8b4-33a6-445b-98d3-53b0e8e769e7": {
-      "stamp": "2026-08-19T13:51:39.948000Z",
-      "turns": 8,
+      "stamp": "2026-08-19T16:01:30.507000Z",
+      "turns": 10,
       "purpose": "Keep Session Fleet current — rewrite stale summaries, and work the comment threads left on the published page.",
       "next": [
         {
@@ -512,12 +395,20 @@
         {
           "type": "i",
           "text": "Dropping the Total tile means `?monitor=1` shows no session count at all, since monitor mode hides the toolbar where the count lives."
+        },
+        {
+          "type": "i",
+          "text": "This routine is now duplicated work — `/session-fleet refresh` does the same rescan-and-rewrite from the project directory. Worth retiring one of them."
+        },
+        {
+          "type": "i",
+          "text": "The artifact's live watch dropped and stopped retrying. Only affects notifications; the published page is unchanged, and a concurrent publish would 409 rather than silently overwrite."
         }
       ]
     },
     "local_ee75a028-de17-4750-bb38-6e797c0e31b6": {
-      "stamp": "2026-08-19T12:02:41.836000Z",
-      "turns": 9,
+      "stamp": "2026-08-19T23:38:31.222000Z",
+      "turns": 13,
       "purpose": "Design hooks that surface the right tool at the right moment, plus a weekly routine that spends each service's unused allotment — latterly, wiring Cursor in as a code reviewer.",
       "next": [
         {
@@ -538,6 +429,22 @@
         },
         {
           "type": "a",
+          "text": "Open Lovable's billing page and read one line: does it say resets Aug 22 or Sep 1? That single data point settles the whole cohort. Your credit pools almost certainly reset on the billing anniversary, not the 1st — every renewal date clusters on Jul 22 and Jul 26, so the real deadlines are Aug 22 and Aug 26, not month-end."
+        },
+        {
+          "type": "q",
+          "text": "Claude offered to start the Lovable half of the spend-the-credits work now."
+        },
+        {
+          "type": "i",
+          "text": "Airtable claims `calendar-month` for these, but that's an unverified assumption and the one service actually checked contradicts it — Cursor resets on the billing date, and Cursor is in the Jul 22 cohort."
+        },
+        {
+          "type": "i",
+          "text": "Not on a clock: Google AI Pro has no monthly pool (5-hour refresh), ElevenLabs just reset with 121k available through Sep 18, and n8n, Notion, Linear, Cyrus and Supabase have no monthly reset at all."
+        },
+        {
+          "type": "a",
           "text": "Google AI Pro was downgraded on 2026-05-17: the 1,000 monthly AI credits left the base plan. `claimed-unused` also moved the wrong way, 8 → 10, with Supabase and ElevenLabs starting fresh clocks at zero extraction."
         }
       ]
@@ -554,6 +461,140 @@
         {
           "type": "a",
           "text": "Those leftovers accumulate at roughly 5–6 a day. They're the ones you archive in bulk, so the pile rebuilds itself between clean-ups."
+        }
+      ]
+    },
+    "1f8f1785-7166-4bde-80dd-23b8e9d9f556": {
+      "stamp": "2026-08-20T22:38:42.109Z",
+      "turns": 4,
+      "purpose": "A `/session-fleet refresh` run — rescan every session and rewrite the stale summaries.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Housekeeping only, nothing for you to answer. It found 10 stale entries and rewrote them; this is the entry for the run itself."
+        }
+      ],
+      "title": "Session Fleet refresh run"
+    },
+    "local_66995bb1-9a44-4b63-9c19-fb9a957a9743": {
+      "stamp": "2026-08-20T22:36:46.211000Z",
+      "turns": 3,
+      "purpose": "Build out Session Fleet's UI and tooling — hide unattended routine runs, tighten the row layout, and turn the re-summarize workflow into a skill.",
+      "next": [
+        {
+          "type": "i",
+          "text": "All three original asks shipped and are committed: routine runs are filtered out unless you actually replied in the thread, the row buttons moved to the meta line (cards down 267px → 180px), and `/session-fleet refresh` now exists as a skill."
+        },
+        {
+          "type": "i",
+          "text": "In flight: whether the refresh can run headless from the CLI so the menu bar gets a one-click button for it. Claude is working that out — nothing waiting on you."
+        }
+      ]
+    },
+    "local_9cf8e76f-1964-435c-be35-d3cf6011993c": {
+      "stamp": "2026-08-20T22:35:23.971000Z",
+      "turns": 4,
+      "purpose": "Work out why CLI-started sessions rename inconsistently, then rebuild the session-name format around it.",
+      "next": [
+        {
+          "type": "q",
+          "text": "Fire the sweep once now so you can see the new titles, or let the schedule pick it up on its next run?"
+        },
+        {
+          "type": "i",
+          "text": "New format is live and verified end to end: `GEN | 0 | Session renaming CLI inconsistency | 8.20`. The idle counter reads the last **assistant** timestamp, not `lastActivityAt` — that field moves on any activity including a rename, so it would have reported 0 for every session the sweep touched."
+        },
+        {
+          "type": "i",
+          "text": "The prefix must be stripped exactly once, never in a loop: loop it and a name starting with a number gets eaten (`JOBS | 3 | 500 | error triage | 8.20` loses the `500` on the second pass). Nine cases unit-tested."
+        },
+        {
+          "type": "i",
+          "text": "The leading `*` means start-a-new-session-instead, and fires on compaction or very large context — roughly 15% of sessions, and it lands on exactly the long heavy threads. Note ~100k of any context figure is startup overhead; the thresholds already account for it."
+        },
+        {
+          "type": "i",
+          "text": "Changed: the sweep's SKILL.md and CLAUDE.md §5, which is the standard every other session reads."
+        }
+      ]
+    },
+    "3d4df9c2-1630-4cad-bfd1-158d1e2f8989": {
+      "stamp": "2026-08-20T18:26:05.962Z",
+      "turns": 9,
+      "purpose": "Hunt down whatever is leaking window-server shields and pinning WindowServer at 45% CPU.",
+      "next": [
+        {
+          "type": "a",
+          "text": "After the restart, just use the machine normally for a couple of hours, then check the shield count. That baseline rate is the measurement everything else compares against — testing against the poisoned 641 would tell you nothing."
+        },
+        {
+          "type": "i",
+          "text": "State at the pause: 641 shields, WindowServer 45%, Manus ruled out, Airtable quit but never tested. Remaining suspects are Claude desktop, Granola, 1Password, Brain.fm and replayd."
+        },
+        {
+          "type": "i",
+          "text": "Watch for the count staying near zero with everything running — that would mean the leak needs a specific trigger (a screen share, a recording, a meeting) rather than an app merely being open."
+        }
+      ]
+    },
+    "13c51216-0733-479f-8991-19d40b1c14d4": {
+      "stamp": "2026-08-20T03:45:24.636Z",
+      "turns": 3,
+      "purpose": "Install and authenticate the Higgsfield CLI so image and video generation works from Claude Code.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Done and working — signed in as your account, Pro plan, ~611 credits. Just ask for what you want in plain English; the skills pick the model and params."
+        },
+        {
+          "type": "i",
+          "text": "The skills are project-scoped to `~/claude/general`, so they won't load anywhere else. Say the word and they move to `~/.claude/skills`."
+        },
+        {
+          "type": "i",
+          "text": "Two small things: `account status` needed a workspace, so your only one (Private, pro) was selected; and credits ticked 611.92 → 610.92 between two read-only calls. Nothing run here generates anything, so glance at it if it keeps drifting."
+        },
+        {
+          "type": "i",
+          "text": "Video models can be expensive — `higgsfield generate cost` prices a job before it spends."
+        }
+      ]
+    },
+    "local_afe5ba70-3715-4be7-a136-f0e6f8dce5ad": {
+      "stamp": "2026-08-19T21:32:44.385000Z",
+      "turns": 4,
+      "purpose": "Squeeze the free-unlimited Manus window for research, media, and long-form autonomous builds before it closes.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Fire the prompts while the window is open — eight are drafted and ready, three aimed at your existing projects and five at long autonomous runs (a full-stack app build deployed to a live URL, design work, productivity)."
+        },
+        {
+          "type": "a",
+          "text": "Anything Manus builds lives in its VM and on its hosting. Pull the source as a zip or push it to your own GitHub before the window closes, or you'll own a demo you can't rebuild."
+        },
+        {
+          "type": "i",
+          "text": "The app-build prompt is written to be reusable — swap the app description and re-fire it for any future build."
+        }
+      ]
+    },
+    "local_4234a808-e85b-40a5-8bdf-b18cc33f3003": {
+      "stamp": "2026-08-19T20:20:23.994000Z",
+      "turns": 21,
+      "purpose": "Evaluate a batch of ~30 job postings and land the results in the tracker and Airtable.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Batch fully closed out — 27 evaluated, 4 skipped as exact duplicates of existing reports, tracker and Airtable both synced and spot-checked. Nothing pending."
+        },
+        {
+          "type": "i",
+          "text": "17 new company records were created bare-minimum (Asana, Tenex, Nectar Social, Novig, Nebius, Harness, Ode, Modal, Sierra, Linear, Railway, Runware, LogRocket, Oso, Ritual, Meshy, Vibe). Full enrichment — Glassdoor, HQ, valuation — can run later via `analyze-companies` whenever you want it."
+        },
+        {
+          "type": "i",
+          "text": "11 of 25 roles have no salary data because none was disclosed, not because the sync missed it."
         }
       ]
     }

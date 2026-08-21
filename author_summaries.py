@@ -35,6 +35,7 @@ TITLES = {
    "2069bab7-8a36-4f18-8c7f-352b851e28b2": "Logic mouse-focus suspects",
    "8a64dbf3-6489-4595-bb71-ece59e77332c": "Google Drive multi-part zip question",
    "local_8fc1d0bd-2486-4acb-b6bd-a94e56668048": "Session sweep that never ran",
+   "1f8f1785-7166-4bde-80dd-23b8e9d9f556": "Session Fleet refresh run",
 }
 
 AUTHORED = {
@@ -137,19 +138,18 @@ AUTHORED = {
            "src/view/model.ts with the write path that just landed.")]),
 
 "local_7f3d1925-f4bd-46d1-9879-d07f6646853e": (
-    "The running career-ops chat — job scans and tracker upkeep, now redesigning "
-    "deanhicks.com because the site reads boring.",
-    [("q", "Four visual directions are rendered with your real content and waiting on your "
-           "reaction, not a pick: A Editorial, B Technical, C Bold modern, D Refined. The read "
-           "was that “boring” rules out D, and the honest split is A saying *I document "
-           "things carefully* against C saying *I am not a document*. Mixing is on the table."),
-     ("i", "B was flagged against on purpose: mono-on-dark is the default look for DevRel "
-           "personal sites, so the exact people you're targeting have seen it a lot."),
-     ("i", "Scope is bounded to the visual layer with content frozen, which keeps the two-page "
-           "print guarantee intact. Nothing ships until you approve a design; the mockups are "
-           "throwaway."),
-     ("a", "JOBS-38 is still open: wind deanhicks.me down to Email Routing before the "
-           "2026-11-11 expiry."),
+    "The running career-ops chat — job scans and tracker upkeep; the deanhicks.com "
+    "redesign is now shipped.",
+    [("a", "Your GitHub profile still points at deanhicks.me. Ten seconds in profile settings, "
+           "and it's the link recruiters actually click."),
+     ("a", "JOBS-38 is still open: wind deanhicks.me down to Cloudflare Email Routing before "
+           "the 2026-11-11 expiry."),
+     ("i", "The redesign is live and verified against the real URL, not localhost — valid cert, "
+           "HTTP/2 200, both self-hosted fonts actually loading, four requests total and zero "
+           "off-site, so the no-external-requests promise in your README still holds."),
+     ("i", "Résumé content and markup are byte-identical to before; index.html changed by one "
+           "line. Dark for OS-dark, light paper otherwise, both measured at WCAG AA (worst pair "
+           "4.97:1), and print still gives the two-page CV."),
      ("i", "The last scan evaluated 14 roles and every report said don't apply, ceiling 3.9. "
            "Glean #557 contradicts itself — Greenhouse says remote, the JD says hybrid four "
            "days in SF or Mountain View.")]),
@@ -457,7 +457,12 @@ AUTHORED = {
            "blank lines that an earlier splice had collapsed, so it appended instead of "
            "replacing. It's parser-based now, 56 unique entries, output verified identical."),
      ("i", "Dropping the Total tile means `?monitor=1` shows no session count at all, since "
-           "monitor mode hides the toolbar where the count lives.")]),
+           "monitor mode hides the toolbar where the count lives."),
+     ("i", "This routine is now duplicated work — `/session-fleet refresh` does the same "
+           "rescan-and-rewrite from the project directory. Worth retiring one of them."),
+     ("i", "The artifact's live watch dropped and stopped retrying. Only affects notifications; "
+           "the published page is unchanged, and a concurrent publish would 409 rather than "
+           "silently overwrite.")]),
 
 "local_ee75a028-de17-4750-bb38-6e797c0e31b6": (
     "Design hooks that surface the right tool at the right moment, plus a weekly routine that "
@@ -474,6 +479,17 @@ AUTHORED = {
            "advice, that's worth knowing too."),
      ("q", "The original hooks design still isn't approved, and it now carries the two extra "
            "workstreams you added — Linear Business with Loops, and Cursor Pro."),
+     ("a", "Open Lovable's billing page and read one line: does it say resets Aug 22 or Sep 1? "
+           "That single data point settles the whole cohort. Your credit pools almost certainly "
+           "reset on the billing anniversary, not the 1st — every renewal date clusters on "
+           "Jul 22 and Jul 26, so the real deadlines are Aug 22 and Aug 26, not month-end."),
+     ("q", "Claude offered to start the Lovable half of the spend-the-credits work now."),
+     ("i", "Airtable claims `calendar-month` for these, but that's an unverified assumption and "
+           "the one service actually checked contradicts it — Cursor resets on the billing "
+           "date, and Cursor is in the Jul 22 cohort."),
+     ("i", "Not on a clock: Google AI Pro has no monthly pool (5-hour refresh), ElevenLabs just "
+           "reset with 121k available through Sep 18, and n8n, Notion, Linear, Cyrus and "
+           "Supabase have no monthly reset at all."),
      ("a", "Google AI Pro was downgraded on 2026-05-17: the 1,000 monthly AI credits left the "
            "base plan. `claimed-unused` also moved the wrong way, 8 → 10, with Supabase "
            "and ElevenLabs starting fresh clocks at zero extraction.")]),
@@ -500,6 +516,87 @@ AUTHORED = {
            "or dates."),
      ("a", "Those leftovers accumulate at roughly 5–6 a day. They're the ones you archive "
            "in bulk, so the pile rebuilds itself between clean-ups.")]),
+
+"1f8f1785-7166-4bde-80dd-23b8e9d9f556": (
+    "A `/session-fleet refresh` run — rescan every session and rewrite the stale summaries.",
+    [("i", "Housekeeping only, nothing for you to answer. It found 10 stale entries and "
+           "rewrote them; this is the entry for the run itself.")]),
+
+"local_66995bb1-9a44-4b63-9c19-fb9a957a9743": (
+    "Build out Session Fleet's UI and tooling — hide unattended routine runs, tighten the "
+    "row layout, and turn the re-summarize workflow into a skill.",
+    [("i", "All three original asks shipped and are committed: routine runs are filtered out "
+           "unless you actually replied in the thread, the row buttons moved to the meta line "
+           "(cards down 267px → 180px), and `/session-fleet refresh` now exists as a skill."),
+     ("i", "In flight: whether the refresh can run headless from the CLI so the menu bar gets "
+           "a one-click button for it. Claude is working that out — nothing waiting on you.")]),
+
+"local_9cf8e76f-1964-435c-be35-d3cf6011993c": (
+    "Work out why CLI-started sessions rename inconsistently, then rebuild the session-name "
+    "format around it.",
+    [("q", "Fire the sweep once now so you can see the new titles, or let the schedule pick "
+           "it up on its next run?"),
+     ("i", "New format is live and verified end to end: `GEN | 0 | Session renaming CLI "
+           "inconsistency | 8.20`. The idle counter reads the last **assistant** timestamp, not "
+           "`lastActivityAt` — that field moves on any activity including a rename, so it would "
+           "have reported 0 for every session the sweep touched."),
+     ("i", "The prefix must be stripped exactly once, never in a loop: loop it and a name "
+           "starting with a number gets eaten (`JOBS | 3 | 500 | error triage | 8.20` loses the "
+           "`500` on the second pass). Nine cases unit-tested."),
+     ("i", "The leading `*` means start-a-new-session-instead, and fires on compaction or very "
+           "large context — roughly 15% of sessions, and it lands on exactly the long heavy "
+           "threads. Note ~100k of any context figure is startup overhead; the thresholds "
+           "already account for it."),
+     ("i", "Changed: the sweep's SKILL.md and CLAUDE.md §5, which is the standard every other "
+           "session reads.")]),
+
+"3d4df9c2-1630-4cad-bfd1-158d1e2f8989": (
+    "Hunt down whatever is leaking window-server shields and pinning WindowServer at 45% CPU.",
+    [("a", "After the restart, just use the machine normally for a couple of hours, then check "
+           "the shield count. That baseline rate is the measurement everything else compares "
+           "against — testing against the poisoned 641 would tell you nothing."),
+     ("i", "State at the pause: 641 shields, WindowServer 45%, Manus ruled out, Airtable quit "
+           "but never tested. Remaining suspects are Claude desktop, Granola, 1Password, "
+           "Brain.fm and replayd."),
+     ("i", "Watch for the count staying near zero with everything running — that would mean the "
+           "leak needs a specific trigger (a screen share, a recording, a meeting) rather than "
+           "an app merely being open.")]),
+
+"13c51216-0733-479f-8991-19d40b1c14d4": (
+    "Install and authenticate the Higgsfield CLI so image and video generation works from "
+    "Claude Code.",
+    [("i", "Done and working — signed in as your account, Pro plan, ~611 credits. Just ask for "
+           "what you want in plain English; the skills pick the model and params."),
+     ("i", "The skills are project-scoped to `~/claude/general`, so they won't load anywhere "
+           "else. Say the word and they move to `~/.claude/skills`."),
+     ("i", "Two small things: `account status` needed a workspace, so your only one (Private, "
+           "pro) was selected; and credits ticked 611.92 → 610.92 between two read-only calls. "
+           "Nothing run here generates anything, so glance at it if it keeps drifting."),
+     ("i", "Video models can be expensive — `higgsfield generate cost` prices a job before it "
+           "spends.")]),
+
+"local_afe5ba70-3715-4be7-a136-f0e6f8dce5ad": (
+    "Squeeze the free-unlimited Manus window for research, media, and long-form autonomous "
+    "builds before it closes.",
+    [("a", "Fire the prompts while the window is open — eight are drafted and ready, three "
+           "aimed at your existing projects and five at long autonomous runs (a full-stack app "
+           "build deployed to a live URL, design work, productivity)."),
+     ("a", "Anything Manus builds lives in its VM and on its hosting. Pull the source as a zip "
+           "or push it to your own GitHub before the window closes, or you'll own a demo you "
+           "can't rebuild."),
+     ("i", "The app-build prompt is written to be reusable — swap the app description and "
+           "re-fire it for any future build.")]),
+
+"local_4234a808-e85b-40a5-8bdf-b18cc33f3003": (
+    "Evaluate a batch of ~30 job postings and land the results in the tracker and Airtable.",
+    [("i", "Batch fully closed out — 27 evaluated, 4 skipped as exact duplicates of existing "
+           "reports, tracker and Airtable both synced and spot-checked. Nothing pending."),
+     ("i", "17 new company records were created bare-minimum (Asana, Tenex, Nectar Social, "
+           "Novig, Nebius, Harness, Ode, Modal, Sierra, Linear, Railway, Runware, LogRocket, "
+           "Oso, Ritual, Meshy, Vibe). Full enrichment — Glassdoor, HQ, valuation — can run "
+           "later via `analyze-companies` whenever you want it."),
+     ("i", "11 of 25 roles have no salary data because none was disclosed, not because the sync "
+           "missed it.")]),
 }
 
 

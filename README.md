@@ -81,6 +81,14 @@ Nothing spends tokens without you asking for it.
 
 From a Claude session in this directory, `/session-fleet refresh` does the whole
 loop — rescan, read the excerpts for the stale ids, write the bullets, republish.
+`./resummarize.sh` runs that same skill headless, and the menu bar item
+**Re-summarize N · ~$X** runs the script after a confirmation.
+
+Measured, not estimated: a run over 10 stale sessions billed **$1.73** and took
+about two and a half minutes. That is roughly **$0.17 a session** — well above
+what the token estimate on the toolbar implies, because the model reads every
+excerpt to write a few lines. It is the only thing here that costs anything,
+which is why the menu item prints the price and asks before spending it.
 
 ## States
 
@@ -217,6 +225,7 @@ them to that. If nothing appears, enable it under System Settings → Notificati
 | `render.py` | `data.json` + `summaries.json` → HTML (`--local` adds controls) |
 | `serve.py` | Local server, rebuilds on every load |
 | `refresh.sh` | One-shot rebuild + stale report |
+| `resummarize.sh` | Headless `claude -p` run of the skill — the only part that costs money |
 | `stale.py` | Which summaries need rewriting — the one definition of "stale" |
 | `.claude/skills/session-fleet/` | `/session-fleet refresh` — rescan and rewrite the stale summaries |
 | `linear.py` | Linear GraphQL client, disk cache, fail-soft |

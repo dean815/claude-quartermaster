@@ -16,8 +16,11 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 
-# Rough cost of having a model write one purpose + next-steps block.
+# Rough cost of having a model write one purpose + next-steps block. The dollar
+# figure is measured, not derived: a headless run over 10 stale sessions billed
+# $1.73, and it buys far more input than output — the model reads every excerpt.
 TOKENS_PER_SUMMARY = 1500
+USD_PER_SUMMARY = 0.17
 
 
 def summary_of(entries, session):
