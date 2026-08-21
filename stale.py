@@ -16,11 +16,14 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 
-# Rough cost of having a model write one purpose + next-steps block. The dollar
-# figure is measured, not derived: a headless run over 10 stale sessions billed
-# $1.73, and it buys far more input than output — the model reads every excerpt.
+# Rough size of having a model write one purpose + next-steps block. The seconds
+# are measured, not derived: a headless run over 10 stale sessions took 147s.
+#
+# Deliberately not priced in dollars. Auth here is an OAuth subscription, so a
+# run spends rate-limit headroom, not money — and the CLI's total_cost_usd is
+# what the tokens would have cost at API rates, which is not a bill.
 TOKENS_PER_SUMMARY = 1500
-USD_PER_SUMMARY = 0.17
+SECONDS_PER_SUMMARY = 15
 
 
 def summary_of(entries, session):

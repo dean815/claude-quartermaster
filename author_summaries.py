@@ -36,6 +36,7 @@ TITLES = {
    "8a64dbf3-6489-4595-bb71-ece59e77332c": "Google Drive multi-part zip question",
    "local_8fc1d0bd-2486-4acb-b6bd-a94e56668048": "Session sweep that never ran",
    "1f8f1785-7166-4bde-80dd-23b8e9d9f556": "Session Fleet refresh run",
+   "cc8fe90e-0ac1-4670-b20f-5bcdb578e1b3": "Session Fleet refresh run",
 }
 
 AUTHORED = {
@@ -520,7 +521,12 @@ AUTHORED = {
 "1f8f1785-7166-4bde-80dd-23b8e9d9f556": (
     "A `/session-fleet refresh` run — rescan every session and rewrite the stale summaries.",
     [("i", "Housekeeping only, nothing for you to answer. It found 10 stale entries and "
-           "rewrote them; this is the entry for the run itself.")]),
+           "rewrote them; this is the entry for the run itself. Finished and idle.")]),
+
+"cc8fe90e-0ac1-4670-b20f-5bcdb578e1b3": (
+    "A `/session-fleet refresh` run — rescan every session and rewrite the stale summaries.",
+    [("i", "Housekeeping only, nothing for you to answer. Three stale entries this pass: the "
+           "session-renaming thread and both refresh runs, including this one.")]),
 
 "local_66995bb1-9a44-4b63-9c19-fb9a957a9743": (
     "Build out Session Fleet's UI and tooling — hide unattended routine runs, tighten the "

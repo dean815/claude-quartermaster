@@ -7,8 +7,9 @@
 # rescans, reads the excerpts for the stale ids, writes the bullets into
 # author_summaries.py and republishes both pages.
 #
-# This is the one part of Session Fleet that costs money — roughly $0.17 a
-# session, so a full board is a couple of dollars. Everything else is free.
+# This is the one part of Session Fleet that puts a model to work — roughly 15
+# seconds a session. Auth is an OAuth subscription, so it spends rate-limit
+# headroom rather than money. Everything else here is free either way.
 #
 # Exits non-zero and prints the reason if the run fails, so the menu bar can
 # tell you rather than silently doing nothing.

@@ -22,7 +22,7 @@ cd ~/claude/session-fleet && ./refresh.sh
 ```
 
 Prints the session counts and the stale list. If nothing is stale, say so and
-stop — do not spend tokens confirming what is already current.
+stop — do not burn a model pass confirming what is already current.
 
 ### 2. Read what changed
 
@@ -90,8 +90,8 @@ same work with no one watching, so be more careful, not less, about only writing
 
 ## Bare `/session-fleet`
 
-Rescan only (`./refresh.sh`) and report the counts and the stale list. Costs
-nothing. Ask before spending tokens on step 3.
+Rescan only (`./refresh.sh`) and report the counts and the stale list. Free —
+no model involved. Ask before going on to step 3, which is not.
 
 ## What the board hides
 

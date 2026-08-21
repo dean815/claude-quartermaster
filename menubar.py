@@ -190,8 +190,14 @@ class Fleet(rumps.App):
 
     # ------------------------------------------------------------ re-summarize
 
+    def minutes_for(self, n):
+        return max(1, round(n * stale_mod.SECONDS_PER_SUMMARY / 60))
+
     def resummarize_item(self):
-        """The one menu item that spends money, so it says how much up front.
+        """The one menu item that puts a model to work, so it says how long.
+
+        Priced in minutes and plan usage rather than dollars: auth is an OAuth
+        subscription, so a run draws down rate-limit headroom and bills nothing.
 
         A callback of None renders the item greyed, which is what we want when
         there is nothing stale or a run is already going: the label still
@@ -202,23 +208,22 @@ class Fleet(rumps.App):
         n = stale_count()
         if not n:
             return rumps.MenuItem("Summaries are current", callback=None)
-        cost = n * stale_mod.USD_PER_SUMMARY
-        return rumps.MenuItem(f"Re-summarize {n} · ~${cost:.2f}",
+        return rumps.MenuItem(f"Re-summarize {n} · ~{self.minutes_for(n)} min",
                               callback=self.confirm_resummarize)
 
     def confirm_resummarize(self, _):
         n = stale_count()
         if not n or self._resummarizing:
             return
-        cost = n * stale_mod.USD_PER_SUMMARY
+        mins = self.minutes_for(n)
         ok = rumps.alert(
             title=f"Re-summarize {n} session{'' if n == 1 else 's'}?",
             message=(f"Claude rewrites the purpose and next steps for {n} stale "
-                     f"session{'' if n == 1 else 's'}.\n\n"
-                     f"Roughly ${cost:.2f} and about "
-                     f"{max(1, round(n * 15 / 60))} minute"
-                     f"{'' if round(n * 15 / 60) == 1 else 's'}. "
-                     f"Everything else in this menu is free."),
+                     f"session{'' if n == 1 else 's'} — about {mins} minute"
+                     f"{'' if mins == 1 else 's'}.\n\n"
+                     f"This is the only thing here that puts a model to work. It "
+                     f"draws on your plan's usage limits; everything else in this "
+                     f"menu is free."),
             ok="Re-summarize", cancel="Cancel")
         if ok:
             self.start_resummarize()
