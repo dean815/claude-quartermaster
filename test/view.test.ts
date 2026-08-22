@@ -376,6 +376,17 @@ describe('a field nobody has heard of still does not reach the wire', () => {
   const CANARY_ENV = 'sk-live-CANARY-env-4a77b1';
   const CANARY_HEADER = 'Bearer CANARY-header-93de55';
   const CANARY_NESTED = 'CANARY-nested-inside-an-object-0c19';
+  /**
+   * The shadowing keys are planted at *both* scopes, and the project copy has its own
+   * values so a failure says which file leaked.
+   *
+   * Found by mutation, not by design. A projection that took `value` off the settings file
+   * reads one file per column -- `record.settings`, never the user's -- so with the shadows
+   * planted only at user scope the mutation picked up nothing and the sweep stayed green.
+   * A canary that cannot be reached from where the bug would be is not a canary.
+   */
+  const CANARY_SHADOW_VALUE = 'CANARY-shadowing-value-at-project-scope-5e7a';
+  const CANARY_SHADOW_SOURCE = '/home/work/repo/private/CANARY-shadowing-source-3f81.json';
 
   const fixtureSettings = (name: string): SettingsFile => {
     const file = readSettings(join(FIXTURE, name), NOT_CHECKED);
@@ -425,7 +436,7 @@ describe('a field nobody has heard of still does not reach the wire', () => {
     for (const key of [CANARY_KEY, 'value', 'source', 'path']) {
       assert.ok(planted.keys.includes(key), `${key} is no longer planted: ${planted.keys.join(', ')}`);
     }
-    for (const value of [CANARY_REST, CANARY_NESTED]) {
+    for (const value of [CANARY_REST, CANARY_NESTED, CANARY_SHADOW_VALUE, CANARY_SHADOW_SOURCE]) {
       assert.ok(planted.values.includes(value), `${value} is no longer planted`);
     }
   });
@@ -692,8 +703,13 @@ describe('the live workspace', () => {
     assert.deepEqual(leaked, []);
   });
 
-  test('no key a settings file carries that no reader names appears, by key or by value', { skip: !available && 'no live workspace' }, () => {
-    const { keys, values } = unmodelledKeysAndValues(settingsPaths(ws!));
+  // The sweep is a filter over a set the *test* assembles now (QM-30), where it used to
+  // read a field off the workspace -- so an empty set is a new way for this to pass
+  // without looking. Measured by mutation: pointing it at no paths left all 37 green.
+  test('no key a settings file carries that no reader names appears, by key or by value', { skip: !available && 'no live workspace' }, (t) => {
+    const paths = settingsPaths(ws!);
+    if (!paths.length) return t.skip('no settings files on this machine');
+    const { keys, values } = unmodelledKeysAndValues(paths);
     assert.deepEqual(keys.filter((k) => found!.keys.has(k) && !ALLOWED_KEYS.has(k)), []);
     assert.deepEqual(values.filter((v) => found!.strings.some((s) => s.includes(v))), []);
   });

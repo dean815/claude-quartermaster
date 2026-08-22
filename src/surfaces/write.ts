@@ -13,8 +13,8 @@
  *
  * Modelling them instead is the obvious fix and the wrong one: it makes this repo
  * responsible for tracking a key set another program owns, and the day it falls behind
- * is a silent data loss rather than a failure. `SettingsFile.rest` is that bargain
- * already made once -- see the note at the bottom of this file.
+ * is a silent data loss rather than a failure. That bargain was made once already and has
+ * since been unmade -- see the note at the bottom of this file.
  *
  * Even a lossless parse does not survive `JSON.stringify`: it reformats the whole
  * document, so every byte moves and a diff shows the file rewritten. CLAUDE.md's
@@ -689,15 +689,23 @@ export function applyStage(stage: Stage): ApplyResult {
 }
 
 /**
- * On `SettingsFile.rest`.
+ * On the field this module replaced (QM-30, closed).
  *
- * `rest` exists to let a writer round-trip a settings file without loss, and this module
- * does that job for every JSON file without holding a copy of anything. Two mechanisms
- * for one property is the drift condition this project keeps legislating against -- and
- * `rest` is the one that costs elsewhere: `view/model.ts` builds its payload key by key
- * specifically because `rest` is unbounded and unknown by construction, so whatever the
- * next Claude Code release adds lands in it and would reach a browser.
+ * `SettingsFile.rest` held every settings key the readers do not name, so that a Phase 2
+ * writer could round-trip a file without loss. It never delivered that: it preserved
+ * *values*, and a writer using it still re-serialised, so key order, spacing and every
+ * other formatting decision went anyway. This module preserves the bytes, for every JSON
+ * file, holding a copy of nothing -- and two mechanisms for one property is the drift
+ * condition this project keeps legislating against.
  *
- * Retiring it is a wide refactor across the readers, the view boundary and their tests,
- * so it is recommended here and filed separately rather than done in passing.
+ * `rest` was also the one that cost elsewhere. `view/model.ts` builds its payload key by
+ * key partly because that bag was unbounded and unknown by construction, so whatever the
+ * next Claude Code release added landed in it and was one strip-list projection away from
+ * a browser. Retiring it did not relax that rule -- the reader is now an allowlist too,
+ * which is a second barrier rather than a replacement for the first, and `view.test.ts`
+ * gates both.
+ *
+ * The one thing that did not survive the retirement is the *label*. Those keys still exist
+ * in `stage.text` and in `TogglePlan.before` / `.after`, which is why `PlanView` refuses
+ * them; there is simply no longer a field name to point at when explaining why.
  */
