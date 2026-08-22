@@ -644,7 +644,8 @@ posted beside a valid handle — naming a different target, a different id and i
 wrote exactly the planned entry and nothing else.
 **`PlanView` is `view/model.ts`'s allowlist in the second direction**, and it refuses three
 things for reasons that file already knew. `before`/`after` are the whole text of a settings
-file, which is `SettingsFile.rest`'s hazard at full strength; the reviewed unit is the entry
+file — every key the readers do not name, verbatim, which was `SettingsFile.rest`'s hazard at
+the time and since QM-30 is the only place in the model those keys survive; the reviewed unit is the entry
 and not the byte (QM-46), which is what `applyPlan` binds its precondition to anyway.
 `project`/`target` are absolute paths, exactly as `ChainLink.source` is. And **no message
 crosses at all** — notes and refusals cross as their codes, because three of the eight note
@@ -671,6 +672,64 @@ widened **alone** — the two are one expression with two callers, so either one
 other and only mutating `columnRecords` itself reddens. `renderTarget`'s "the axis did not
 build this path" branch is unreachable through the server and its case is constructed and
 labelled so.
+
+**Deleting the bag did not delete the hazard, and the canary had to move first (QM-30).**
+`SettingsFile.rest` held every settings key no reader names, so a Phase 2 writer could
+round-trip a file without loss. It never delivered that — it preserved *values*, so a
+writer using it still re-serialised and still lost key order, spacing and every other
+formatting decision; `write.ts` (DEA-139) preserves the bytes. It also contradicted the
+file it lived in: `surfaces/types.ts`' own header says the readers "preserve nothing they
+do not name", which was true of every field except this one. Retired, with
+`SETTINGS_KNOWN` — orphaned by the deletion — going with it.
+**Nothing read it but the strongest security test in the repo.** The obvious sweep says
+`rest` is dead code; the issue's own first sweep said so and was wrong. `view.test.ts`
+read it to plant the **fails-open redaction canary**, the test proving `view/model.ts`'s
+projection is an allowlist and not a strip list. Deleting the field deletes the canary's
+injection point, so the property had to be rehomed before the field could go: a committed
+settings fixture (`test/fixtures/settings/unknown-keys/`) read through the real
+`readSettings`. A hand-built bag can only hold what its type permits; a file holds `path`,
+one of `SettingsFile`'s **own** field names, which the typed bag could not express.
+**There are two barriers now where there was one, and they are gated separately.** With
+`rest` gone the reader is an allowlist too, so an unknown settings key never enters the
+model at all — which means "make `viewFrom` merge an unknown key" is no longer expressible
+on this axis, and a canary asserting only the composition would be a canary nobody could
+say which half of. Measured by hand mutation: spreading `...raw` in `readSettings` reddens
+`the reader keeps no key it does not name` and **nothing else** — the projection holds on
+its own; spreading the model link into `viewChainLink` reddens 6 including `no absolute
+path survives` and leaves the reader gate green; both at once reddens 12, naming the
+canary values and firing the *live* sweep. Each barrier fails alone, which is the whole
+point of gating them apart.
+**A mutation found the fixture wrong rather than the test.** A projection that takes
+`value` off a settings file reads `record.settings` — one file per column, never the
+user's — so with the shadowing keys planted only at user scope the mutation picked up
+nothing and every sweep stayed green. They are at both scopes now with distinct values,
+and both are pinned as literals, because a canary that cannot be reached from where the
+bug would be is not a canary.
+**The allowlist's justification got worse, not better.** `rest` was the hazard with a name
+on it. Two unnamed ones remain and neither is contingent: `ProjectEntry` and
+`McpServerSpec` are **cast whole** out of `~/.claude.json` and `.mcp.json` rather than
+built field by field. Measured 2026-08-22 — `ProjectEntry` names six keys and the 161
+project entries on this machine carry **34** it does not; `McpServerSpec` names six and
+carries 0 extra across the 6 top-level and 2 project-declared specs here, which is today's
+luck and not a property. So the day the header predicts has already arrived on the surface
+nobody labelled, and the rule is stated as the mechanism rather than as the list.
+**Not measured.** Whether the retirement changes any *runtime* behaviour: nothing in
+`src/` consumed the field, so the claim is a type-level one and no output was diffed. And
+the write path was left alone — `PlanView`'s canary is planted in the target file's own
+bytes and never touched `rest`, confirmed rather than assumed: publishing `before`/`after`
+from `planView` reddens exactly `and publishes no key this file has not named` and `nor
+anything out of the target file that the readers do not name`.
+The day it fails: three ways, and one is new. The `MODELLED_SETTINGS_KEYS` copy in
+`view.test.ts` is deliberately *not* imported, so the sweep and the reader can disagree —
+naming too few keys there fails loudly (the sweep covers a key the payload publishes
+legitimately), naming too many drops a key out of the sweep **in silence**, which is why
+it is written as a literal in the file that explains the boundary. The live sweep
+assembles its own path list now, and pointing it at nothing left all 37 tests green; it is
+guarded, but only into a reported *skip*, because a machine with no settings files is a
+real machine and not a defect. And the fixture is hand-written, unlike `doctor/`: it is a
+statement about first-party's key space rather than a recording of it, and there is no
+recording to be had, because the keys this exists for are the ones first-party has not
+shipped yet.
 
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
