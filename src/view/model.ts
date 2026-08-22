@@ -3,17 +3,17 @@
  *
  * `qm audit --json` emits findings -- prose and counts someone already decided to
  * print. Phase 1b serves the *resolved model itself*, over a socket, which changes what
- * the `Workspace` is: a structure held in one process becomes a payload. Three of its
- * fields do not belong on a wire.
+ * the `Workspace` is: a structure held in one process becomes a payload. Parts of it do
+ * not belong on a wire, and the third is not a field -- which is the point of it.
  *
  *   - `McpServerSpec.env` / `.headers`   values are credentials.
  *   - `ChainLink.source`                 an absolute path, on every link of every cell.
- *   - `ProjectEntry`, `McpServerSpec`    cast whole out of `~/.claude.json` and
- *                                        `.mcp.json` rather than built field by field,
- *                                        so each carries whatever else those files hold.
- *                                        Measured 2026-08-22: `ProjectEntry` names six
- *                                        keys and the 161 entries on this machine carry
- *                                        **34** it does not.
+ *   - everything else on `ProjectEntry`  both are **cast whole** out of `~/.claude.json`
+ *     and on `McpServerSpec`             and `.mcp.json` rather than built field by field,
+ *                                        so each carries whatever else those files hold
+ *                                        and no name here says what. Measured 2026-08-22:
+ *                                        `ProjectEntry` names six keys and the 161 entries
+ *                                        on this machine carry **34** it does not.
  *
  * So the payload is built field by field from what this file names, rather than
  * serialised from the model and stripped afterwards. The two look equivalent today and
