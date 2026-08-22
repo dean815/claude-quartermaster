@@ -203,7 +203,6 @@ function world(
           schemaErrors: [],
           droppedRuleElements: {},
           ...files.user,
-          rest: {},
         }
       : null,
     userRules: [],

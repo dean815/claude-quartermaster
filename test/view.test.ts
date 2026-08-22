@@ -9,14 +9,16 @@
  *     Measured over the whole output, not over the one cell that motivated the rule.
  *  2. Nothing sensitive reaches the wire when a field nobody here has heard of appears
  *     upstream. That is the case a strip list passes today and fails the day it
- *     matters, so it is the test that earns its keep -- `rest` exists to hold exactly
- *     such fields.
+ *     matters, so it is the test that earns its keep. Its input is a settings file on
+ *     disk carrying keys no reader names (QM-30), read through the real `readSettings` --
+ *     so both barriers are in the picture, and the block gates each: the reader keeps
+ *     nothing it does not name, and the projection publishes nothing it does not name.
  *  3. Every pair the resolver decides still appears, with the same value and the same
  *     origin. A redaction that quietly drops rows is not safer, it is wrong.
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -28,7 +30,7 @@ import {
   type GridView,
 } from '../src/view/model.ts';
 import type { AuditContext } from '../src/detect.ts';
-import { loadWorkspace } from '../src/surfaces/read.ts';
+import { NOT_CHECKED, loadWorkspace, readSettings } from '../src/surfaces/read.ts';
 import { measureProject } from '../src/cost/transcript.ts';
 import { allPluginIds } from '../src/resolve.ts';
 import { allMcpServerNames, buildMcpCatalog } from '../src/mcp.ts';
@@ -52,7 +54,6 @@ const settings = (path: string, body: Partial<SettingsFile> = {}): SettingsFile 
   validity: 'not-checked',
   schemaErrors: [],
   droppedRuleElements: {},
-  rest: {},
   ...body,
 });
 
@@ -165,8 +166,32 @@ function secretValues(ws: Workspace): string[] {
   return out.filter((v) => typeof v === 'string' && v.length >= 8);
 }
 
-/** Every unrecognised key any settings file carried, and every string under them. */
-function restKeysAndValues(ws: Workspace): { keys: string[]; values: string[] } {
+/**
+ * The keys `readSettings` models, written out here rather than imported (QM-30).
+ *
+ * Imported, the sweep below would ask the reader what "unknown" means, and a reader that
+ * quietly stopped naming a key would take the sweep with it. Written here, the two halves
+ * are independent -- and naming too *few* is the safe way to be wrong: the sweep then
+ * covers a key the payload publishes legitimately and fails loudly, where naming too many
+ * drops a key out of the sweep in silence.
+ */
+const MODELLED_SETTINGS_KEYS = new Set([
+  'enabledPlugins',
+  'skillOverrides',
+  'enabledMcpjsonServers',
+  'disabledMcpjsonServers',
+  'permissions',
+]);
+
+/**
+ * Every key a settings file carries that no reader names, and every string under one.
+ *
+ * Read off the *file*, not off the `SettingsFile` built from it. Until QM-30 the reader
+ * kept an unbounded `rest` bag and this swept that -- which is asking the reader what it
+ * threw away, and a bag holds only what the thing filling it put in. The file is the other
+ * half of the fact, and the half nothing in `src/` decides.
+ */
+function unmodelledKeysAndValues(paths: readonly string[]): { keys: string[]; values: string[] } {
   const keys: string[] = [];
   const values: string[] = [];
 
@@ -176,15 +201,30 @@ function restKeysAndValues(ws: Workspace): { keys: string[]; values: string[] } 
     if (v && typeof v === 'object') for (const child of Object.values(v)) collect(child);
   };
 
-  const files = [ws.userSettings, ...ws.projects.flatMap((p) => [p.settings, p.localSettings])];
-  for (const f of files) {
-    if (!f) continue;
-    for (const [k, v] of Object.entries(f.rest)) {
+  for (const path of paths) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(readFileSync(path, 'utf8'));
+    } catch {
+      // Unreadable or not JSON. `readSettings` returned null for it too, so it is not in
+      // the model either, and there is nothing here for the payload to have leaked.
+      continue;
+    }
+    if (!raw || typeof raw !== 'object') continue;
+    for (const [k, v] of Object.entries(raw)) {
+      if (MODELLED_SETTINGS_KEYS.has(k)) continue;
       keys.push(k);
       collect(v);
     }
   }
   return { keys, values };
+}
+
+/** The path of every settings file a workspace read. */
+function settingsPaths(ws: Workspace): string[] {
+  return [ws.userSettings, ...ws.projects.flatMap((p) => [p.settings, p.localSettings])]
+    .filter((f): f is SettingsFile => f !== null)
+    .map((f) => f.path);
 }
 
 /**
@@ -315,30 +355,40 @@ describe('the home project does not publish the account name', () => {
 /**
  * The fails-open case. A key nobody named and a credential nobody named, planted where
  * the model keeps exactly those, and then the whole payload swept for them.
+ *
+ * **Where the settings half is planted, since QM-30.** It used to be a hand-built
+ * `SettingsFile.rest`, and a hand-built bag can only hold what its type permits. It is a
+ * committed settings file now, read through the real `readSettings`, which buys two things
+ * the object literal could not. The keys are whatever JSON allows -- including `path`, one
+ * of `SettingsFile`'s *own* field names, unplantable while the bag was typed. And the
+ * reader is inside the test rather than upstream of it, so the two barriers are both in
+ * frame and each has its own gate below: `readSettings` keeps nothing it does not name,
+ * `viewFrom` publishes nothing it does not name. Either alone would hold today; the sweep
+ * is over the composition, which is the property a browser actually gets.
+ *
+ * The credential half stays hand-built. `env` and `headers` are *modelled* fields -- the
+ * reader is supposed to carry them, and does -- so a fixture would prove nothing extra.
  */
 describe('a field nobody has heard of still does not reach the wire', () => {
+  const FIXTURE = join(import.meta.dirname, 'fixtures', 'settings', 'unknown-keys');
   const CANARY_KEY = 'qmCanaryUnknownSetting';
   const CANARY_REST = 'CANARY-rest-value-8f21c0';
   const CANARY_ENV = 'sk-live-CANARY-env-4a77b1';
   const CANARY_HEADER = 'Bearer CANARY-header-93de55';
   const CANARY_NESTED = 'CANARY-nested-inside-an-object-0c19';
 
-  const user = settings('/home/.claude/settings.json', {
-    enabledPlugins: { 'alpha@market': true },
-    rest: {
-      [CANARY_KEY]: CANARY_REST,
-      // Keys that shadow the view's own field names. A projection is indifferent to
-      // this; anything that merged `rest` in would publish them.
-      value: CANARY_NESTED,
-      source: '/home/somewhere/private/path.json',
-    },
-  });
+  const fixtureSettings = (name: string): SettingsFile => {
+    const file = readSettings(join(FIXTURE, name), NOT_CHECKED);
+    assert.ok(file, `the canary fixture is unreadable: ${name}`);
+    return file;
+  };
+
+  const user = fixtureSettings('user-settings.json');
+  const repoSettings = fixtureSettings('project-settings.json');
+  const planted = unmodelledKeysAndValues([user.path, repoSettings.path]);
 
   const repo = project('/home/work/repo', {
-    settings: settings('/home/work/repo/.claude/settings.json', {
-      enabledPlugins: { 'alpha@market': false },
-      rest: { [CANARY_KEY]: { nested: { deeper: CANARY_NESTED } } },
-    }),
+    settings: repoSettings,
     mcpJson: {
       path: '/home/work/repo/.mcp.json',
       mcpServers: {
@@ -363,11 +413,61 @@ describe('a field nobody has heard of still does not reach the wire', () => {
   const found = scan(view);
   const serialised = JSON.stringify(view);
 
+  /**
+   * A canary nobody can see is a canary nobody notices losing.
+   *
+   * Every sweep below is a filter over a set, and a filter over an empty set passes. So
+   * the shapes this block is worth running for are pinned as literals here, against a set
+   * derived from the fixture on disk -- editing the fixture cannot quietly disarm the
+   * sweeps, and the sweeps cover whatever else the fixture grows.
+   */
+  test('the fixture still plants what this block sweeps for', () => {
+    for (const key of [CANARY_KEY, 'value', 'source', 'path']) {
+      assert.ok(planted.keys.includes(key), `${key} is no longer planted: ${planted.keys.join(', ')}`);
+    }
+    for (const value of [CANARY_REST, CANARY_NESTED]) {
+      assert.ok(planted.values.includes(value), `${value} is no longer planted`);
+    }
+  });
+
+  /**
+   * The first barrier, which is the one QM-30 made load-bearing.
+   *
+   * While `rest` existed the reader carried every unknown key into the model on purpose,
+   * and only the projection stood between one and a browser. The reader is a projection
+   * too now, and this is its allowlist -- named here for `ALLOWED_KEYS`' reason, so a
+   * field appearing on `SettingsFile` costs an edit in a file that explains the boundary.
+   *
+   * `path` is the sharp one: the fixture sets a top-level `path`, so a reader that spread
+   * the raw document over its own fields would answer with the canary instead of the file
+   * it was asked about -- which `sourceDisplays` looks up by identity and would silently
+   * miss.
+   */
+  test('the reader keeps no key it does not name', () => {
+    const modelled = new Set([
+      'path', 'validity', 'schemaErrors', 'droppedRuleElements',
+      ...MODELLED_SETTINGS_KEYS,
+    ]);
+    for (const file of [user, repoSettings]) {
+      assert.deepEqual(Object.keys(file).filter((k) => !modelled.has(k)), [], file.path);
+    }
+    assert.equal(user.path, join(FIXTURE, 'user-settings.json'));
+  });
+
   for (const canary of [CANARY_REST, CANARY_ENV, CANARY_HEADER, CANARY_NESTED]) {
     test(`the payload does not contain ${canary.slice(0, 14)}…`, () => {
       assert.ok(!serialised.includes(canary), serialised);
     });
   }
+
+  test('nor anything else the fixture planted, by key or by value', () => {
+    assert.ok(planted.values.length >= 3, 'the fixture planted nothing to sweep for');
+    assert.deepEqual(planted.values.filter((v) => serialised.includes(v)), []);
+    // Filtered against the allowlist because two of the planted keys collide with the
+    // view's own field names on purpose: `value` and `source` are legitimate payload keys,
+    // and what must not be theirs is the fixture's *values*, swept on the line above.
+    assert.deepEqual(planted.keys.filter((k) => found.keys.has(k) && !ALLOWED_KEYS.has(k)), []);
+  });
 
   test('the unrecognised key is not a key of the payload', () => {
     assert.ok(!found.keys.has(CANARY_KEY));
@@ -592,8 +692,8 @@ describe('the live workspace', () => {
     assert.deepEqual(leaked, []);
   });
 
-  test('nothing from rest appears, by key or by value', { skip: !available && 'no live workspace' }, () => {
-    const { keys, values } = restKeysAndValues(ws!);
+  test('no key a settings file carries that no reader names appears, by key or by value', { skip: !available && 'no live workspace' }, () => {
+    const { keys, values } = unmodelledKeysAndValues(settingsPaths(ws!));
     assert.deepEqual(keys.filter((k) => found!.keys.has(k) && !ALLOWED_KEYS.has(k)), []);
     assert.deepEqual(values.filter((v) => found!.strings.some((s) => s.includes(v))), []);
   });

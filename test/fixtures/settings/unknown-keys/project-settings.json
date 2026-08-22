@@ -1,0 +1,10 @@
+{
+  "enabledPlugins": {
+    "alpha@market": false
+  },
+  "qmCanaryUnknownSetting": {
+    "nested": {
+      "deeper": "CANARY-nested-inside-an-object-0c19"
+    }
+  }
+}
