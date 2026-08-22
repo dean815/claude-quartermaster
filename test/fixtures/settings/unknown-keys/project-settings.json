@@ -1,0 +1,12 @@
+{
+  "enabledPlugins": {
+    "alpha@market": false
+  },
+  "qmCanaryUnknownSetting": {
+    "nested": {
+      "deeper": "CANARY-nested-inside-an-object-0c19"
+    }
+  },
+  "value": "CANARY-shadowing-value-at-project-scope-5e7a",
+  "source": "/home/work/repo/private/CANARY-shadowing-source-3f81.json"
+}

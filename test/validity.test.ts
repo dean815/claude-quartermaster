@@ -127,7 +127,6 @@ function resolveWith(c: RecordedCase, validityOf_: (path: string) => SettingsVal
       schemaErrors: [],
       droppedRuleElements: {},
       enabledPlugins: MANIFEST.userScope,
-      rest: {},
     },
     userRules: [],
     personalSkills: [],

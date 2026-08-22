@@ -183,8 +183,6 @@ export interface SettingsFile {
     ask?: string[];
     defaultMode?: string;
   };
-  /** Everything else, kept so writers in Phase 2 can round-trip without loss. */
-  rest: Record<string, unknown>;
 }
 
 /** A `.mcp.json` -- servers a project declares for itself. */

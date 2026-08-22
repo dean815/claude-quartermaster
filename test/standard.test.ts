@@ -31,7 +31,6 @@ const settings = (path: string, body: Partial<SettingsFile> = {}): SettingsFile 
   validity: 'not-checked',
   schemaErrors: [],
   droppedRuleElements: {},
-  rest: {},
   ...body,
 });
 

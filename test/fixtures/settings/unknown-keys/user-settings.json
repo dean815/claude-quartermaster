@@ -1,0 +1,10 @@
+{
+  "enabledPlugins": {
+    "alpha@market": true
+  },
+  "qmCanaryNote": "Not a real settings file. Every key below is one no reader names; view.test.ts sweeps the served payload for all of them.",
+  "qmCanaryUnknownSetting": "CANARY-rest-value-8f21c0",
+  "value": "CANARY-nested-inside-an-object-0c19",
+  "source": "/home/somewhere/private/path.json",
+  "path": "CANARY-shadows-the-readers-own-field-11ac"
+}

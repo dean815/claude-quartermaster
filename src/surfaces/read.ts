@@ -42,14 +42,6 @@ function readJsonSafe(path: string): Record<string, any> | null {
   }
 }
 
-const SETTINGS_KNOWN = new Set([
-  'enabledPlugins',
-  'skillOverrides',
-  'enabledMcpjsonServers',
-  'disabledMcpjsonServers',
-  'permissions',
-]);
-
 /**
  * The answer a caller with nothing to ask passes. A value, not a default.
  *
@@ -141,9 +133,6 @@ export function readSettings(path: string, check: SettingsCheck): SettingsFile |
   const raw = readJsonSafe(path);
   if (!raw) return null;
 
-  const rest: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(raw)) if (!SETTINGS_KNOWN.has(k)) rest[k] = v;
-
   const permissions = raw.permissions ? readPermissions(raw.permissions) : null;
 
   return {
@@ -156,7 +145,6 @@ export function readSettings(path: string, check: SettingsCheck): SettingsFile |
     ...(raw.enabledMcpjsonServers ? { enabledMcpjsonServers: raw.enabledMcpjsonServers } : {}),
     ...(raw.disabledMcpjsonServers ? { disabledMcpjsonServers: raw.disabledMcpjsonServers } : {}),
     ...(permissions ? { permissions: permissions.value ?? {} } : {}),
-    rest,
   };
 }
 

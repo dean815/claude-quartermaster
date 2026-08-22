@@ -3,28 +3,31 @@
  *
  * `qm audit --json` emits findings -- prose and counts someone already decided to
  * print. Phase 1b serves the *resolved model itself*, over a socket, which changes what
- * the `Workspace` is: a structure held in one process becomes a payload. Three of its
- * fields do not belong on a wire.
+ * the `Workspace` is: a structure held in one process becomes a payload. Parts of it do
+ * not belong on a wire, and the third is not a field -- which is the point of it.
  *
  *   - `McpServerSpec.env` / `.headers`   values are credentials.
- *   - `SettingsFile.rest`                every key the readers do not name, kept whole
- *                                        for Phase 2 round-tripping. Unbounded and
- *                                        unknown by construction: whatever the next
- *                                        Claude Code release adds lands there.
  *   - `ChainLink.source`                 an absolute path, on every link of every cell.
+ *   - everything else on `ProjectEntry`  both are **cast whole** out of `~/.claude.json`
+ *     and on `McpServerSpec`             and `.mcp.json` rather than built field by field,
+ *                                        so each carries whatever else those files hold
+ *                                        and no name here says what. Measured 2026-08-22:
+ *                                        `ProjectEntry` names six keys and the 161 entries
+ *                                        on this machine carry **34** it does not.
  *
  * So the payload is built field by field from what this file names, rather than
  * serialised from the model and stripped afterwards. The two look equivalent today and
  * differ on exactly one day: when a field appears upstream that nobody here has heard
- * of. A strip list fails open that day; an allowlist fails closed. `rest` guarantees
- * the day comes.
+ * of. A strip list fails open that day; an allowlist fails closed.
  *
- * **The rule outlives its examples (QM-44).** Two of those three fields are contingent --
- * QM-30 retires `rest`, and a release that stopped putting credentials in `env` would take
- * a second with it. What does not change is that a payload is built out of a structure
- * somebody else's release decides the shape of. So the discipline is stated as the
- * mechanism (allowlist, field by field, closed value domains) rather than as the list, and
- * losing an example is not evidence that the mechanism can be relaxed.
+ * **The rule outlives its examples (QM-44), and QM-30 is that claim tested rather than
+ * predicted.** This list used to open with `SettingsFile.rest` -- an explicit bag of every
+ * settings key the readers do not name -- and QM-44 called it contingent. It is gone: the
+ * readers drop those keys at the door now, and `test/view.test.ts` gates that they do. The
+ * discipline did not move an inch, because the third bullet is the same hazard with *no*
+ * field name to point at, which is harder to notice and no less live. So it is stated as
+ * the mechanism (allowlist, field by field, closed value domains) and never as the list,
+ * and losing an example is not evidence that the mechanism can be relaxed.
  *
  * ## The second direction (QM-44)
  *
@@ -33,12 +36,14 @@
  * and strip", and what crosses is chosen here field by field like everything above. Three
  * of its fields are refused for reasons the workspace payload already knows:
  *
- *   - `before` / `after`        the whole text of a settings file, which is `rest`'s hazard
- *                               at full strength: every key the readers do not name,
- *                               verbatim, plus whatever the next release adds. The reviewed
- *                               unit is the *entry* and not the byte (QM-46), which is also
- *                               what `applyPlan` binds its precondition to, so the diff is
- *                               not what the consent rests on.
+ *   - `before` / `after`        the whole text of a settings file: every key the readers do
+ *                               not name, verbatim, plus whatever the next release adds.
+ *                               Since QM-30 this is the *only* place in the model those
+ *                               keys still exist, which sharpens the refusal rather than
+ *                               softening it. The reviewed unit is the *entry* and not the
+ *                               byte (QM-46), which is also what `applyPlan` binds its
+ *                               precondition to, so the diff is not what the consent rests
+ *                               on.
  *   - `project` / `target`      absolute paths, exactly as `ChainLink.source` is. They cross
  *                               as `projectId` and as a display form.
  *   - `edits`                   `Edit.value` is `unknown` by construction -- whatever
@@ -246,8 +251,11 @@ function viewDistribution(d: Distribution): ViewDistribution {
  * Component kinds `claude plugin details` prints.
  *
  * Named here rather than taken from `PluginCost.counts`, whose keys are whatever that
- * CLI's output contained. A key set another program decides is the same problem as
- * `rest` on a smaller scale, and it gets the same treatment.
+ * CLI's output contained. That is the header's third bullet on a smaller scale -- a key
+ * set another program decides, reaching the model without passing through anything that
+ * names it -- and it gets the same treatment. Smaller only in blast radius: a component
+ * kind is a word off a help-style listing rather than a config file's contents, so this
+ * one is the cheap case of the rule and not the reason for it.
  */
 const COMPONENT_KINDS = ['Skills', 'Agents', 'Hooks', 'MCP servers', 'LSP servers'] as const;
 

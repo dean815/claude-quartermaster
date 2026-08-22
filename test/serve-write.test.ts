@@ -139,7 +139,6 @@ function buildWorld(): AuditContext {
     // Every id is `true` above and `false` in the project, so a plan for `on` in
     // `existing` moves a real entry and a plan for `on` in `fresh` is a `no-change`.
     enabledPlugins: Object.fromEntries(PLUGINS.map((id) => [id, true])),
-    rest: {},
   };
 
   const ws: Workspace = {
