@@ -145,6 +145,14 @@ function world(
       entry?: ProjectEntry | null;
       mcpJson?: Record<string, McpServerSpec>;
     };
+    /**
+     * A plugin that provides an MCP server, for the twin cases (QM-52).
+     *
+     * `manifestName` is spelled out per case rather than defaulted, because the whole
+     * point of the key is that the manifest name and the marketplace id can disagree --
+     * DEA-145's defect is invisible on any fixture where they happen to match.
+     */
+    pluginServer?: { id: string; manifestName: string | null; server: string };
   } = {},
 ): World {
   const dir = join(root, name);
@@ -194,15 +202,22 @@ function world(
     settings: readSettings(join(dir, '.claude', 'settings.json'), NOT_CHECKED),
     localSettings: readSettings(join(dir, '.claude', TARGET_FILENAME), files.localCheck ?? NOT_CHECKED),
   });
+  // A plugin only contributes MCP servers to the catalog while it resolves enabled
+  // somewhere, so the fixture has to switch it on as well as install it.
+  const ps = files.pluginServer;
+  const userSettings = ps
+    ? { ...files.user, enabledPlugins: { ...files.user?.enabledPlugins, [ps.id]: true } }
+    : files.user;
+
   const ws: Workspace = {
     home,
-    userSettings: files.user
+    userSettings: userSettings
       ? {
           path: join(root, '__home__', '.claude', 'settings.json'),
           validity: 'accepted',
           schemaErrors: [],
           droppedRuleElements: {},
-          ...files.user,
+          ...userSettings,
         }
       : null,
     userRules: [],
@@ -219,7 +234,29 @@ function world(
       ws,
       measurements: [],
       pluginCosts: new Map(),
-      inventories: new Map([['p@m', inventory('p@m')]]),
+      inventories: ps
+        ? new Map([
+            ['p@m', inventory('p@m')],
+            [
+              ps.id,
+              {
+                ...inventory(ps.id),
+                manifestName: ps.manifestName,
+                enumerated: [
+                  {
+                    source: 'catalog' as const,
+                    names: [],
+                    skillNames: [],
+                    mcpServerNames: [ps.server],
+                    sha: null,
+                    version: null,
+                    fetchedAt: null,
+                  },
+                ],
+              },
+            ],
+          ])
+        : new Map([['p@m', inventory('p@m')]]),
     },
   };
 }
@@ -1995,5 +2032,251 @@ describe('the gate fails when an axis stops saying it', () => {
       `the skill mutation leaked onto the plugin axis: ${report(failures)}`,
     );
     console.log(`    caught the skill refusal (${failures.length}): ${failures[0]}`);
+  });
+});
+
+/**
+ * A deny that removes a suppression (QM-52).
+ *
+ * The only note on any axis that says a write can *increase* what loads. Claude Code
+ * hides an MCP server whose launch signature duplicates a manually-configured one, and
+ * builds that map out of the servers that are **enabled** -- so denying the winner takes
+ * it out of the map and the copies it was hiding become reachable.
+ *
+ * **What the issue asked for and what is buildable are different, and this is the
+ * boundary.** QM-52 specified two bases -- `url` where both sides carry a launch
+ * signature, `name` where only a service name is available -- with
+ * `linear-server` <-> `plugin:linear:linear` as the exact case. `basis: url` is
+ * **unreachable with the readers this repo has**, which was measured rather than
+ * assumed:
+ *
+ * - a plugin's `.mcp.json` sits under its install path, which `detect.ts` says in as many
+ *   words that nothing here reads, deliberately;
+ * - `plugin-catalog-cache.json` carries server **names** and no specs at all (checked --
+ *   every `mcpServers` value in it is a list of strings);
+ * - a connector's URL is declared in claude.ai and appears in no file on the machine.
+ *
+ * And the one pairing whose two halves *are* both readable -- a user-scope launch spec
+ * against a project's own `.mcp.json` -- is not deduplicated by signature in the first
+ * place: the three manual scopes collide **by name** and the highest simply wins. So the
+ * only two pairings that suppress are exactly the two whose other half has no readable
+ * URL, and every match this can make is inferred. The note says so in those words rather
+ * than carrying a `basis` field with one reachable value.
+ *
+ * Measured on the machine this was written against, 2026-08-23: with `serviceOf` as it
+ * stands, the name match finds the twin for 2 of the 3 live pairs -- `linear-server` and
+ * `robinhood-trading` -- and misses `raindrop` against `claude.ai raindrop.io`, because
+ * `.io` survives normalisation and `raindrop_io` is not `raindrop`. Widening `serviceOf`
+ * to strip a trailing TLD was rejected: it is a shared predicate `duplicateAccessPaths`
+ * also reads, and a wrong merge there is a finding about two services that are not one.
+ * The miss is reported, not fixed.
+ *
+ * The day it fails: `serviceOf`'s suffix list is three literals, so a service whose
+ * manual and connector spellings differ by anything else is missed silently -- `raindrop`
+ * is that case today and there is nothing to say it is the only one. The enabled-only
+ * filter reads this project's deny-list and **not** whether a twin's plugin is enabled
+ * *in this project*, only that it is enabled somewhere, which `buildMcpCatalog` decides;
+ * so a plugin disabled here alone reads as a live twin. And nothing observes the
+ * suppression happening -- the mechanism is first-party behaviour recorded in one research
+ * session, and this fires on a name comparison rather than on anything Claude Code said.
+ */
+describe('a deny that un-suppresses a twin (QM-52)', () => {
+  const noteCodes = (w: World, requests: ToggleRequest[]) =>
+    planned(planToggles(w.ctx, MCP_AXIS, w.dir, requests)).notes.map((n) => n.code);
+
+  const unsuppression = (w: World, requests: ToggleRequest[]) =>
+    planned(planToggles(w.ctx, MCP_AXIS, w.dir, requests)).notes.find(
+      (n) => n.code === 'un-suppresses',
+    );
+
+  /** The live shape: a user-scope server whose twin is a plugin at the same service. */
+  const withPluginTwin = () =>
+    world('qm52-plugin-twin', {
+      mcp: { mcpServers: { 'linear-server': {} }, entry: {} },
+      pluginServer: { id: 'linear@marketplace', manifestName: 'Linear', server: 'linear' },
+    });
+
+  /** The other live shape: the twin is a claude.ai connector, known only by name. */
+  const withConnectorTwin = () =>
+    world('qm52-connector-twin', {
+      mcp: {
+        mcpServers: { 'robinhood-trading': {} },
+        everConnected: ['claude.ai Robinhood'],
+        entry: {},
+      },
+    });
+
+  test('denying a user-scope server names the plugin twin it was suppressing', () => {
+    const note = unsuppression(withPluginTwin(), mcp('linear-server', false));
+    assert.ok(note, 'the note must fire');
+    // The manifest name and the marketplace id disagree in this fixture, so the key can
+    // only be right if it came from the manifest (DEA-145).
+    assert.match(note.message, /plugin:Linear:linear \(plugin\)/);
+    assert.doesNotMatch(
+      note.message,
+      /plugin:linear:linear/,
+      'the key must come from the manifest name, never the marketplace id prefix',
+    );
+  });
+
+  test('denying a user-scope server names the connector twin', () => {
+    const note = unsuppression(withConnectorTwin(), mcp('robinhood-trading', false));
+    assert.ok(note, 'the note must fire');
+    assert.match(note.message, /claude\.ai Robinhood \(connector\)/);
+  });
+
+  test('the note says the match is inferred and refuses to name a winner', () => {
+    const note = unsuppression(withPluginTwin(), mcp('linear-server', false));
+    assert.ok(note);
+    assert.match(note.message, /inferred, not exact/);
+    assert.match(note.message, /depends on how Claude Code was started/);
+  });
+
+  /**
+   * The negative control, in `linkedin`'s shape: a manually-configured server with no
+   * twin at all. 21 of this machine's deny entries are exactly this and must stay quiet.
+   */
+  test('a manually-configured server with no twin gets no note', () => {
+    const w = world('qm52-no-twin', { mcp: { mcpServers: { linkedin: {} }, entry: {} } });
+    assert.ok(!noteCodes(w, mcp('linkedin', false)).includes('un-suppresses'));
+  });
+
+  /**
+   * Mutation 4, as a fixture. `on` removes an entry and so *restores* a suppression --
+   * the opposite advice -- so a note saying "this makes the twin reachable" is backwards.
+   */
+  test('un-denying is silent, because it restores a suppression rather than removing one', () => {
+    const w = world('qm52-undeny', {
+      mcp: {
+        mcpServers: { 'linear-server': {} },
+        entry: { disabledMcpServers: ['linear-server'] },
+      },
+      pluginServer: { id: 'linear@marketplace', manifestName: 'Linear', server: 'linear' },
+    });
+    assert.ok(!noteCodes(w, mcp('linear-server', true)).includes('un-suppresses'));
+  });
+
+  /**
+   * Mutation 2, as a fixture. The dedup map is built from **enabled** servers, so a twin
+   * this project already denies is not in it either -- removing this suppression does not
+   * make that twin load, and there is nothing to warn about.
+   */
+  test('a twin this project already denies is not a twin that comes back', () => {
+    const w = world('qm52-twin-denied', {
+      mcp: {
+        mcpServers: { 'robinhood-trading': {} },
+        everConnected: ['claude.ai Robinhood'],
+        entry: { disabledMcpServers: ['claude.ai Robinhood'] },
+      },
+    });
+    assert.ok(!noteCodes(w, mcp('robinhood-trading', false)).includes('un-suppresses'));
+  });
+
+  /**
+   * Only a manually-configured server arbitrates. Denying the *connector* removes no
+   * suppression, because it was never the one doing the suppressing -- and this is the
+   * commonest write on the axis (22 of 34 distinct names here are connectors), so a note
+   * firing on it would fire on almost everything.
+   */
+  test('denying the connector half says nothing', () => {
+    const w = withConnectorTwin();
+    assert.ok(!noteCodes(w, mcp('claude.ai Robinhood', false)).includes('un-suppresses'));
+  });
+
+  /** A project's own `.mcp.json` is manually-configured too, and suppresses the same way. */
+  test('a project-declared server suppresses as a user-scope one does', () => {
+    const w = world('qm52-project-declared', {
+      mcp: {
+        mcpJson: { 'robinhood-trading': {} },
+        everConnected: ['claude.ai Robinhood'],
+        entry: {},
+      },
+    });
+    const note = unsuppression(w, mcp('robinhood-trading', false));
+    assert.ok(note, 'a .mcp.json declaration is manually-configured');
+    assert.match(note.message, /claude\.ai Robinhood \(connector\)/);
+  });
+
+  /**
+   * The `raindrop` miss, pinned as a **known gap** rather than left to be discovered.
+   *
+   * `serviceOf('raindrop')` is `raindrop` and `serviceOf('claude_ai_raindrop_io')` is
+   * `raindrop_io`, so the pair does not collapse and the note stays silent on a real
+   * suppression. This asserts the silence deliberately: the day someone widens
+   * `serviceOf`, this test goes red and the widening has to be argued for rather than
+   * slipped in -- which is the point, because the same predicate decides
+   * `duplicateAccessPaths`.
+   */
+  test('a service whose two spellings differ by more than the suffix list is missed', () => {
+    const w = world('qm52-known-gap', {
+      mcp: {
+        mcpServers: { raindrop: {} },
+        everConnected: ['claude.ai raindrop.io'],
+        entry: {},
+      },
+    });
+    assert.ok(
+      !noteCodes(w, mcp('raindrop', false)).includes('un-suppresses'),
+      'known gap: raindrop vs claude.ai raindrop.io does not collapse under serviceOf',
+    );
+  });
+
+  /**
+   * Two manually-configured servers at one service are **not** a suppression, and this
+   * fixture exists because the two filters that say so were masking each other.
+   *
+   * Found by mutation, not by reading: deleting the plugin-or-connector filter *and*
+   * deleting the manually-configured check each left all 710 tests green on their own,
+   * because every fixture that reached one was stopped by the other. That is DEA-149's
+   * defect exactly -- a guard the suite happens to cover through something else -- and the
+   * only cure is a case where one filter is the sole thing standing between the note and
+   * a wrong answer.
+   *
+   * The rule being pinned: the three manual scopes collide **by name** and the highest
+   * simply wins, so a user-scope launch spec and a project `.mcp.json` naming the same
+   * service suppress nothing. Only plugins and connectors are deduplicated by signature.
+   */
+  test('another manually-configured server at the same service is precedence, not suppression', () => {
+    const w = world('qm52-two-manual', {
+      mcp: {
+        mcpServers: { 'robinhood-trading': {} },
+        mcpJson: { robinhood: {} },
+        entry: {},
+      },
+    });
+    assert.ok(
+      !noteCodes(w, mcp('robinhood-trading', false)).includes('un-suppresses'),
+      'a second manual server is resolved by precedence and never suppressed',
+    );
+  });
+
+  /**
+   * The other half of that pair: denying a *connector* while a plugin twin exists.
+   *
+   * Without the manually-configured check the plugin twin is found and the note fires on
+   * a write that removes no suppression at all -- and no fixture above reaches it, because
+   * they all stop at the plugin-or-connector filter first.
+   */
+  test('denying a connector says nothing even when a plugin twin exists', () => {
+    const w = world('qm52-connector-with-plugin-twin', {
+      mcp: {
+        mcpServers: { 'robinhood-trading': {} },
+        everConnected: ['claude.ai Robinhood'],
+        entry: {},
+      },
+      pluginServer: { id: 'rh@marketplace', manifestName: 'Robinhood', server: 'robinhood' },
+    });
+    assert.ok(
+      !noteCodes(w, mcp('claude.ai Robinhood', false)).includes('un-suppresses'),
+      'only a manually-configured server arbitrates, so denying a connector removes nothing',
+    );
+  });
+
+  /** The settings axes have no deduplicating container, so they answer empty by value. */
+  test('the settings axes never produce this note', () => {
+    for (const axis of [PLUGIN_AXIS, SKILL_AXIS]) {
+      const w = world(`qm52-settings-${axis.name}`);
+      assert.deepEqual(axis.suppressing(w.ctx, null, { id: 'anything', value: false }), []);
+    }
   });
 });

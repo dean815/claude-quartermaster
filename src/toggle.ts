@@ -88,7 +88,7 @@ import {
   type PendingChange,
   type WriteTarget,
 } from './effect.ts';
-import { buildMcpCatalog } from './mcp.ts';
+import { buildMcpCatalog, serviceOfName } from './mcp.ts';
 import {
   PROJECT_SCOPES,
   SKILL_VALUES,
@@ -195,6 +195,23 @@ export interface Attestation {
 }
 
 /**
+ * A copy of one service that a deny would make reachable again (QM-52).
+ *
+ * `kind` is what the other path *is*, never which one wins. Which copy takes over is
+ * launch-mode dependent -- the interactive TUI keeps `plugin:*` in the manually-configured
+ * map so the plugin beats the connector, while the non-interactive path (`-p`, piped
+ * stdout, the Agent SDK, and Claude Code Desktop, which spawns its own CLI over stdio
+ * pipes) strips them and the connector wins. Both were established in one research session;
+ * the headless half was watched happening 3/3, the interactive half is source-derived and
+ * corroborated by `claude mcp list`. A field naming the winner would have to pick one.
+ */
+export interface SuppressedTwin {
+  /** The name a deny-list would use for this other path. */
+  name: string;
+  kind: 'plugin' | 'connector';
+}
+
+/**
  * One writable surface: which file and key it lands in, how it resolves, and what a user
  * may say.
  *
@@ -297,6 +314,19 @@ export interface Axis {
     record: ProjectRecord | null,
     req: ToggleRequest,
   ): { message: string; evidence: string[]; fix: string } | null;
+  /**
+   * Copies of this server that the write would stop suppressing (QM-52).
+   *
+   * Empty on the settings axes, and not because nobody has looked: a plugin and a skill
+   * are named things that either load or do not, and no first-party mechanism substitutes
+   * one for another. Only the MCP axis has a *deduplicating* container behind it, so only
+   * it can answer a write of "off" with "and this other thing comes back".
+   */
+  suppressing(
+    ctx: AuditContext,
+    record: ProjectRecord | null,
+    req: ToggleRequest,
+  ): SuppressedTwin[];
   /** This id's own entry in the target document, `null` when it holds none. */
   entryIn(doc: unknown, project: string, id: string): EntryValue | null;
   /** The entry a requested value lands as; `null` where it lands as no entry at all. */
@@ -364,6 +394,7 @@ function settingsAxis(
     stored: 'project-file',
     validated: (record) => record.localSettings,
     contested: () => null,
+    suppressing: () => [],
     entryIn: (doc, _project, id) => {
       const block = (doc as Record<string, unknown> | null)?.[key];
       if (block === null || typeof block !== 'object') return null;
@@ -527,6 +558,40 @@ export const MCP_AXIS: Axis = {
       evidence: [`projects[${JSON.stringify(record.path)}].enabledMcpServers holds ${req.id}`],
       fix: `Remove ${req.id} from enabledMcpServers first, then try again.`,
     };
+  },
+  suppressing: (ctx, record, req) => {
+    // Deny only. `on` removes an entry and so *restores* a suppression -- the opposite
+    // advice -- and saying "this un-suppresses something" there would be backwards.
+    if (req.value !== false) return [];
+
+    const catalog = buildMcpCatalog(ctx.ws, ctx.inventories);
+    const self = catalog.entries.find((e) => e.name === req.id);
+    // Only a manually-configured server suppresses anything: first-party arbitrates
+    // plugin-vs-connector by *signature* and only a user-scope launch spec or a project's
+    // own `.mcp.json` is on the winning side of that. A connector or a plugin server being
+    // denied removes no suppression, so it gets no note.
+    const manual =
+      self?.userScope || (record !== null && (self?.declaredIn.includes(record.path) ?? false));
+    if (!manual) return [];
+
+    const service = serviceOfName(req.id);
+    // The map is built from *enabled* servers, which is the whole mechanism: a twin this
+    // project already denies is not in it either, so removing this suppression does not
+    // make that twin load and there is nothing to warn about.
+    const denied = new Set(record?.entry?.disabledMcpServers ?? []);
+
+    return catalog.entries
+      .filter((e) => e.name !== req.id)
+      // Exactly the two kinds first-party deduplicates by signature. Another *manual*
+      // server sharing this name is a precedence question and not a suppression: the
+      // three scopes collide by name and the highest one simply wins.
+      .filter((e) => e.fromPlugin !== null || e.everConnected)
+      .filter((e) => !denied.has(e.name))
+      .filter((e) => serviceOfName(e.name) === service)
+      .map((e) => ({
+        name: e.name,
+        kind: e.fromPlugin !== null ? ('plugin' as const) : ('connector' as const),
+      }));
   },
   entryIn: (doc, project, id) => (denyList(doc, project)?.includes(id) ? false : null),
   entryFor: (value) => (value ? null : false),
@@ -840,6 +905,11 @@ export type ToggleNoteCode =
   | 'unattested-id'
   /** The entry moves and the resolved value does not, because no source declares the id. */
   | 'value-unmoved'
+  /**
+   * The deny removes a suppression, so another copy of the service becomes reachable
+   * (QM-52). The one note on any axis that says a write can *increase* what loads.
+   */
+  | 'un-suppresses'
   /** The target is shared by every project, and this write decides one of them. */
   | 'shared-file';
 
@@ -1461,6 +1531,27 @@ function notesFor(
         `${change.id}: the entry changes and the resolved value does not — nothing on disk ` +
         `declares this ${input.axis.noun}, so this model reads it ${showValue(change.to)} ` +
         'either way. What the write decides is whether the deny-list names it.',
+    });
+  }
+
+  // The only note here that warns about the write doing *more* than it says (QM-52).
+  // Claude Code hides an MCP server whose launch signature duplicates a manually-configured
+  // one, and builds that map out of the servers that are enabled -- so denying the winner
+  // takes it out of the map and the copies it was hiding become reachable.
+  for (const req of input.requests) {
+    const twins = input.axis.suppressing(input.ctx, input.record, req);
+    if (twins.length === 0) continue;
+    const listed = twins.map((t) => `${t.name} (${t.kind})`).join(', ');
+    notes.push({
+      code: 'un-suppresses',
+      message:
+        `${req.id}: this deny removes a suppression. Claude Code hides an MCP server whose ` +
+        `launch signature duplicates a manually-configured one, and builds that map from ` +
+        `enabled servers only — so turning this one off makes ${listed} reachable again. ` +
+        'Which of them ends up loading depends on how Claude Code was started, so this does ' +
+        'not say. The match is by service name and is inferred, not exact: a plugin keeps ' +
+        "its launch spec under its install path and a connector's is declared in claude.ai, " +
+        'so neither URL is readable here to compare.',
     });
   }
 

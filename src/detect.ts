@@ -19,7 +19,7 @@ import { classifyServer, normalizeServerName } from './cost/transcript.ts';
 import type { PluginCostIndex } from './cost/plugins.ts';
 import type { PluginInventory } from './inventory.ts';
 import type { McpEntry } from './mcp.ts';
-import { buildMcpCatalog } from './mcp.ts';
+import { buildMcpCatalog, serviceOf } from './mcp.ts';
 import { resolveMcpServer, resolvePlugin, allPluginIds } from './resolve.ts';
 import { RULE_ARRAYS } from './surfaces/read.ts';
 import { pluginUsage, isDemonstrablyUnused } from './usage.ts';
@@ -245,14 +245,6 @@ function num(n: number): string {
   return n.toLocaleString('en-US');
 }
 
-/** `claude_ai_Linear`, `linear-server`, `plugin_productivity_linear` -> `linear`. */
-function serviceOf(namespace: string): string {
-  return namespace
-    .replace(/^claude_ai_/, '')
-    .replace(/^plugin_[^_]+_/, '')
-    .replace(/-(trading|server|mcp)$/, '')
-    .toLowerCase();
-}
 
 /**
  * A project restating a value it would inherit anyway. Does nothing today, and stops
