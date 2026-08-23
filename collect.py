@@ -35,9 +35,31 @@ LIVE = HOME / ".claude/sessions"
 TAIL_BYTES = 400_000
 EXCERPT_CHARS = 700
 
-# A routine's opening prompt is injected as if the user typed it. This is how a
-# routine-launched session is told apart from one Dean actually started.
+# Messages the harness writes into the user's slot: a routine's opening prompt, a
+# slash-command invocation, the skill body that follows it, the resumed-session
+# caveat. None of them are Dean typing, and mistaking one for a reply is what
+# would keep an unattended run on the board.
+SYNTHETIC_PREFIXES = ("<scheduled-task", "<command-message>", "<command-name>",
+                      "<local-command-caveat>", "Base directory for this skill:")
 SCHEDULED_RE = re.compile(r'<scheduled-task name="([^"]+)"')
+# The dashboard's own upkeep, run either headless by resummarize.sh or by Dean
+# typing the slash command. Either way the session exists to service the board,
+# so listing it on the board is just noise about itself.
+SELF_CMD_RE = re.compile(r"<command-name>/session-fleet</command-name>")
+
+
+def origin_of(text):
+    """Who started this session, when it was not a person. None if it was."""
+    m = SCHEDULED_RE.match(text)
+    if m:
+        return m.group(1)
+    if SELF_CMD_RE.search(text):
+        return "session-fleet"
+    return None
+
+
+def is_synthetic(text):
+    return text.startswith(SYNTHETIC_PREFIXES)
 
 
 # --------------------------------------------------------------------------- utils
@@ -191,7 +213,7 @@ def read_transcript(path):
            "last_assistant": "", "last_assistant_tail": "",
            "turns": 0, "first_ts": None, "last_ts": None,
            "skills": [], "title": None,
-           "scheduled_task": None, "human_turns": 0}
+           "origin": None, "human_turns": 0}
 
     size = path.stat().st_size
     # Head and tail overlap on short transcripts, so every user message gets fed
@@ -231,10 +253,12 @@ def read_transcript(path):
                 key = d.get("uuid") or (ts, txt[:60])
                 if key not in seen_user:
                     seen_user.add(key)
-                    m = SCHEDULED_RE.match(txt)
-                    if m:
-                        res["scheduled_task"] = m.group(1)
-                    else:
+                    # Only the opening message says who started the session. A
+                    # /session-fleet run later in one of Dean's own threads is
+                    # him working, not the board servicing itself.
+                    if head and len(seen_user) == 1:
+                        res["origin"] = origin_of(txt)
+                    if not is_synthetic(txt):
                         res["human_turns"] += 1
         elif t == "assistant" and not head:
             txt = clean(text_of(d.get("message")), 4000)
@@ -296,15 +320,16 @@ def is_noise(cwd, turns):
     return turns < 2
 
 
-def is_unattended_routine(routine, human_turns, waiting):
-    """True for a routine's own run that never turned into a conversation.
+def is_unattended(origin, human_turns, waiting):
+    """True for a machine-started run that never turned into a conversation.
 
-    A routine posts its prompt, works, and stops — nothing is expected back, so
-    the run is noise on a board about what needs Dean. It stops being noise the
-    moment either of two things happens: Dean replies in the thread, or the run
-    ends on something addressed to him.
+    Two kinds qualify: a scheduled task's own run, and the dashboard's own
+    re-summarize pass. Both post a prompt, work, and stop — nothing is expected
+    back, so listing them is noise on a board about what needs Dean. Either one
+    stops being noise the moment he replies in the thread, or the run ends on
+    something addressed to him.
     """
-    return bool(routine) and not human_turns and not waiting
+    return bool(origin) and not human_turns and not waiting
 
 
 def classify(cwd, entrypoint, kind):
@@ -353,7 +378,7 @@ def collect_desktop(cutoff, transcripts):
             "permission_mode": d.get("permissionMode"),
             "turns": d.get("completedTurns"),
             "entrypoint": "claude-desktop",
-            "scheduled_task": d.get("scheduledTaskId"),
+            "origin": d.get("scheduledTaskId"),
         })
     return sessions
 
@@ -386,7 +411,7 @@ def collect_transcript_only(cutoff, transcripts, claimed):
             "permission_mode": None,
             "turns": t["turns"],
             "entrypoint": t["entrypoint"],
-            "scheduled_task": t["scheduled_task"],
+            "origin": t["origin"],
             "_transcript": t,
         })
     return sessions
@@ -398,7 +423,7 @@ def main():
     ap.add_argument("--out", default=str(Path(__file__).parent / "data.json"))
     ap.add_argument("--include-archived", action="store_true")
     ap.add_argument("--include-routines", action="store_true",
-                    help="keep routine runs nobody is expected to answer")
+                    help="keep machine-started runs nobody is expected to answer")
     ap.add_argument("--include-noise", action="store_true",
                     help="keep scratchpad and single-turn probe sessions")
     args = ap.parse_args()
@@ -456,10 +481,10 @@ def main():
         state = watcher.classify_state(phase, len(subs), waiting, age_h,
                                        live=bool(proc))
 
-        routine = s.get("scheduled_task") or t.get("scheduled_task")
+        origin = s.get("origin") or t.get("origin")
         if (proc or {}).get("kind") == "scheduled":
-            routine = routine or "scheduled"
-        if (is_unattended_routine(routine, t.get("human_turns", 0), waiting)
+            origin = origin or "scheduled"
+        if (is_unattended(origin, t.get("human_turns", 0), waiting)
                 and not args.include_routines):
             continue
 
@@ -487,7 +512,7 @@ def main():
             "subagents": subs,
             "question": question,
             "waiting": waiting,
-            "routine": routine,
+            "origin": origin,
             "pid": (proc or {}).get("pid"),
             "archived": s["archived"],
             "cwd": cwd,

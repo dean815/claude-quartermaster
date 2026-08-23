@@ -252,12 +252,19 @@ them to that. If nothing appears, enable it under System Settings → Notificati
 Archived sessions, anything under `/tmp` or `/private/tmp`, `cwd` of `/`, and
 single-turn probes. Override with `--include-archived` and `--include-noise`.
 
-Also dropped: a scheduled task's own run, when you never replied in the thread
-and it did not end on a question. The routine posts its prompt, works, and stops
-— nothing is expected back, so it is noise on a board about what needs you. It
-reappears the moment either of those is untrue. `--include-routines` keeps them.
-Detected from `scheduledTaskId` on the Desktop record, or the `<scheduled-task>`
-prompt the harness injects as the opening user message.
+Also dropped: machine-started runs nobody is expected to answer — a scheduled
+task's own run, and the board's own `/session-fleet refresh` pass. Both post a
+prompt, work, and stop, so listing them is noise on a board about what needs you;
+the refresh runs are noise about themselves. Either reappears the moment you
+reply in the thread or the run ends on a question. `--include-routines` keeps
+them.
+
+Detected from the opening user message, which is the only one that says who
+started the session: `scheduledTaskId` on the Desktop record or an injected
+`<scheduled-task>` prompt for a routine, `<command-name>/session-fleet</...>` for
+a refresh. Everything the harness writes into your slot — the slash-command
+invocation, the skill body, the resume caveat — is excluded from the "did you
+reply" test, since none of it is you typing.
 
 ## State values
 

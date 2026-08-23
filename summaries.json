@@ -1,38 +1,8 @@
 {
   "_note": "Model-written. 'stamp' and 'turns' are the session's values when this was written; render.py flags the entry stale when either has moved. Bullet types: q = open question awaiting Dean, a = action for Dean, i = informational.",
   "entries": {
-    "local_597d5790-54ef-4480-873b-6bd72f0e8512": {
-      "stamp": "2026-08-15T07:30:16.073000Z",
-      "turns": 5,
-      "purpose": "Automated daily-brief run for the tool stack; this run also reconciled the SKILL.md and prompt.md copies.",
-      "next": [
-        {
-          "type": "i",
-          "text": "You approved syncing the drifted paragraph and committing. Claude is finishing that now."
-        }
-      ]
-    },
-    "local_a32a70d7-db5e-472e-9285-e1830dd513f9": {
-      "stamp": "2026-08-16T04:50:03.129000Z",
-      "turns": 7,
-      "purpose": "Count Airtable API calls from session transcripts, then stop normal usage from blocking unattended runs — and prove the guard actually fires.",
-      "next": [
-        {
-          "type": "a",
-          "text": "Set the override in the environment of any cron or SDK run — it is inert otherwise, which is the whole point of the design."
-        },
-        {
-          "type": "i",
-          "text": "Verified end to end in production, which earlier tests couldn't do: two identical list_bases calls, the second served entirely from cache. Per-agent keying is live — state keys on transcript_path, not session_id, so parallel subagents no longer share a ledger."
-        },
-        {
-          "type": "i",
-          "text": "A verification run is scheduled for Sun Aug 23, 9:00 AM against a locked baseline (91 calls, 68 billed, 24 avoidable), and the analysis script now lives at ~/.claude/user-scripts/airtable-usage-report.py rather than in scratchpad."
-        }
-      ]
-    },
     "a2324028-6a0d-4f72-977b-dd5e7fe62891": {
-      "stamp": "2026-08-21T09:25:13.335Z",
+      "stamp": "2026-08-22T05:27:45.517Z",
       "turns": 13,
       "purpose": "Pick chord-chart-maker back up after a context break, which became the M7 Phase A discovery run.",
       "next": [
@@ -60,8 +30,8 @@
       "title": "chord-chart-maker — M7 Phase A"
     },
     "local_cf24f1e7-7602-44e0-bdfb-57c680cb4dcd": {
-      "stamp": "2026-08-16T06:19:40.063000Z",
-      "turns": 198,
+      "stamp": "2026-08-23T16:55:36.580000Z",
+      "turns": 205,
       "purpose": "Main working chat for Claude Quartermaster — design, build and issue triage.",
       "next": [
         {
@@ -109,25 +79,6 @@
         }
       ]
     },
-    "b50d1a54-3cfe-4033-bd63-a06e9ce27c24": {
-      "stamp": "2026-08-15T07:29:31.120Z",
-      "turns": 13,
-      "purpose": "Draft answers to Cursor's application questions, stress-test them with peer agents, then research Cursor's recent marketing positioning to aim the rewrite.",
-      "next": [
-        {
-          "type": "q",
-          "text": "Abstract or concrete? You asked for mostly-abstract drafts; four independent analyses then called missing concrete detail the biggest AI tell. One concrete failure was added and flagged as unresolved rather than silently overriding you."
-        },
-        {
-          "type": "a",
-          "text": "Rework the drafts against Cursor's actual direction — agent swarms, cloud agents, production monitoring. Your current framing is single-developer, single-agent."
-        },
-        {
-          "type": "i",
-          "text": "A handoff is written for a fresh session. Tracker and Airtable untouched since nothing is submitted; step 5 has the exact command and record id."
-        }
-      ]
-    },
     "local_7d1383a1-0b56-4def-900e-460da7e7996e": {
       "stamp": "2026-08-19T03:53:23.544000Z",
       "turns": 16,
@@ -152,7 +103,7 @@
       ]
     },
     "5b91eaa3-caa5-4eac-b343-224065a0cb72": {
-      "stamp": "2026-08-21T09:25:13.871Z",
+      "stamp": "2026-08-22T05:27:46.053Z",
       "turns": 8,
       "purpose": "Deep dive on ChordPro as the app's backing format — now a 73-item survey artifact plus feature suggestions and five proposals for reshaping the roadmap.",
       "next": [
@@ -285,18 +236,6 @@
       ],
       "title": "Logic mouse-focus suspects"
     },
-    "8a64dbf3-6489-4595-bb71-ece59e77332c": {
-      "stamp": "2026-08-16T00:51:38.121Z",
-      "turns": 2,
-      "purpose": "Answer why a shared Google Drive folder downloads as several incomplete-looking zips.",
-      "next": [
-        {
-          "type": "i",
-          "text": "Answered — they're parts, not duplicates; Drive splits anything over ~2GB. Advice was to add a shortcut and use Drive for desktop. Nothing pending."
-        }
-      ],
-      "title": "Google Drive multi-part zip question"
-    },
     "local_80f5f8b4-33a6-445b-98d3-53b0e8e769e7": {
       "stamp": "2026-08-19T16:01:30.507000Z",
       "turns": 10,
@@ -390,33 +329,9 @@
         }
       ]
     },
-    "1f8f1785-7166-4bde-80dd-23b8e9d9f556": {
-      "stamp": "2026-08-20T22:41:03.776Z",
-      "turns": 4,
-      "purpose": "A `/session-fleet refresh` run — rescan every session and rewrite the stale summaries.",
-      "next": [
-        {
-          "type": "i",
-          "text": "Housekeeping only, nothing for you to answer. It found 10 stale entries and rewrote them; this is the entry for the run itself. Finished and idle."
-        }
-      ],
-      "title": "Session Fleet refresh run"
-    },
-    "cc8fe90e-0ac1-4670-b20f-5bcdb578e1b3": {
-      "stamp": "2026-08-21T21:01:32.666Z",
-      "turns": 4,
-      "purpose": "A `/session-fleet refresh` run — rescan every session and rewrite the stale summaries.",
-      "next": [
-        {
-          "type": "i",
-          "text": "Housekeeping only, nothing for you to answer. Three stale entries this pass: the session-renaming thread and both refresh runs, including this one."
-        }
-      ],
-      "title": "Session Fleet refresh run"
-    },
     "local_66995bb1-9a44-4b63-9c19-fb9a957a9743": {
-      "stamp": "2026-08-21T21:00:09.615000Z",
-      "turns": 4,
+      "stamp": "2026-08-23T16:57:10.993000Z",
+      "turns": 5,
       "purpose": "Build out Session Fleet's UI and tooling — hide unattended routine runs, tighten the row layout, and turn the re-summarize workflow into a skill.",
       "next": [
         {
@@ -430,8 +345,8 @@
       ]
     },
     "local_9cf8e76f-1964-435c-be35-d3cf6011993c": {
-      "stamp": "2026-08-20T22:37:40.075000Z",
-      "turns": 5,
+      "stamp": "2026-08-22T15:23:17.513000Z",
+      "turns": 6,
       "purpose": "Work out why CLI-started sessions rename inconsistently, then rebuild the session-name format around it.",
       "next": [
         {
@@ -499,8 +414,8 @@
       ]
     },
     "local_afe5ba70-3715-4be7-a136-f0e6f8dce5ad": {
-      "stamp": "2026-08-19T21:32:44.385000Z",
-      "turns": 4,
+      "stamp": "2026-08-22T14:39:09.561000Z",
+      "turns": 5,
       "purpose": "Squeeze the free-unlimited Manus window for research, media, and long-form autonomous builds before it closes.",
       "next": [
         {
@@ -518,8 +433,8 @@
       ]
     },
     "local_4234a808-e85b-40a5-8bdf-b18cc33f3003": {
-      "stamp": "2026-08-19T20:20:23.994000Z",
-      "turns": 21,
+      "stamp": "2026-08-21T22:09:01.625000Z",
+      "turns": 22,
       "purpose": "Evaluate a batch of ~30 job postings and land the results in the tracker and Airtable.",
       "next": [
         {
