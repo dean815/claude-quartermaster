@@ -233,6 +233,67 @@ describe('MCP servers', () => {
   });
 });
 
+/**
+ * Claude Code's **Local scope** (QM-53): `~/.claude.json` -> `projects[<abspath>].mcpServers`.
+ *
+ * The highest-precedence MCP scope and the last one this repo learned to read. Verified
+ * against the live binary rather than inferred: from the declaring project
+ * `claude mcp get google-sheets` reports *"Local config (private to you in this project)"*,
+ * and from any other directory the same command answers *"No MCP server named"*. Two
+ * servers on the machine this was written against were in exactly this state and had no
+ * row, no cell and no attestation anywhere in the tool.
+ *
+ * **The link is pushed at `project` scope, which understates where the spec lives**, and
+ * the second test here is what pins that. `local` would be the honest label and it is not
+ * usable yet: this chain models on/off, and the deny-list is not ranked against
+ * declarations by scope -- it is stronger than all of them. Measured from `~`:
+ * `robinhood-trading` is declared at user scope, denied for that project, and
+ * `claude mcp list` calls it "Disabled for this project". A deny beats a user- or
+ * project-scope declaration today only because `local` outranks both and no declaration is
+ * pushed there. Label this one `local` and a denied server resolves `true`.
+ */
+describe('MCP Local scope (QM-53)', () => {
+  const spec = { type: 'stdio', command: 'npx' };
+
+  test('a local spec is on in its own project and absent from every other', () => {
+    const declaring = project('/p', { entry: { mcpServers: { 'google-sheets': spec } } });
+    const other = project('/q', { entry: {} });
+    const ws = workspace(null, [declaring, other]);
+
+    const here = resolveMcpServer(ws, declaring, 'google-sheets');
+    assert.equal(here.value, true);
+    assert.deepEqual(here.chain.map((l) => `${l.scope}=${String(l.value)}`), ['project=true']);
+
+    assert.equal(
+      resolveMcpServer(ws, other, 'google-sheets').value,
+      false,
+      'a Local-scope spec reaches exactly one project — this is what claude mcp get shows',
+    );
+  });
+
+  test('the deny-list still wins over a local declaration', () => {
+    const p = project('/p', {
+      entry: { mcpServers: { 'google-sheets': spec }, disabledMcpServers: ['google-sheets'] },
+    });
+    const cell = resolveMcpServer(workspace(null, [p]), p, 'google-sheets');
+    assert.equal(cell.value, false, 'a deny outranks the declaration it disables');
+    // Both links land at project scope, so the deny wins on insertion order. Pushing the
+    // declaration at `local` would reverse this and report a disabled server as loading.
+    assert.deepEqual(
+      cell.chain.map((l) => `${l.scope}=${String(l.value)}`),
+      ['project=true', 'project=false'],
+    );
+  });
+
+  test('an empty mcpServers object declares nothing', () => {
+    // 68 of the 69 project entries carrying this key on the measured machine are `{}`.
+    const p = project('/p', { entry: { mcpServers: {} } });
+    const cell = resolveMcpServer(workspace(null, [p]), p, 'google-sheets');
+    assert.equal(cell.value, false);
+    assert.equal(cell.chain.length, 0);
+  });
+});
+
 describe('enumeration', () => {
   test('plugin ids are collected from every scope and sorted', () => {
     const user = settings('/home/.claude/settings.json', { enabledPlugins: { b: true } });

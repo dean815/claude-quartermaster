@@ -119,6 +119,26 @@ export function resolveMcpServer(
     links.push({ scope: 'project', value: true, source: project.mcpJson.path });
   }
 
+  // Claude Code's Local scope: a launch spec private to this project (QM-53). Verified
+  // against the live binary rather than inferred -- `claude mcp get` labels it "Local
+  // config (private to you in this project)" from the declaring project and answers "No
+  // MCP server named" from anywhere else.
+  //
+  // **Pushed at `project` and not at `local`, which understates where the spec lives.**
+  // The scope name would be the honest one, and it cannot be used yet: this chain models
+  // *on or off*, and the deny-list below is not ranked against declarations by scope at
+  // all -- it is stronger than any of them. Measured, from `~`: `robinhood-trading` is
+  // declared at user scope, denied for that project, and `claude mcp list` reports it
+  // "Disabled for this project". Today a deny beats a user- or project-scope declaration
+  // only because `local` outranks both and nothing pushes a declaration there; label this
+  // one `local` and it would outrank the deny and resolve a denied server `true`.
+  // Promoting the deny to `local` instead would fix that and dissolve `resolve.test.ts`'s
+  // `round-trip` fixture, whose whole point is two links landing at one scope (QM-43). So
+  // the conservative label ships and the fidelity question is filed rather than guessed.
+  if (project.entry?.mcpServers && serverName in project.entry.mcpServers) {
+    links.push({ scope: 'project', value: true, source: ws.claudeJson.path });
+  }
+
   // The per-project deny-list. Highest-signal surface, and the easiest to forget.
   if (project.entry?.disabledMcpServers?.includes(serverName)) {
     links.push({ scope: 'project', value: false, source: ws.claudeJson.path });

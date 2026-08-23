@@ -2280,3 +2280,66 @@ describe('a deny that un-suppresses a twin (QM-52)', () => {
     }
   });
 });
+
+/**
+ * The write path, against Claude Code's **Local scope** (QM-53).
+ *
+ * `projects[<abspath>].mcpServers` is a launch spec private to one project, and it lives
+ * in the very file `qm set --axis mcp` writes. Until QM-53 nothing read it, so a name
+ * declared there reached `attestMcpName`'s last branch and the plan said the entry
+ * *"will match whatever Claude Code calls that server, if anything"* — about a server
+ * whose spec is two keys away in the document being edited. That is the failure
+ * `attestMcpName` exists to prevent, arriving because a reader did not look rather than
+ * because a name was guessed.
+ *
+ * Measured live before this was built: `claude mcp get google-sheets` from the declaring
+ * project reports "Local config (private to you in this project)"; from any other
+ * directory the same command answers "No MCP server named".
+ */
+describe('a server declared at Local scope (QM-53)', () => {
+  const spec = { type: 'stdio', command: 'npx' };
+
+  const declaring = (name: string) =>
+    world(`qm53-local-${name}`, { mcp: { entry: { mcpServers: { [name]: spec } } } });
+
+  test('is attested by config, not reported as a minted key', () => {
+    const w = declaring('google-sheets');
+    const a = attestMcpName(w.ctx, 'google-sheets');
+    assert.equal(a.basis, 'config');
+    assert.equal(a.guessed, null);
+    assert.equal(a.note, null, 'a launch spec on disk is not an unattested name');
+  });
+
+  test('and the plan carries no unattested-id note for it', () => {
+    const w = declaring('google-docs');
+    const plan = planned(planToggles(w.ctx, MCP_AXIS, w.dir, mcp('google-docs', false)));
+    assert.ok(!plan.notes.map((n) => n.code).includes('unattested-id'));
+  });
+
+  /**
+   * A name nothing declares still reads unattested, so the test above is about the source
+   * being read rather than about the branch having been softened.
+   */
+  test('while a name nothing declares still reads unattested', () => {
+    const w = declaring('google-sheets');
+    assert.equal(attestMcpName(w.ctx, 'nobody-declares-this').basis, 'unattested');
+  });
+
+  /**
+   * QM-52's twin check has to see it as manually-configured. `claude mcp add -s local` is
+   * as manual as editing `.mcp.json`, and it is the *highest-precedence* MCP scope — so a
+   * deny against it removes a suppression exactly as a user-scope deny does.
+   */
+  test('suppresses a twin, because a local spec is manually-configured', () => {
+    const w = world('qm53-local-suppresses', {
+      mcp: {
+        entry: { mcpServers: { 'robinhood-trading': spec } },
+        everConnected: ['claude.ai Robinhood'],
+      },
+    });
+    const plan = planned(planToggles(w.ctx, MCP_AXIS, w.dir, mcp('robinhood-trading', false)));
+    const note = plan.notes.find((n) => n.code === 'un-suppresses');
+    assert.ok(note, 'a Local-scope server suppresses its connector twin');
+    assert.match(note.message, /claude\.ai Robinhood \(connector\)/);
+  });
+});

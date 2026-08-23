@@ -16,7 +16,7 @@ server is holding. The MCP and skill controls in the grid stay disabled and say 
 
 ## Architecture
 
-Seven config surfaces decide whether an extension is active. They do not share a
+Eight config surfaces decide whether an extension is active. They do not share a
 mechanism:
 
 | Surface | Location | Controls |
@@ -24,6 +24,7 @@ mechanism:
 | Global plugins | `~/.claude/settings.json` → `enabledPlugins` | on/off everywhere |
 | Project plugins | `<proj>/.claude/settings{,.local}.json` → `enabledPlugins` | per-project override |
 | MCP servers | `~/.claude.json` → `projects[<abspath>].disabledMcpServers` | flat deny-list; covers claude.ai connectors, `plugin:X:Y`, and user servers |
+| MCP Local scope | `~/.claude.json` → `projects[<abspath>].mcpServers` | launch specs private to one project; **highest-precedence** MCP scope (QM-53) |
 | Project MCP | `.mcp.json` + `enabled/disabledMcpjsonServers` | project-declared servers |
 | Skills | `settings{,.local}.json` → `skillOverrides` | per-skill, 4 states: `on` / `name-only` / `user-invocable-only` / `off` |
 | Rules | `.claude/rules/*.md` | `paths:` frontmatter ⇒ loads only on matching files |
@@ -775,6 +776,52 @@ enabled *somewhere*, so a plugin disabled in this project alone still reads as a
 `page.ts` has **no gloss** for `un-suppresses`, deliberately — QM-44's grid writes the plugin
 axis only, so the code cannot reach the wire; the day the grid grows this axis it renders as a
 bare code.
+
+**A whole scope was missing, and the type that hid it was the one nobody labelled
+(QM-53).** `view/model.ts`'s header named `ProjectEntry` as **cast whole** and predicted the
+day it would cost something. It had: `projects[<abspath>].mcpServers` is Claude Code's
+**Local scope** — launch specs private to one project, written by `claude mcp add -s local`,
+removed by `claude mcp remove <name> -s local`, and the *highest-precedence* MCP scope there
+is. Nothing in `src/` read it. Measured on this machine: 69 of 161 project entries carry the
+key, **1** is non-empty, and it holds `google-sheets` and `google-docs` — two servers no
+other source names, so they had no row, no cell and no attestation anywhere in the tool.
+**Confirmed against the live binary before a line was written**, not inferred from the key
+name: `claude mcp get google-sheets` from the declaring project reports `Scope: Local config
+(private to you in this project)`, and from any other directory the same command answers
+`No MCP server named "google-sheets"`. `claude mcp list` from that project lists both.
+**The write path was the sharp end.** `attestMcpName` fell through to `unattested` and the
+plan said the entry *"will match whatever Claude Code calls that server, if anything"* —
+about a server whose launch spec sits two keys away in the document being edited. That is
+the failure that function exists to prevent, arriving because a reader did not look rather
+than because a name was guessed. `localIn` joins `userScope`/`declaredIn`/`scopedIn` in the
+`config` branch, and QM-52's `suppressing` treats a local spec as manually-configured: it is
+the strongest form of manual there is.
+**The link is pushed at `project` scope, which understates where the spec lives, and that is
+a choice rather than an oversight.** `local` is the honest label and is not usable yet,
+because this chain models *on or off* while the deny-list is not ranked against declarations
+by scope at all — it is stronger than any of them. Measured from `~`: `robinhood-trading` is
+declared at user scope, denied for that project, and `claude mcp list` calls it
+`⊘ Disabled for this project`. A deny beats a user- or project-scope declaration today only
+because `local` outranks both and nothing pushes a declaration there; label this one `local`
+and a **denied server resolves `true`**. Promoting the deny to `local` instead would fix that
+and dissolve `resolve.test.ts`'s `round-trip` fixture, whose entire point is two links
+landing at one scope (QM-43). So the conservative label ships, `the deny-list still wins over
+a local declaration` pins it, and the fidelity question is filed rather than guessed —
+verified by mutation, relabelling to `local` reddens exactly that test.
+**The cast itself was not narrowed**, deliberately. Widening `ProjectEntry` to name all 34
+keys it drops would model telemetry this tool has no business reading and would not have put
+`google-sheets` on the axis: the fix was a reader, not a type. `McpServerSpec` stays cast
+whole too — it names 6 keys and carries 0 extra across the 5 top-level and 1
+project-declared specs here, which is today's luck and not a property. The new key's values
+*are* `McpServerSpec`, so they carry `env` and `headers`; nothing publishes them, because
+`McpEntry` crosses the wire as rows and `localIn`'s absolute paths are caught by the two
+live absolute-path sweeps, both of which ran green rather than skipping.
+The day it fails: the one live instance is under `~`, the home-directory collision CLAUDE.md
+already records as breaking things in two layers, so every live observation here is of the
+one project most likely to be special. 68 of the 69 entries carrying the key are `{}` and
+contribute nothing, so the source is exercised by a single real row. And precedence between
+a Local-scope spec and a top-level one of the same name is **unmeasured** — no such pair
+exists on this machine, and establishing it means writing `~/.claude.json`.
 
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
