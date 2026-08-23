@@ -137,6 +137,14 @@ export interface McpEntry {
   /** Projects whose `.mcp.json` declares it, sorted. */
   declaredIn: string[];
   /**
+   * Projects whose `~/.claude.json` entry declares it at **Local scope**, sorted (QM-53).
+   *
+   * Separate from `declaredIn` because the two are different files making the same claim,
+   * and a row has no workspace left to ask which one said it. Both are manually-configured
+   * for `MCP_AXIS.suppressing`; only this one lives in the file `qm set --axis mcp` writes.
+   */
+  localIn: string[];
+  /**
    * The plugin whose catalog entry provides it. Non-null implies the plugin resolves
    * enabled in at least one live project -- a disabled plugin's server does not load,
    * so it is no more a row than a plugin nobody installed.
@@ -195,6 +203,7 @@ export function pluginServerKey(
 interface Acc {
   userScope: boolean;
   declaredIn: Set<string>;
+  localIn: Set<string>;
   fromPlugin: string | null;
   keyBasis: PluginKeyBasis | null;
   everConnected: boolean;
@@ -213,6 +222,7 @@ export function buildMcpCatalog(
       a = {
         userScope: false,
         declaredIn: new Set(),
+        localIn: new Set(),
         fromPlugin: null,
         keyBasis: null,
         everConnected: false,
@@ -231,6 +241,10 @@ export function buildMcpCatalog(
 
   for (const p of ws.projects) {
     if (p.mcpJson) for (const n of Object.keys(p.mcpJson.mcpServers)) of(n).declaredIn.add(p.path);
+    // Local scope (QM-53). Read from every project, live or dead, exactly as the
+    // deny-lists below are: a name only a dead project declares is still a name this
+    // workspace has an opinion about.
+    for (const n of Object.keys(p.entry?.mcpServers ?? {})) of(n).localIn.add(p.path);
     // Dead projects keep their deny-lists -- ten of the differential fixture's do -- and
     // a name only they carry is still a name the workspace has an opinion about.
     for (const n of p.entry?.disabledMcpServers ?? []) of(n).scopedIn.add(p.path);
@@ -261,6 +275,7 @@ export function buildMcpCatalog(
       presence: presenceOf(a),
       userScope: a.userScope,
       declaredIn: [...a.declaredIn].sort(),
+      localIn: [...a.localIn].sort(),
       fromPlugin: a.fromPlugin,
       keyBasis: a.keyBasis,
       everConnected: a.everConnected,
@@ -272,7 +287,11 @@ export function buildMcpCatalog(
 }
 
 function presenceOf(a: Acc): McpPresence {
-  if (a.userScope || a.declaredIn.size > 0 || a.fromPlugin !== null) return 'available';
+  // A local spec is a launch spec on disk, so it is exactly as strong a claim as the
+  // top-level `mcpServers` one -- the same claim, scoped to one project (QM-53).
+  if (a.userScope || a.declaredIn.size > 0 || a.localIn.size > 0 || a.fromPlugin !== null) {
+    return 'available';
+  }
   return a.everConnected ? 'ever-connected' : 'scoped-only';
 }
 

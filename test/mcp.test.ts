@@ -568,7 +568,9 @@ function scenario(): Scenario {
       projects: [
         project('/p', {
           mcpJson: { path: '/p/.mcp.json', mcpServers: { 'proj-srv': spec() } },
-          entry: { disabledMcpServers: ['legacy-srv'] },
+          // Claude Code's Local scope (QM-53). A launch spec in `~/.claude.json` under
+          // this project, which is neither the top-level `mcpServers` nor a `.mcp.json`.
+          entry: { disabledMcpServers: ['legacy-srv'], mcpServers: { 'local-srv': spec() } },
         }),
       ],
       claudeJson: claudeJson({
@@ -596,6 +598,7 @@ function scenario(): Scenario {
 const EXPECTED_AXIS = [
   'claude.ai Gmail',
   'legacy-srv',
+  'local-srv',
   'plugin:Delta:delta',
   'plugin:alpha:alpha',
   'proj-srv',
@@ -685,6 +688,18 @@ interface Mutation {
 }
 
 const MUTATIONS: Mutation[] = [
+  {
+    /**
+     * The source QM-53 added: `projects[<abspath>].mcpServers`, Claude Code's Local
+     * scope. It was unread for the whole life of this file, and on the machine this was
+     * written against that cost two live servers their row entirely.
+     */
+    name: 'drop the Local-scope launch specs',
+    apply: (s) => {
+      for (const p of s.ws.projects) if (p.entry) delete p.entry.mcpServers;
+    },
+    names: /^missing row local-srv$/,
+  },
   {
     /** The source that was missing entirely: `readClaudeJson` dropped this key. */
     name: 'drop the claudeAiMcpEverConnected source',

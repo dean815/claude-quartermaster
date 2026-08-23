@@ -216,6 +216,24 @@ export interface McpServerSpec {
 
 /** One `projects[<abspath>]` entry in `~/.claude.json`. */
 export interface ProjectEntry {
+  /**
+   * Claude Code's **Local scope**: launch specs private to this one project (QM-53).
+   *
+   * Not a variant of the top-level `mcpServers` and not the same thing as a project's
+   * `.mcp.json`. `claude mcp add -s local` writes here, `claude mcp get` labels it
+   * *"Local config (private to you in this project)"*, and `claude mcp remove <name> -s
+   * local` takes it out. It is the **highest-precedence** MCP scope there is.
+   *
+   * It was unread until QM-53 and the cost was not theoretical: measured on this machine,
+   * 69 of 161 project entries carry the key and one is non-empty, holding two servers
+   * (`google-sheets`, `google-docs`) that no other source names. `claude mcp list` from
+   * that project lists both; from any other directory `claude mcp get google-sheets`
+   * answers *"No MCP server named"* -- so they are live, per-project config, and this tool
+   * gave them no row, no cell and no attestation. A `qm set --axis mcp` write against
+   * either would have called the name `unattested` and said it was minting a key, about a
+   * server whose launch spec is two keys away in the file being written.
+   */
+  mcpServers?: Record<string, McpServerSpec>;
   /** Flat deny-list. Covers connectors, `plugin:X:Y` ids, and user-scoped servers alike. */
   disabledMcpServers?: string[];
   enabledMcpServers?: string[];

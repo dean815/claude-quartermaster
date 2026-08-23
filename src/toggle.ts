@@ -571,7 +571,12 @@ export const MCP_AXIS: Axis = {
     // own `.mcp.json` is on the winning side of that. A connector or a plugin server being
     // denied removes no suppression, so it gets no note.
     const manual =
-      self?.userScope || (record !== null && (self?.declaredIn.includes(record.path) ?? false));
+      self?.userScope ||
+      (record !== null &&
+        ((self?.declaredIn.includes(record.path) ?? false) ||
+          // Local scope is manually-configured too, and is the strongest form of it
+          // (QM-53): `claude mcp add -s local` is as manual as editing `.mcp.json`.
+          (self?.localIn.includes(record.path) ?? false)));
     if (!manual) return [];
 
     const service = serviceOfName(req.id);
@@ -692,7 +697,14 @@ export function attestMcpName(ctx: AuditContext, id: string): Attestation {
   if (entry?.keyBasis === 'manifest') {
     return { basis: 'manifest', guessed: null, note: null };
   }
-  if (entry && (entry.userScope || entry.declaredIn.length || entry.scopedIn.length)) {
+  // `localIn` joined this list in QM-53. A Local-scope launch spec is a config file on
+  // this machine holding this exact string -- the same claim `userScope` makes -- and
+  // leaving it out is what let two live servers read `unattested`, in the very file the
+  // write lands in.
+  if (
+    entry &&
+    (entry.userScope || entry.declaredIn.length || entry.localIn.length || entry.scopedIn.length)
+  ) {
     return { basis: 'config', guessed: null, note: null };
   }
   if (entry?.everConnected) {
