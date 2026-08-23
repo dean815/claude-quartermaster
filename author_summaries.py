@@ -35,6 +35,7 @@ TITLES = {
    "2069bab7-8a36-4f18-8c7f-352b851e28b2": "Logic mouse-focus suspects",
    "8a64dbf3-6489-4595-bb71-ece59e77332c": "Google Drive multi-part zip question",
    "local_8fc1d0bd-2486-4acb-b6bd-a94e56668048": "Session sweep that never ran",
+   "96679363-ac01-47af-9172-971b67a60893": "Fresh login, no work yet",
 }
 
 AUTHORED = {
@@ -137,18 +138,23 @@ AUTHORED = {
            "src/view/model.ts with the write path that just landed.")]),
 
 "local_7f3d1925-f4bd-46d1-9879-d07f6646853e": (
-    "The running career-ops chat — job scans and tracker upkeep; the deanhicks.com "
-    "redesign is now shipped.",
-    [("a", "Your GitHub profile still points at deanhicks.me. Ten seconds in profile settings, "
+    "The running career-ops chat — job scans, tracker upkeep, and deanhicks.com; now "
+    "weighing a Signal Trace redesign of the résumé page.",
+    [("q", "Should the site be light? Signal Trace says document mode — light — is the default "
+           "for dense prose pages like a résumé, which contradicts the dark design you picked "
+           "last week. Claude flagged the conflict and stopped rather than pick for you."),
+     ("q", "Should Signal Trace own the site at all? That's the second call Claude wants before "
+           "shipping any of the mockup."),
+     ("a", "Your GitHub profile still points at deanhicks.me. Ten seconds in profile settings, "
            "and it's the link recruiters actually click."),
      ("a", "JOBS-38 is still open: wind deanhicks.me down to Cloudflare Email Routing before "
            "the 2026-11-11 expiry."),
-     ("i", "The redesign is live and verified against the real URL, not localhost — valid cert, "
-           "HTTP/2 200, both self-hosted fonts actually loading, four requests total and zero "
-           "off-site, so the no-external-requests promise in your README still holds."),
-     ("i", "Résumé content and markup are byte-identical to before; index.html changed by one "
-           "line. Dark for OS-dark, light paper otherwise, both measured at WCAG AA (worst pair "
-           "4.97:1), and print still gives the two-page CV."),
+     ("i", "The Signal Trace version is a mockup artifact only — nothing committed, the live "
+           "site untouched. Contrast numbers match the design system's published values digit "
+           "for digit, print still lands on two pages, no overflow at 375px."),
+     ("i", "The shipped redesign is still live and verified against the real URL — valid cert, "
+           "HTTP/2 200, self-hosted fonts, four requests and zero off-site, so the "
+           "no-external-requests promise in your README holds."),
      ("i", "The last scan evaluated 14 roles and every report said don't apply, ceiling 3.9. "
            "Glean #557 contradicts itself — Greenhouse says remote, the JD says hybrid four "
            "days in SF or Mountain View.")]),
@@ -582,15 +588,44 @@ AUTHORED = {
            "re-fire it for any future build.")]),
 
 "local_4234a808-e85b-40a5-8bdf-b18cc33f3003": (
-    "Evaluate a batch of ~30 job postings and land the results in the tracker and Airtable.",
-    [("i", "Batch fully closed out — 27 evaluated, 4 skipped as exact duplicates of existing "
-           "reports, tracker and Airtable both synced and spot-checked. Nothing pending."),
-     ("i", "17 new company records were created bare-minimum (Asana, Tenex, Nectar Social, "
-           "Novig, Nebius, Harness, Ode, Modal, Sierra, Linear, Railway, Runware, LogRocket, "
-           "Oso, Ritual, Meshy, Vibe). Full enrichment — Glassdoor, HQ, valuation — can run "
-           "later via `analyze-companies` whenever you want it."),
+    "Evaluate batches of job postings and land the results in the tracker and Airtable.",
+    [("a", "One eval short of done: Baseten Inference Platform (#621). Claude reported 14/15 and "
+           "ended its turn, so the session won't pick it back up on its own — tell it to finish."),
+     ("i", "The current batch needed retries — Plaid TPM (#628), Chalk FDE (#622) and Reflection "
+           "FDE (#629) all completed on a second or third attempt."),
+     ("i", "The earlier ~30-posting batch is fully closed out — 27 evaluated, 4 skipped as exact "
+           "duplicates, tracker and Airtable synced and spot-checked."),
+     ("i", "17 company records from that batch are still bare-minimum (Asana, Tenex, Nectar "
+           "Social, Novig, Nebius, Harness, Ode, Modal, Sierra, Linear, Railway, Runware, "
+           "LogRocket, Oso, Ritual, Meshy, Vibe). Full enrichment — Glassdoor, HQ, valuation — "
+           "can run later via `analyze-companies` whenever you want it."),
      ("i", "11 of 25 roles have no salary data because none was disclosed, not because the sync "
            "missed it.")]),
+
+"96679363-ac01-47af-9172-971b67a60893": (
+    "A fresh terminal in ~/claude/general, opened and logged into — no work in it yet.",
+    [("i", "Only a /login. Nothing asked, nothing pending; it'll get a real summary once it "
+           "has a subject.")]),
+
+"cf24f1e7-7602-44e0-bdfb-57c680cb4dcd": (
+    "The main chat for claude-quartermaster — the read-only CLI that audits which Claude "
+    "Code extensions load in which projects and what they cost.",
+    [("q", "QM-8 is still on your scoping call, and it's the one blocking the backlog: is "
+           "encoding published first-party guidance a fact this tool reports, or the judgement "
+           "it hands back? Claude's correction narrowed it but left the question untouched."),
+     ("q", "QM-54 was filed deliberately to be decided, not done. Reading plugin `.mcp.json` "
+           "would upgrade exactly one row from inferred to exact and move zero QM-31 findings, "
+           "against reversing a documented exclusion. Claude's lean is no; the issue lists what "
+           "would change that."),
+     ("i", "Backlog is down to those two and neither is Claude's to start. Latest merge is in — "
+           "main at c7aecf4, branch deleted, tree clean, 720 tests with one pre-existing skip. "
+           "QM-53 closed as Done."),
+     ("i", "Three issues landed today off one research transcript: QM-52 (the un-suppression "
+           "note — `qm set --axis mcp <name>=off` writes `disabledMcpServers`, which can "
+           "un-suppress the copies it was suppressing), QM-53 (Local scope reader), QM-54."),
+     ("i", "Worth knowing: the live instance sits under `~`, which CLAUDE.md already records as "
+           "breaking things in two separate layers — so every live observation of the new scope "
+           "surface came from the one project least likely to be representative.")]),
 }
 
 
