@@ -66,9 +66,47 @@
  * between a resolved `Cell` and `skillPresenceIn`, and it is drawn here for the same
  * reason.
  */
+import { normalizeServerName } from './cost/transcript.ts';
 import { pluginNamespace, type PluginInventory, type PluginKeyBasis } from './inventory.ts';
 import { resolvePlugin } from './resolve.ts';
 import type { Workspace } from './surfaces/types.ts';
+
+/**
+ * The service two names are both a path to. `claude_ai_Linear`, `linear-server` and
+ * `plugin_productivity_linear` all reduce to `linear`.
+ *
+ * **Moved here from `detect.ts` in QM-52 rather than copied.** It had one caller and now
+ * has two -- `duplicateAccessPaths` asking it of a transcript namespace, and
+ * `MCP_AXIS.suppressing` asking it of a config key -- and a second copy is how the two
+ * would drift the moment either grew a suffix. It lives in `mcp.ts` because the vocabulary
+ * is this module's, and because `toggle.ts` already imports from here while a value edge to
+ * `detect.ts` would be new.
+ *
+ * Takes a **namespace**, so a config key has to be put through `normalizeServerName` first
+ * (`serviceOfName` does that and is the form config-side callers want). The direction is
+ * the exact one: config key -> namespace, never back (`mcp.ts` header, DEA-123).
+ *
+ * The suffix list is three literals and CLAUDE.md already names the risk -- two genuinely
+ * different services named apart only by `-server` would merge. Checked across the 145
+ * live namespaces when it was written; both collapses it causes are correct. QM-52
+ * considered widening it to strip a trailing `.io`/`.com`, which would have caught
+ * `raindrop` against `claude.ai raindrop.io`, and **declined**: that turns every
+ * dotted connector name into a prefix match on a shared predicate, and the cost of a wrong
+ * merge here is a note claiming a suppression that does not exist. The miss is reported
+ * instead.
+ */
+export function serviceOf(namespace: string): string {
+  return namespace
+    .replace(/^claude_ai_/, '')
+    .replace(/^plugin_[^_]+_/, '')
+    .replace(/-(trading|server|mcp)$/, '')
+    .toLowerCase();
+}
+
+/** `serviceOf` for a name as a config file spells it, rather than as a transcript does. */
+export function serviceOfName(name: string): string {
+  return serviceOf(normalizeServerName(name));
+}
 
 /**
  * How well the workspace can account for a server.

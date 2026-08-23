@@ -731,6 +731,51 @@ statement about first-party's key space rather than a recording of it, and there
 recording to be had, because the keys this exists for are the ones first-party has not
 shipped yet.
 
+**The only write that can increase what loads, and the basis it was specified with does
+not exist (QM-52).** `qm set --axis mcp <name>=off` writes a deny, and on a
+manually-configured server that deny *removes a suppression*: Claude Code hides an MCP
+server whose launch signature duplicates a manually-configured one, and builds that map
+from the servers that are **enabled** — so denying the winner takes it out of the map and
+the copies it was hiding come back. Measured on this machine: of 1,269 deny entries over
+34 names, only **4** name a manually-configured server (140 entries) and **3** of those
+have a twin; **119 entries already sit in this shape**, written by `/mcp disable` before
+`qm set` existed. `Axis.suppressing` is empty on the settings axes and not by omission —
+a plugin and a skill either load or do not, and no first-party mechanism substitutes one
+for another.
+**The issue asked for two bases and one of them is unreachable.** It specified `url` where
+both halves carry a launch signature and `name` otherwise, with
+`linear-server` ↔ `plugin:linear:linear` as the exact case. A plugin's `.mcp.json` sits
+under its install path, which `detect.ts` says nothing reads *deliberately*;
+`plugin-catalog-cache.json` carries server **names** and no specs (checked — every
+`mcpServers` value in it is a list of strings); and a connector's URL is declared in
+claude.ai. The one pairing whose halves *are* both readable — a user-scope spec against a
+project `.mcp.json` — is not signature-deduplicated at all, because the three manual scopes
+collide **by name** and the highest wins. So the only two pairings that suppress are exactly
+the two whose other half has no readable URL, every match is inferred, and the note says so
+in words rather than carrying a `basis` field with one reachable value.
+**`serviceOf` moved rather than being copied**, and its miss is pinned as a test. With three
+suffix literals the name match finds the twin for 2 of the 3 live pairs and misses `raindrop`
+against `claude.ai raindrop.io` — `raindrop_io` is not `raindrop`. Widening it to strip a
+trailing TLD was rejected: `duplicateAccessPaths` reads the same predicate, and a wrong merge
+there is a finding about two services that are not one. `a service whose two spellings differ
+by more than the suffix list is missed` asserts the silence, so widening it goes red in two
+suites at once and has to be argued for.
+**Two guards were masking each other and only mutation said so.** Deleting the
+manually-configured check and deleting the plugin-or-connector filter each left all 710 tests
+green *on their own*, because every fixture reaching one was stopped by the other — DEA-149's
+defect, on a new axis. Two cases separate them: two manual servers at one service (precedence,
+not suppression) and a connector denied while a plugin twin exists. Seven mutations are run and
+each reddens the fixture built for it. A third hole was in the fixture rather than the source:
+the first plugin twin used manifest `linear` under id `linear@marketplace`, so the manifest name
+and the id prefix collapsed to the same key and DEA-145's own mutation stayed green.
+The day it fails: the note fires on a name comparison and observes no suppression, so it is a
+claim about first-party behaviour recorded in one research session and never re-checked here.
+The enabled-only filter reads this project's deny-list but only whether a twin's plugin is
+enabled *somewhere*, so a plugin disabled in this project alone still reads as a live twin. And
+`page.ts` has **no gloss** for `un-suppresses`, deliberately — QM-44's grid writes the plugin
+axis only, so the code cannot reach the wire; the day the grid grows this axis it renders as a
+bare code.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32
