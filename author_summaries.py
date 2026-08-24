@@ -128,14 +128,19 @@ AUTHORED = {
 "local_cf24f1e7-7602-44e0-bdfb-57c680cb4dcd": (
     "Main working chat for Claude Quartermaster — design, build and issue triage.",
     [("q", "QM-8 / Phase 3 is still blocked on your scoping call: is encoding first-party "
-           "guidance a fact the tool reports, or the judgement it hands back?"),
-     ("a", "Close QM-48 as Done pointing at PR #43 — it was decided inside QM-44 "
-           "(`Attestation.basis` is not published, doc corrected) but left open in Linear for "
-           "you. Reopen it instead if you disagree with not publishing."),
-     ("i", "QM-44 merged: the grid writes now, 697 tests, clean tree, no open PRs. The Phase 2 "
-           "badge is gone."),
-     ("i", "QM-30 (retire `SettingsFile.rest`) is the suggested next one — it shares "
-           "src/view/model.ts with the write path that just landed.")]),
+           "guidance a fact the tool reports, or the judgement it hands back? Claude's "
+           "correction narrowed it — the duplication half is a two-branch fact, not a single "
+           "rule — but the question itself is untouched."),
+     ("a", "Decide QM-54 (Low), filed deliberately to be decided rather than done: reading "
+           "plugin `.mcp.json` upgrades exactly one row from inferred to exact and moves zero "
+           "QM-31 findings, against reversing a documented exclusion."),
+     ("i", "The backlog is down to those two and neither is Claude's to start. Three issues "
+           "landed in the last run — QM-52, QM-53, plus QM-54 filed. Main at `c7aecf4`, branch "
+           "deleted, tree clean, 720 tests / 719 pass / 1 pre-existing skip."),
+     ("i", "Worth knowing from the QM-53 work: the live instance sits under `~`, which "
+           "CLAUDE.md already records as breaking things in two layers — so every live "
+           "observation of that new surface comes from the one project most likely to be "
+           "unrepresentative.")]),
 
 "local_7f3d1925-f4bd-46d1-9879-d07f6646853e": (
     "The running career-ops chat — job scans, tracker upkeep, and deanhicks.com; now "
@@ -158,6 +163,15 @@ AUTHORED = {
      ("i", "The last scan evaluated 14 roles and every report said don't apply, ceiling 3.9. "
            "Glean #557 contradicts itself — Greenhouse says remote, the JD says hybrid four "
            "days in SF or Mountain View.")]),
+
+"local_84da0d6c-a62f-470d-a51b-16cd357f650e": (
+    "A fresh run of the career-ops cleanup routine — the housekeeping pass over the "
+    "job-search tracker and its working files.",
+    [("a", "It is parked on a multiple-choice prompt from the cleanup skill four turns in "
+           "and cannot move until you pick. Open the session and answer it, or close it if "
+           "you started the cleanup by accident."),
+     ("i", "Nothing has been changed yet — the run stopped at the question before touching "
+           "the tracker.")]),
 
 "b50d1a54-3cfe-4033-bd63-a06e9ce27c24": (
     "Draft answers to Cursor's application questions, stress-test them with peer agents, "

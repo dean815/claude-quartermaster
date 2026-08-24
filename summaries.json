@@ -30,31 +30,31 @@
       "title": "chord-chart-maker — M7 Phase A"
     },
     "local_cf24f1e7-7602-44e0-bdfb-57c680cb4dcd": {
-      "stamp": "2026-08-23T19:46:33.708000Z",
-      "turns": 210,
+      "stamp": "2026-08-23T19:46:52.069000Z",
+      "turns": 211,
       "purpose": "Main working chat for Claude Quartermaster — design, build and issue triage.",
       "next": [
         {
           "type": "q",
-          "text": "QM-8 / Phase 3 is still blocked on your scoping call: is encoding first-party guidance a fact the tool reports, or the judgement it hands back?"
+          "text": "QM-8 / Phase 3 is still blocked on your scoping call: is encoding first-party guidance a fact the tool reports, or the judgement it hands back? Claude's correction narrowed it — the duplication half is a two-branch fact, not a single rule — but the question itself is untouched."
         },
         {
           "type": "a",
-          "text": "Close QM-48 as Done pointing at PR #43 — it was decided inside QM-44 (`Attestation.basis` is not published, doc corrected) but left open in Linear for you. Reopen it instead if you disagree with not publishing."
+          "text": "Decide QM-54 (Low), filed deliberately to be decided rather than done: reading plugin `.mcp.json` upgrades exactly one row from inferred to exact and moves zero QM-31 findings, against reversing a documented exclusion."
         },
         {
           "type": "i",
-          "text": "QM-44 merged: the grid writes now, 697 tests, clean tree, no open PRs. The Phase 2 badge is gone."
+          "text": "The backlog is down to those two and neither is Claude's to start. Three issues landed in the last run — QM-52, QM-53, plus QM-54 filed. Main at `c7aecf4`, branch deleted, tree clean, 720 tests / 719 pass / 1 pre-existing skip."
         },
         {
           "type": "i",
-          "text": "QM-30 (retire `SettingsFile.rest`) is the suggested next one — it shares src/view/model.ts with the write path that just landed."
+          "text": "Worth knowing from the QM-53 work: the live instance sits under `~`, which CLAUDE.md already records as breaking things in two layers — so every live observation of that new surface comes from the one project most likely to be unrepresentative."
         }
       ]
     },
     "local_7f3d1925-f4bd-46d1-9879-d07f6646853e": {
-      "stamp": "2026-08-23T17:53:50.676000Z",
-      "turns": 44,
+      "stamp": "2026-08-23T22:12:27.096000Z",
+      "turns": 45,
       "purpose": "The running career-ops chat — job scans, tracker upkeep, and deanhicks.com; now weighing a Signal Trace redesign of the résumé page.",
       "next": [
         {
@@ -84,6 +84,21 @@
         {
           "type": "i",
           "text": "The last scan evaluated 14 roles and every report said don't apply, ceiling 3.9. Glean #557 contradicts itself — Greenhouse says remote, the JD says hybrid four days in SF or Mountain View."
+        }
+      ]
+    },
+    "local_84da0d6c-a62f-470d-a51b-16cd357f650e": {
+      "stamp": "2026-08-23T20:47:38.502000Z",
+      "turns": 4,
+      "purpose": "A fresh run of the career-ops cleanup routine — the housekeeping pass over the job-search tracker and its working files.",
+      "next": [
+        {
+          "type": "a",
+          "text": "It is parked on a multiple-choice prompt from the cleanup skill four turns in and cannot move until you pick. Open the session and answer it, or close it if you started the cleanup by accident."
+        },
+        {
+          "type": "i",
+          "text": "Nothing has been changed yet — the run stopped at the question before touching the tracker."
         }
       ]
     },
@@ -197,53 +212,6 @@
       ],
       "title": "Plugin and MCP console session"
     },
-    "677cc1ea-5bdb-4cd8-bd1a-08a5a61e1bc0": {
-      "stamp": "2026-08-17T14:34:02.658Z",
-      "turns": 6,
-      "purpose": "Nothing happened here — a /login that was interrupted.",
-      "next": [
-        {
-          "type": "i",
-          "text": "Three messages, no conversation. Close it."
-        }
-      ],
-      "title": "Interrupted login"
-    },
-    "local_8f672474-ae9d-432b-99a0-c4b396b03255": {
-      "stamp": "2026-08-17T14:17:55.519000Z",
-      "turns": 2,
-      "purpose": "Automated Tool Stack daily-brief run, which you then answered live to correct an Airtable record.",
-      "next": [
-        {
-          "type": "a",
-          "text": "The commit is local — `916759c` (Warp Build: Claude Usable no → yes) has not been pushed."
-        },
-        {
-          "type": "i",
-          "text": "Both research tiers were empty for the window; the only finding was your own data being wrong. Claude Code still 2.1.233."
-        },
-        {
-          "type": "i",
-          "text": "It declined to invent an `Access` value for 'Claude Code plugin' — the schema has no such choice and adding one is outside lane 2."
-        }
-      ]
-    },
-    "2069bab7-8a36-4f18-8c7f-352b851e28b2": {
-      "stamp": "2026-08-17T05:53:22.883Z",
-      "turns": 4,
-      "purpose": "Find what was stealing mouse focus in Logic Pro.",
-      "next": [
-        {
-          "type": "a",
-          "text": "Two suspects cleared, four still live if it recurs: Wispr Flow (11 processes with a global key listener), Universal Control, Granola, BetterDisplay."
-        },
-        {
-          "type": "i",
-          "text": "Five LogicProMCP processes are gone, so the logic-pro MCP tools are disconnected for that session until it reconnects. Loom uninstalled — 824MB, no recordings lost; its Screen Recording and Accessibility entries survive in the TCC database and can only be removed from System Settings."
-        }
-      ],
-      "title": "Logic mouse-focus suspects"
-    },
     "local_80f5f8b4-33a6-445b-98d3-53b0e8e769e7": {
       "stamp": "2026-08-19T16:01:30.507000Z",
       "turns": 10,
@@ -338,8 +306,8 @@
       ]
     },
     "local_66995bb1-9a44-4b63-9c19-fb9a957a9743": {
-      "stamp": "2026-08-23T19:45:36.905000Z",
-      "turns": 8,
+      "stamp": "2026-08-24T18:23:06.279000Z",
+      "turns": 9,
       "purpose": "Build out Session Fleet's UI and tooling — hide unattended routine runs, tighten the row layout, and turn the re-summarize workflow into a skill.",
       "next": [
         {
@@ -437,33 +405,6 @@
         {
           "type": "i",
           "text": "The app-build prompt is written to be reusable — swap the app description and re-fire it for any future build."
-        }
-      ]
-    },
-    "local_4234a808-e85b-40a5-8bdf-b18cc33f3003": {
-      "stamp": "2026-08-23T18:02:57.693000Z",
-      "turns": 35,
-      "purpose": "Evaluate batches of job postings and land the results in the tracker and Airtable.",
-      "next": [
-        {
-          "type": "a",
-          "text": "One eval short of done: Baseten Inference Platform (#621). Claude reported 14/15 and ended its turn, so the session won't pick it back up on its own — tell it to finish."
-        },
-        {
-          "type": "i",
-          "text": "The current batch needed retries — Plaid TPM (#628), Chalk FDE (#622) and Reflection FDE (#629) all completed on a second or third attempt."
-        },
-        {
-          "type": "i",
-          "text": "The earlier ~30-posting batch is fully closed out — 27 evaluated, 4 skipped as exact duplicates, tracker and Airtable synced and spot-checked."
-        },
-        {
-          "type": "i",
-          "text": "17 company records from that batch are still bare-minimum (Asana, Tenex, Nectar Social, Novig, Nebius, Harness, Ode, Modal, Sierra, Linear, Railway, Runware, LogRocket, Oso, Ritual, Meshy, Vibe). Full enrichment — Glassdoor, HQ, valuation — can run later via `analyze-companies` whenever you want it."
-        },
-        {
-          "type": "i",
-          "text": "11 of 25 roles have no salary data because none was disclosed, not because the sync missed it."
         }
       ]
     },
