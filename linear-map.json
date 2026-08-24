@@ -16,5 +16,6 @@
   "linkedin-mcp-server": "LI",
   "cloud-planning": "CLOUD",
   "general": "DEA",
-  "fleetview": "DEA"
+  "fleetview": "DEA",
+  "session-fleet": "DEA"
 }
