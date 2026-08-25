@@ -88,7 +88,7 @@ import {
   type PendingChange,
   type WriteTarget,
 } from './effect.ts';
-import { buildMcpCatalog, serviceOfName } from './mcp.ts';
+import { buildMcpCatalog, launchSignature, pluginServerKey, serviceOfName } from './mcp.ts';
 import {
   PROJECT_SCOPES,
   SKILL_VALUES,
@@ -100,7 +100,7 @@ import {
 import { resolveMcpServer, resolvePlugin, resolveSkill } from './resolve.ts';
 import { buildSkillCatalog } from './skills.ts';
 import { applyEdits, stageEdits, type Edit, type Stage } from './surfaces/write.ts';
-import type { ProjectRecord, SettingsFile, Workspace } from './surfaces/types.ts';
+import type { McpServerSpec, ProjectRecord, SettingsFile, Workspace } from './surfaces/types.ts';
 
 /** The filename the settings axes write. Read by `apply.ts`'s last guard. */
 export const TARGET_FILENAME = 'settings.local.json';
@@ -195,6 +195,44 @@ export interface Attestation {
 }
 
 /**
+ * `config name -> launch signature`, over every source that carries a spec (QM-54).
+ *
+ * User scope, QM-53's Local scope, a project's own `.mcp.json`, and -- new here -- each
+ * installed plugin build's own `.mcp.json`. A claude.ai connector is absent by
+ * construction: it is declared in claude.ai and leaves no spec on disk, which is why
+ * `basis: name` remains reachable and is the common case.
+ *
+ * Keyed by the **config name** rather than the transcript namespace, because that is what
+ * `Axis.suppressing` holds. A name two sources give different signatures for is dropped
+ * rather than picked between -- the same rule `urlIndex` follows, for the same reason.
+ */
+function signatureIndex(ctx: AuditContext): Map<string, string> {
+  const seen = new Map<string, Set<string>>();
+  const add = (name: string, spec: McpServerSpec) => {
+    const sig = launchSignature(spec);
+    if (!sig) return;
+    const set = seen.get(name) ?? new Set<string>();
+    set.add(sig);
+    seen.set(name, set);
+  };
+
+  for (const [name, spec] of Object.entries(ctx.ws.claudeJson.mcpServers)) add(name, spec);
+  for (const p of ctx.ws.projects) {
+    for (const [name, spec] of Object.entries(p.entry?.mcpServers ?? {})) add(name, spec);
+    for (const [name, spec] of Object.entries(p.mcpJson?.mcpServers ?? {})) add(name, spec);
+  }
+  for (const inv of ctx.inventories.values()) {
+    for (const [name, spec] of Object.entries(inv.mcpServerSpecs)) {
+      add(pluginServerKey(inv.id, name, inv.manifestName), spec);
+    }
+  }
+
+  const out = new Map<string, string>();
+  for (const [name, set] of seen) if (set.size === 1) out.set(name, [...set][0]!);
+  return out;
+}
+
+/**
  * A copy of one service that a deny would make reachable again (QM-52).
  *
  * `kind` is what the other path *is*, never which one wins. Which copy takes over is
@@ -209,6 +247,16 @@ export interface SuppressedTwin {
   /** The name a deny-list would use for this other path. */
   name: string;
   kind: 'plugin' | 'connector';
+  /**
+   * How this twin was identified (QM-54).
+   *
+   * `signature` means both halves carried a launch spec and the two matched byte-exactly,
+   * which is what Claude Code itself compares. `name` means at least one half has no
+   * readable spec -- a claude.ai connector never does -- so the match is inferred from the
+   * spelling. Printed, because folding the difference into one word is how a guess starts
+   * reading like a measurement (`duplicateAccessPaths` makes the same argument).
+   */
+  basis: 'signature' | 'name';
 }
 
 /**
@@ -580,6 +628,13 @@ export const MCP_AXIS: Axis = {
     if (!manual) return [];
 
     const service = serviceOfName(req.id);
+    // QM-54: compare launch signatures where both halves have one. A plugin build's
+    // `.mcp.json` is read now, so a manual-vs-plugin pair is byte-exact rather than a
+    // spelling match -- and unlike the *duplicate* question a mismatch is conclusive
+    // here, because first-party suppresses on signature equality. A connector has no
+    // readable spec and stays name-only.
+    const signatures = signatureIndex(ctx);
+    const mine = signatures.get(req.id) ?? null;
     // The map is built from *enabled* servers, which is the whole mechanism: a twin this
     // project already denies is not in it either, so removing this suppression does not
     // make that twin load and there is nothing to warn about.
@@ -592,10 +647,18 @@ export const MCP_AXIS: Axis = {
       // three scopes collide by name and the highest one simply wins.
       .filter((e) => e.fromPlugin !== null || e.everConnected)
       .filter((e) => !denied.has(e.name))
-      .filter((e) => serviceOfName(e.name) === service)
+      .filter((e) => {
+        const theirs = signatures.get(e.name) ?? null;
+        if (mine !== null && theirs !== null) return mine === theirs;
+        return serviceOfName(e.name) === service;
+      })
       .map((e) => ({
         name: e.name,
         kind: e.fromPlugin !== null ? ('plugin' as const) : ('connector' as const),
+        basis:
+          mine !== null && signatures.get(e.name) !== undefined
+            ? ('signature' as const)
+            : ('name' as const),
       }));
   },
   entryIn: (doc, project, id) => (denyList(doc, project)?.includes(id) ? false : null),
@@ -1554,6 +1617,18 @@ function notesFor(
     const twins = input.axis.suppressing(input.ctx, input.record, req);
     if (twins.length === 0) continue;
     const listed = twins.map((t) => `${t.name} (${t.kind})`).join(', ');
+    // QM-54: say which comparison was actually made. `signature` is what Claude Code
+    // itself compares; `name` is a spelling match and the note has always said so.
+    const exact = twins.every((t) => t.basis === 'signature');
+    const howMatched = exact
+      ? 'Matched on the launch signature these share, which is what Claude Code compares, ' +
+        'so this is exact.'
+      : twins.some((t) => t.basis === 'signature')
+        ? 'Some of these matched on the launch signature, which is exact; the rest on the ' +
+          'service name, which is inferred — a claude.ai connector declares its spec in ' +
+          'claude.ai and leaves nothing here to compare.'
+        : 'The match is by service name and is inferred, not exact: no launch spec this ' +
+          'tool can read covers both sides.';
     notes.push({
       code: 'un-suppresses',
       message:
@@ -1561,9 +1636,7 @@ function notesFor(
         `launch signature duplicates a manually-configured one, and builds that map from ` +
         `enabled servers only — so turning this one off makes ${listed} reachable again. ` +
         'Which of them ends up loading depends on how Claude Code was started, so this does ' +
-        'not say. The match is by service name and is inferred, not exact: a plugin keeps ' +
-        "its launch spec under its install path and a connector's is declared in claude.ai, " +
-        'so neither URL is readable here to compare.',
+        `not say. ${howMatched}`,
     });
   }
 

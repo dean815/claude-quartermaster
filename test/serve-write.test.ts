@@ -99,6 +99,7 @@ const inventory = (id: string): PluginInventory => ({
   installed: null,
   // Enumerated with no MCP server, so `classify` answers `reload` from a catalog rather
   // than from the absence of transcripts.
+  mcpServerSpecs: {},
   enumerated: [
     { source: 'catalog', names: [], skillNames: [], mcpServerNames: [], sha: null, version: null, fetchedAt: null },
   ],

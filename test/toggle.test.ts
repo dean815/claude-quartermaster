@@ -104,6 +104,7 @@ const inventory = (id: string): PluginInventory => ({
   // A source that enumerated it and found no MCP server: `reload`, by the catalog rather
   // than by an observation, so the effect line below is not an artefact of empty
   // transcripts.
+  mcpServerSpecs: {},
   enumerated: [
     { source: 'catalog', names: [], skillNames: [], mcpServerNames: [], sha: null, version: null, fetchedAt: null },
   ],
@@ -152,7 +153,13 @@ function world(
      * point of the key is that the manifest name and the marketplace id can disagree --
      * DEA-145's defect is invisible on any fixture where they happen to match.
      */
-    pluginServer?: { id: string; manifestName: string | null; server: string };
+    pluginServer?: {
+      id: string;
+      manifestName: string | null;
+      server: string;
+      /** The plugin build's own `.mcp.json` entry, for the signature cases (QM-54). */
+      spec?: McpServerSpec;
+    };
   } = {},
 ): World {
   const dir = join(root, name);
@@ -242,6 +249,7 @@ function world(
               {
                 ...inventory(ps.id),
                 manifestName: ps.manifestName,
+                mcpServerSpecs: ps.spec ? { [ps.server]: ps.spec } : {},
                 enumerated: [
                   {
                     source: 'catalog' as const,
@@ -709,6 +717,7 @@ function unreadableManifest(): World {
   const inv: PluginInventory = {
     ...inventory('notion@m'),
     manifestName: null,
+    mcpServerSpecs: {},
     enumerated: [
       {
         source: 'catalog',
@@ -2341,5 +2350,78 @@ describe('a server declared at Local scope (QM-53)', () => {
     const note = plan.notes.find((n) => n.code === 'un-suppresses');
     assert.ok(note, 'a Local-scope server suppresses its connector twin');
     assert.match(note.message, /claude\.ai Robinhood \(connector\)/);
+  });
+});
+
+/**
+ * The twin match, once a plugin's launch spec is readable (QM-54).
+ *
+ * QM-52 shipped name-only, and said so in the note, because `basis: url` was structurally
+ * unreachable: nothing read a plugin build's `.mcp.json`. It does now, so a manual-vs-plugin
+ * pair is compared on the string Claude Code itself compares.
+ *
+ * **A mismatch is conclusive here, and that is the asymmetry with `duplicateAccessPaths`.**
+ * There, differing URLs prove nothing -- `amplitude` and `amplitude-eu` are one service
+ * behind two endpoints, so a mismatch must never suppress a finding. Here the question is
+ * "will Claude Code suppress this twin", it suppresses on signature equality, and two specs
+ * that differ do not. So the mismatch removes a false positive rather than hiding a real one.
+ */
+describe('twin matching by launch signature (QM-54)', () => {
+  const spec = (url: string) => ({ type: 'http', url });
+
+  const withPlugin = (name: string, userUrl: string, pluginUrl: string) =>
+    world(name, {
+      mcp: { mcpServers: { 'linear-server': spec(userUrl) }, entry: {} },
+      pluginServer: {
+        id: 'linear@marketplace',
+        manifestName: 'Linear',
+        server: 'linear',
+        spec: spec(pluginUrl),
+      },
+    });
+
+  const note = (w: World) =>
+    planned(planToggles(w.ctx, MCP_AXIS, w.dir, mcp('linear-server', false))).notes.find(
+      (n) => n.code === 'un-suppresses',
+    );
+
+  test('matching signatures report the match as exact', () => {
+    const n = note(withPlugin('qm54-match', 'https://mcp.linear.app/mcp', 'https://mcp.linear.app/mcp'));
+    assert.ok(n, 'a same-signature twin still fires');
+    assert.match(n.message, /plugin:Linear:linear \(plugin\)/);
+    assert.match(n.message, /Matched on the launch signature these share/);
+    assert.doesNotMatch(n.message, /inferred, not exact/);
+  });
+
+  /** The false positive the reader buys: same service name, different endpoints. */
+  test('a signature mismatch is conclusive, so no note fires', () => {
+    const w = withPlugin('qm54-mismatch', 'https://mcp.linear.app/mcp', 'https://eu.linear.app/mcp');
+    assert.equal(note(w), undefined, 'two different endpoints do not suppress each other');
+  });
+
+  /** Byte-exact: a trailing slash is a different server, because first-party says so. */
+  test('and a trailing slash counts as a mismatch', () => {
+    const w = withPlugin('qm54-slash', 'https://mcp.linear.app/mcp', 'https://mcp.linear.app/mcp/');
+    assert.equal(note(w), undefined);
+  });
+
+  /**
+   * A connector declares its spec in claude.ai, so one half is never comparable and the
+   * name match stays the only option. This is the common case, not the exception.
+   */
+  test('a connector twin still matches by name and still says inferred', () => {
+    const w = world('qm54-connector', {
+      mcp: {
+        mcpServers: { 'robinhood-trading': spec('https://agent.robinhood.com/mcp/trading') },
+        everConnected: ['claude.ai Robinhood'],
+        entry: {},
+      },
+    });
+    const n = planned(
+      planToggles(w.ctx, MCP_AXIS, w.dir, mcp('robinhood-trading', false)),
+    ).notes.find((x) => x.code === 'un-suppresses');
+    assert.ok(n);
+    assert.match(n.message, /claude\.ai Robinhood \(connector\)/);
+    assert.match(n.message, /inferred, not exact/);
   });
 });

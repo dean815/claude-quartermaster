@@ -23,6 +23,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 
+import type { McpServerSpec } from './surfaces/types.ts';
+
 /** One source's claim about a plugin's contents. */
 export interface SourceEnumeration {
   /** The file it came from, named so a reader can go and check it. */
@@ -73,6 +75,11 @@ export interface PluginInventory {
   installed: string[] | null;
   /** Sources covering this plugin. Empty when none does. */
   enumerated: SourceEnumeration[];
+  /**
+   * Launch specs from this build's own `.mcp.json`, `${CLAUDE_PLUGIN_ROOT}` expanded
+   * (QM-54). Empty when the build ships none, which is 35 of the 44 installed here.
+   */
+  mcpServerSpecs: Record<string, McpServerSpec>;
 }
 
 export interface InstalledBuild {
@@ -158,6 +165,78 @@ export function readManifestName(installPath: string | null | undefined): string
     // can outlive the build it held.
     return null;
   }
+}
+
+/**
+ * The MCP servers a plugin build declares in its own `.mcp.json` (QM-54).
+ *
+ * **This file was deliberately unread until now**, and `detect.ts` said so in as many
+ * words. What changed is that a consumer appeared: QM-52's twin match and
+ * `duplicateAccessPaths` both compare access paths, and without these specs the plugin
+ * half of every comparison carries no launch signature, so *every* match either tool can
+ * make is inferred from the namespace spelling. Measured before building: reading them
+ * upgrades exactly **one** row on this machine (`linear-server` against
+ * `plugin:linear:linear`) and **zero** `duplicateAccessPaths` findings. That is a thin
+ * return, recorded here rather than implied, so the next person can weigh removing it.
+ *
+ * **Read through `installedBuilds`, never by globbing the plugin tree.** A glob under
+ * `~/.claude/plugins` finds 38 `.mcp.json` files here where only 9 belong to installed
+ * builds; the rest are previous versions still on disk. Measured: the glob produces six
+ * "duplicate signature" groups and **all six are one plugin matching an older copy of
+ * itself**. Taking the path from the build record makes that unreachable rather than
+ * merely unlikely, which is why there is no fixture for it -- the shape cannot be
+ * constructed through this function.
+ *
+ * `${CLAUDE_PLUGIN_ROOT}` is expanded against the build's own install path, because the
+ * signature Claude Code compares is the one it launches. 2 of the 9 live specs carry it.
+ * Left unexpanded it is a *shared literal*: under the stale-directory glob the same
+ * template string was carried by four unrelated plugins (`imessage`, `discord`,
+ * `fakechat`, `telegram`), which a signature index merges into one false group. Expansion
+ * is what keeps the byte-exact comparison honest rather than exact about the wrong bytes.
+ *
+ * Third-party JSON, so every value is checked rather than cast: a spec that is not an
+ * object, or whose `args` are not all strings, is dropped. Both shapes `.mcp.json` takes
+ * are accepted -- a top-level `mcpServers` object, or the servers as top-level keys.
+ */
+export function readPluginMcpServers(
+  installPath: string | null | undefined,
+): Record<string, McpServerSpec> {
+  if (!installPath) return {};
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(join(installPath, '.mcp.json'), 'utf8'));
+  } catch {
+    // Most builds ship none. Missing and malformed are the same answer: nothing declared.
+    return {};
+  }
+  if (!raw || typeof raw !== 'object') return {};
+
+  const container = (raw as { mcpServers?: unknown }).mcpServers;
+  const servers =
+    container && typeof container === 'object'
+      ? (container as Record<string, unknown>)
+      : (raw as Record<string, unknown>);
+
+  const expand = (v: string) => v.split('${CLAUDE_PLUGIN_ROOT}').join(installPath);
+  const out: Record<string, McpServerSpec> = {};
+  for (const [name, value] of Object.entries(servers)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const v = value as Record<string, unknown>;
+    // The two keys a launch signature can be built from. A spec carrying neither is not
+    // a server this can compare, so it contributes no row rather than an empty one.
+    const url = typeof v.url === 'string' ? expand(v.url) : undefined;
+    const command = typeof v.command === 'string' ? expand(v.command) : undefined;
+    if (url === undefined && command === undefined) continue;
+    const rawArgs = Array.isArray(v.args) ? v.args : [];
+    if (!rawArgs.every((a) => typeof a === 'string')) continue;
+    out[name] = {
+      ...(typeof v.type === 'string' ? { type: v.type } : {}),
+      ...(url !== undefined ? { url } : {}),
+      ...(command !== undefined ? { command } : {}),
+      ...(rawArgs.length ? { args: (rawArgs as string[]).map(expand) } : {}),
+    };
+  }
+  return out;
 }
 
 /**
@@ -330,6 +409,7 @@ export function readInventories(home: string): Map<string, PluginInventory> {
       manifestName: readManifestName(build.installPath),
       installed: componentNames(build.installPath),
       enumerated: entry ? [entry] : [],
+      mcpServerSpecs: readPluginMcpServers(build.installPath),
     });
   }
   return out;

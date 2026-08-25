@@ -1016,6 +1016,7 @@ const providing = (id: string, server: string): PluginInventory => ({
   // which is what `plugin:vendor:thing` below is.
   manifestName: null,
   installed: null,
+  mcpServerSpecs: {},
   enumerated: [
     {
       source: 'plugin-catalog-cache.json',

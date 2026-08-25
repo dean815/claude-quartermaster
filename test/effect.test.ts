@@ -85,6 +85,7 @@ const inventory = (
   // nothing yields; the key then falls back to the marketplace id.
   manifestName,
   installed: [],
+  mcpServerSpecs: {},
   // `null` is the "no source covers this plugin" case, which is not the same shape as
   // a source that covers it and lists nothing.
   enumerated:
