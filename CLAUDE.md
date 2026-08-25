@@ -901,6 +901,41 @@ one. And `signatureIndex` and `urlIndex` are two indexes over one predicate: `la
 is shared, the assembly is not, because they drop conflicts for the same reason but answer
 different questions.
 
+**A gate whose input is the live workspace disarms itself when the product is used
+(QM-51).** `skills.test.ts` asserted that every skill in every live project resolves
+`on`/`inherited`, and guarded it with `if (anyOverride) return t.skip(...)` -- the negation
+of the property it asserts. It ran only where it had to pass and skipped wherever it could
+fail, which is DEA-133's defect verbatim. It went dark on **2026-08-17**, five days after
+`qm set --axis skill` shipped, because the first `skillOverrides` key ever written on this
+machine was written *by that feature*: 0 of 35 settings files carried one when QM-45 was
+measured. The suite reported `1 skipped` for two months and four merged PRs quoted that
+number as pre-existing, which is what a silent gate looks like from the outside.
+**Proved rather than argued, side by side on one broken source.** Breaking `resolveSkill`'s
+default so an unconfigured skill resolves `off`: the old test reports `ok ... # SKIP`, the
+replacement reports `not ok`. Both were run in the same file at the same time against the
+same mutation.
+**The repair asserts the general property, so no configuration makes it inapplicable.** No
+contributing file names the id -> `on`/`inherited`, exactly as before; some file names it ->
+the resolved value is one of the values those files give and the origin is not `inherited`.
+It is deliberately **not** a second copy of precedence -- asserting *which* file wins would
+re-implement `resolveCell` in a test, and a re-implementation either drifts or agrees with
+what it is checking. `model.test.ts` owns the algebra; this owns that the live resolver
+never invents a value no file contains. Live today: 4 of 13,282 cells carry an override, so
+both branches actually run, and the count is **printed rather than asserted** because it is
+a property of this machine and is 0 on a fresh one.
+**The issue's own sweep conclusion was wrong and the correction is the deliverable.** It
+grouped `!newest.size` and `!ids.length || !live.length` with the defect as "the same
+family". They are not: those read the *inputs* and skip when a source is absent, which a
+real machine can be. The discriminator is what the condition reads -- inputs are legitimate,
+the asserted output property is not -- and a bug between input and output still reddens an
+input-guarded test, because the guard and the assertion read different things. All four
+remaining skips are classified in place.
+The day it fails: the classification is prose in a doc comment, so nothing stops the next
+live test from deriving its guard from its assertion again -- the sweep is a snapshot, not a
+lint. And `skipped 0` is now the expected state on *this* machine only; a machine with no
+skills installed still skips the input-guarded three, correctly, and someone reading a CI
+log will have to know which kind they are looking at.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32

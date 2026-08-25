@@ -565,6 +565,30 @@ describe('personal skills on disk', () => {
  * Against whatever this machine actually has. Ground truth is derived without going
  * through the catalog, so the assertions cannot be satisfied by the code under test
  * agreeing with itself.
+ *
+ * ## The skips in here, classified (QM-51)
+ *
+ * A live-workspace test can legitimately have nothing to measure, so `t.skip` is not
+ * banned. What is banned is a skip condition that is the **negation of the assertion**:
+ * that runs the test only where it must pass and skips it wherever it could fail, which
+ * is DEA-133's defect and which this file shipped for five days without anyone noticing.
+ *
+ * The distinguishing question is *what the condition reads*:
+ *
+ * - **Input guards — legitimate.** `no skills on disk and no measured listing`,
+ *   `no personal skills`, `no measured listing carries names`, and `nothing to resolve`
+ *   all read the **inputs** to the thing under test and skip when a source is absent.
+ *   A machine with no skills installed is a real machine, not a defect, and crucially a
+ *   bug *between* those inputs and the output still reddens: the axis assertion reads
+ *   `allSkillIds(cat)` while its guard reads `ws.personalSkills` and `measurements`, so
+ *   a catalog that drops every skill is caught.
+ * - **Assertion-derived — the bug.** `this workspace sets skillOverrides` read the
+ *   **output property itself**. The test asserted "everything resolves on/inherited" and
+ *   skipped exactly when something might not. It is gone; see the test below.
+ *
+ * QM-51 grouped `!newest.size` and `!ids.length || !live.length` with the defect as "the
+ * same family". They are not: both read inputs. Keeping them is the conclusion of the
+ * sweep that issue asked for, not an omission from it.
  */
 describe('the catalog agrees with the live workspace', () => {
   const ws = loadWorkspace();
@@ -605,20 +629,77 @@ describe('the catalog agrees with the live workspace', () => {
     assert.deepEqual([...observed].sort(), [...expected].sort());
   });
 
-  test('nothing resolves to anything but on/inherited while no override is set', (t) => {
-    const anyOverride = [ws.userSettings, ...ws.projects.flatMap((p) => [p.settings, p.localSettings])]
-      .some((f) => f?.skillOverrides && Object.keys(f.skillOverrides).length > 0);
-    if (anyOverride) return t.skip('this workspace sets skillOverrides, so the default is not the whole story');
-
+  /**
+   * Every resolved cell agrees with the files, whether or not any override exists (QM-51).
+   *
+   * **This used to skip the moment the product was used.** It asserted that everything
+   * resolves `on`/`inherited`, and guarded that with `if (anyOverride) return t.skip(...)`
+   * -- the negation of the very thing it asserts. So it ran only where it had to pass and
+   * skipped wherever it could fail, which is DEA-133's defect verbatim. It went dark on
+   * 2026-08-17, five days after `qm set --axis skill` shipped, because the first
+   * `skillOverrides` key ever written on this machine was written *by that feature*. A
+   * gate whose input is the live workspace disarms itself when someone exercises the
+   * feature it guards.
+   *
+   * The repair is to assert the general property instead of the special case, so there is
+   * no configuration that makes it inapplicable:
+   *
+   * - no contributing file names the id -> `on` / `inherited`, exactly as before;
+   * - some file names it -> the resolved value is one of the values those files give, and
+   *   the origin is not `inherited`.
+   *
+   * **Deliberately not a second copy of precedence.** Asserting *which* file wins would
+   * mean re-implementing `resolveCell` here, and a re-implementation drifts or -- worse --
+   * agrees with the thing it is checking. `model.test.ts` owns the precedence algebra;
+   * what this owns is that the live resolver never invents a value no file contains, and
+   * never calls a cell inherited while a file is deciding it.
+   *
+   * `discarded` files are excluded because `contributingFiles` excludes them: a file
+   * Claude Code refuses decides nothing, so an override inside one must *not* move the
+   * cell (DEA-147).
+   */
+  test('every resolved skill cell agrees with the files that decide it', (t) => {
     const ids = allSkillIds(cat);
+    // An input guard, not an assertion-derived one: a machine with no skills and no live
+    // projects has nothing to check, and that is a real machine rather than a defect.
     if (!ids.length || !live.length) return t.skip('nothing to resolve on this machine');
 
+    let overridden = 0;
     for (const p of live) {
+      // Deduplicated by path, because `~/.claude/settings.json` arrives twice -- once as
+      // user scope and once as `~`'s own project scope (CLAUDE.md's `~` collision).
+      const files = new Map(
+        [ws.userSettings, p.settings, p.localSettings]
+          .filter((f) => f !== null && f.validity !== 'discarded')
+          .map((f) => [f!.path, f!]),
+      );
       for (const id of ids) {
+        const stated = [...files.values()]
+          .map((f) => f.skillOverrides?.[id])
+          .filter((v) => v !== undefined);
         const cell = resolveSkill(ws, p, id);
-        assert.equal(cell.value, 'on');
-        assert.equal(cell.origin, 'inherited');
+
+        if (!stated.length) {
+          assert.equal(cell.value, 'on', `${id} in ${p.path}: no file names it`);
+          assert.equal(cell.origin, 'inherited', `${id} in ${p.path}: no file names it`);
+          continue;
+        }
+        overridden += 1;
+        assert.ok(
+          stated.includes(cell.value),
+          `${id} in ${p.path}: resolved ${cell.value}, but the files say ${stated.join('/')}`,
+        );
+        assert.notEqual(
+          cell.origin,
+          'inherited',
+          `${id} in ${p.path}: a file names it, so the cell is not inherited`,
+        );
       }
     }
+
+    // Reported rather than asserted. The overridden count is a property of this machine
+    // and will be 0 on a fresh one; printing it is how a reader sees which half of the
+    // test actually exercised, without turning a legitimate configuration red.
+    console.log(`    ${overridden} of ${ids.length * live.length} live cells carry an override`);
   });
 });
