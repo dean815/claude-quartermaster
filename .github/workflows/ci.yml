@@ -60,3 +60,38 @@ jobs:
       # import or a top-level throw would ship green without this.
       - name: CLI smoke test
         run: node dist/src/cli.js help
+
+  # The other two plugins in this marketplace are not TypeScript, so the suite above
+  # says nothing about them. Neither check needs a dependency: session-fleet imports
+  # stdlib only (its requirements.txt serves the menu-bar app alone), and
+  # project-optimizer is bash. Both are syntax gates -- they catch a file that cannot
+  # load at all, which is the failure a monorepo makes easy to ship unnoticed.
+  plugins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: session-fleet compiles
+        run: python3 -m compileall -q plugins/session-fleet
+
+      # `bash -n` is a PARSE check and not a correctness one. Verified by mutation: an
+      # unterminated `if`, an unclosed quote and an unclosed function brace each exit 2,
+      # but `if [ -z "$x" ; then :; fi` exits 0 -- `[` is a command, so a missing `]` is
+      # a runtime error this cannot see. The step name says "parse" for that reason.
+      - name: project-optimizer scripts parse
+        run: |
+          for f in plugins/project-optimizer/scripts/*.sh; do
+            bash -n "$f" || exit 1
+          done
+
+      # A manifest that stops validating is a plugin nobody can install, and none of
+      # the checks above would notice.
+      - name: Manifests validate
+        run: |
+          for m in .claude-plugin/plugin.json \
+                   .claude-plugin/marketplace.json \
+                   plugins/project-optimizer/.claude-plugin/plugin.json \
+                   plugins/session-fleet/.claude-plugin/plugin.json; do
+            python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$m" || exit 1
+            echo "ok $m"
+          done

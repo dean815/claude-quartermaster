@@ -1,0 +1,16 @@
+{
+  "name": "session-fleet",
+  "version": "0.1.0",
+  "description": "Shows every Claude Code session on this machine — across the CLI, Desktop, Cyrus and the Agent SDK — with repo, git state, and what you need to do to keep each one moving.",
+  "author": {
+    "name": "Dean Hicks",
+    "email": "dean.h.hicks@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "sessions",
+    "dashboard",
+    "transcripts",
+    "workspace"
+  ]
+}

@@ -9,7 +9,7 @@ session is for, and what **you** need to do to keep it moving.
 **Menu bar agent** (recommended — install once, then forget it):
 
 ```bash
-~/claude/general/fleetview/install-agent.sh
+./install-agent.sh
 ```
 
 Installs a launchd login agent that puts a mark in your menu bar, lists the sessions
@@ -48,7 +48,7 @@ for leaving open on a spare screen. The plain URL keeps auto off.
 **Just the server**, no menu bar:
 
 ```bash
-python3 ~/claude/general/fleetview/serve.py
+python3 serve.py
 ```
 
 Either way <http://localhost:8787> re-scans and re-renders on **every page load**, so
@@ -59,7 +59,7 @@ the page is current the moment it appears. There's a Rescan button and an Auto t
 **Published artifact**, shareable and viewable from another device:
 
 ```bash
-~/claude/general/fleetview/refresh.sh
+./refresh.sh
 ```
 
 Then ask Claude to republish `fleetview.html` to the existing artifact URL.

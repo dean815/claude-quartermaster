@@ -5,11 +5,11 @@ description: Refresh the Session Fleet dashboard — rescan every Claude Code se
 
 # Session Fleet
 
-The dashboard lives in `~/claude/session-fleet`. Scanning is free — pure Python,
+The dashboard lives at `${CLAUDE_PLUGIN_ROOT}`. Scanning is free — pure Python,
 `git` and one cached Linear call. Only the purpose and next-step prose needs a
 model, which is the part this skill exists to do.
 
-Run everything from the project directory.
+Run everything from `${CLAUDE_PLUGIN_ROOT}`.
 
 ## `/session-fleet refresh`
 
@@ -18,7 +18,7 @@ Rescan, then rewrite every stale summary.
 ### 1. Rescan
 
 ```bash
-cd ~/claude/session-fleet && ./refresh.sh
+cd "${CLAUDE_PLUGIN_ROOT}" && ./refresh.sh
 ```
 
 Prints the session counts and the stale list. If nothing is stale, say so and

@@ -6,8 +6,8 @@
     "url": "https://github.com/dean815"
   },
   "metadata": {
-    "description": "Maintains the inventory. Issues the kit. Knows what's missing.",
-    "version": "0.1.0"
+    "description": "Know and control your Claude Code workspace: what loads, what it costs, and what needs you.",
+    "version": "0.2.0"
   },
   "plugins": [
     {
@@ -22,6 +22,32 @@
       "homepage": "https://github.com/dean815/claude-quartermaster",
       "category": "productivity",
       "keywords": ["audit", "context", "plugins", "mcp", "configuration"]
+    },
+    {
+      "name": "project-optimizer",
+      "source": "./plugins/project-optimizer",
+      "description": "Offers onboarding the first time Claude Code runs in a directory: scopes plugins and MCP servers to the project, writes or improves CLAUDE.md, checks directory organization, and verifies GitHub configuration. Includes a read-only audit with a batch mode, and an archive workflow that inventories every store holding a project's state before anything is removed.",
+      "version": "0.2.1",
+      "author": {
+        "name": "Dean Hicks",
+        "email": "dean.h.hicks@gmail.com"
+      },
+      "homepage": "https://github.com/dean815/claude-quartermaster",
+      "category": "productivity",
+      "keywords": ["onboarding", "project-setup", "claude-md", "github", "configuration"]
+    },
+    {
+      "name": "session-fleet",
+      "source": "./plugins/session-fleet",
+      "description": "Shows every Claude Code session on this machine — across the CLI, Desktop, Cyrus and the Agent SDK — with repo, git state, timestamps, what each session is for, and what you need to do to keep it moving. Scanning costs no tokens; only the purpose and next-step prose needs a model.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Dean Hicks",
+        "email": "dean.h.hicks@gmail.com"
+      },
+      "homepage": "https://github.com/dean815/claude-quartermaster",
+      "category": "productivity",
+      "keywords": ["sessions", "dashboard", "transcripts", "workspace"]
     }
   ]
 }
