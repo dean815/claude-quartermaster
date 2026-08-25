@@ -4,6 +4,15 @@ CLI that audits which Claude Code extensions (plugins, MCP servers, skills) load
 projects, and what they cost. `qm audit`, `qm cost`, `qm baseline` / `--drift`, and
 `qm serve` for the two-view grid on loopback. Every one of those is read-only.
 
+**`qm serve` is the suite's single port (QM-55).** `/` is the extensions grid, `/sessions`
+is Session Fleet's board -- rendered by spawning Fleet's own `collect.py` and `render.py`
+and serving the bytes they emit, so `render.py` is untouched and the scan still costs zero
+tokens. All six of Fleet's modules import stdlib only, so the view needs a `python3` and no
+virtualenv; `requirements.txt` serves the menu-bar app alone. It degrades to a diagnostic
+page rather than a 500, because the grid is the half people came for. **It does not inherit
+the grid's redaction** -- `view.test.ts`'s absolute-path sweep covers the model projection,
+not this route, and the board exists to show which directory each session is in.
+
 **This repo is also a marketplace of three plugins (QM-55).** `quartermaster` at the root,
 plus `plugins/project-optimizer` and `plugins/session-fleet`, both merged in with
 `git subtree` and their history. One purpose — know and control your Claude Code workspace:

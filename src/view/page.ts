@@ -215,6 +215,7 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
 <header>
   <h1>quartermaster</h1>
   <div class="snap" id="snap">reading&#8230;</div>
+  <a class="tab" id="to-sessions" href="/sessions">sessions &#8594;</a>
 </header>
 
 <nav>
