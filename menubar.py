@@ -14,6 +14,7 @@ import atexit
 import fcntl
 import json
 import os
+import plistlib
 import subprocess
 import sys
 import threading
@@ -79,6 +80,83 @@ def notify(title, subtitle, message, open_url=None):
             ["osascript", "-e",
              f'display notification "{safe}" with title "{title}" subtitle "{subtitle}"'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+# Chrome is the default browser here. Anything else falls through to
+# webbrowser.open, which always opens a new tab — correct, just not clever.
+CHROME_FOCUS = """
+on run argv
+  set target to item 1 of argv
+  tell application "Google Chrome"
+    repeat with w in windows
+      set i to 0
+      repeat with t in tabs of w
+        set i to i + 1
+        if URL of t starts with target then
+          set active tab index of w to i
+          set index of w to 1
+          tell t to reload
+          activate
+          return "focused"
+        end if
+      end repeat
+    end repeat
+    if (count of windows) = 0 then
+      make new window
+      set URL of active tab of front window to target
+    else
+      tell front window to make new tab with properties {URL:target}
+      set index of front window to 1
+    end if
+    activate
+  end tell
+  return "opened"
+end run
+"""
+
+
+def chrome_is_running():
+    """Only ask Chrome about its tabs when it is already up.
+
+    `tell application "Google Chrome"` launches it otherwise, which turns
+    "show me the dashboard" into a cold browser start.
+    """
+    r = subprocess.run(["pgrep", "-x", "Google Chrome"], capture_output=True)
+    return r.returncode == 0
+
+
+def default_browser_is_chrome():
+    p = (Path.home() / "Library/Preferences/com.apple.LaunchServices"
+                       "/com.apple.launchservices.secure.plist")
+    try:
+        d = plistlib.loads(p.read_bytes())
+    except (OSError, plistlib.InvalidFileException) as e:
+        log(f"cannot read the default browser, assuming not Chrome: {e}")
+        return False
+    for h in d.get("LSHandlers", []):
+        if h.get("LSHandlerURLScheme") == "http":
+            return h.get("LSHandlerRoleAll", "") == "com.google.chrome"
+    return False
+
+
+def open_or_focus(url):
+    """Reuse the dashboard tab if one is already open, else open a new one.
+
+    Reloading matters as much as focusing: the server rebuilds on every GET, so
+    a tab left open all day is showing whatever the fleet looked like when it
+    was opened.
+    """
+    if default_browser_is_chrome() and chrome_is_running():
+        try:
+            r = subprocess.run(["osascript", "-", url], input=CHROME_FOCUS,
+                               capture_output=True, text=True, timeout=10)
+            if r.returncode == 0:
+                log(f"dashboard {r.stdout.strip() or 'opened'}")
+                return
+            log(f"chrome focus failed, falling back: {r.stderr.strip()[:160]}")
+        except (subprocess.SubprocessError, OSError) as e:
+            log(f"chrome focus errored, falling back: {e}")
+    webbrowser.open(url)
 
 
 def stale_count():
@@ -183,7 +261,7 @@ class Fleet(rumps.App):
 
     def open_dashboard(self, _):
         self.start_server()
-        webbrowser.open(f"http://localhost:{PORT}/")
+        open_or_focus(f"http://localhost:{PORT}/")
 
     def manual_refresh(self, _):
         self.refresh()

@@ -2,7 +2,7 @@
   "_note": "Model-written. 'stamp' and 'turns' are the session's values when this was written; render.py flags the entry stale when either has moved. Bullet types: q = open question awaiting Dean, a = action for Dean, i = informational.",
   "entries": {
     "local_7cb79bd4-7ed1-4c64-8d2d-65c8602e1263": {
-      "stamp": "2026-08-25T05:03:51.520000Z",
+      "stamp": "2026-08-25T06:28:16.945000Z",
       "turns": 2,
       "purpose": "Rebuild the Manus-driven Higgsfield generation workflow inside Claude Code, so Kling 3.0 and Nano Banana 2 keep producing content while Manus is down.",
       "next": [
@@ -45,68 +45,29 @@
       "title": "chord-chart-maker — M7 Phase A"
     },
     "local_cf24f1e7-7602-44e0-bdfb-57c680cb4dcd": {
-      "stamp": "2026-08-25T05:15:41.642000Z",
-      "turns": 212,
+      "stamp": "2026-08-25T06:28:11.144000Z",
+      "turns": 219,
       "purpose": "Main working chat for Claude Quartermaster — design, build and issue triage.",
       "next": [
         {
-          "type": "q",
-          "text": "QM-8 / Phase 3 is still blocked on your scoping call: is encoding first-party guidance a fact the tool reports, or the judgement it hands back? Claude's correction narrowed it — the duplication half is a two-branch fact, not a single rule — but the question itself is untouched."
-        },
-        {
           "type": "a",
-          "text": "Decide QM-54 (Low), filed deliberately to be decided rather than done: reading plugin `.mcp.json` upgrades exactly one row from inferred to exact and moves zero QM-31 findings, against reversing a documented exclusion."
+          "text": "The quartermaster backlog is empty, so nothing moves here without you picking the next thing. Two Todo issues remain in the team and neither is quartermaster code — both are Cyrus/infrastructure you drive: QM-49 (High), prove the Cyrus loop end to end on one Agent Ready issue, and QM-50 (Medium), per-sub-team GitHub automation."
         },
         {
           "type": "i",
-          "text": "The backlog is down to those two and neither is Claude's to start. Three issues landed in the last run — QM-52, QM-53, plus QM-54 filed. Main at `c7aecf4`, branch deleted, tree clean, 720 tests / 719 pass / 1 pre-existing skip."
+          "text": "Seven issues shipped in the last run: QM-52 (un-suppression), QM-53 (the missing Local scope), QM-8 (arbitration, with its three-week scoping block finally resolved), QM-54 (exact twin matching), QM-51 (the disarmed gate), plus QM-48 closed. Main at `f11ca35`, tree clean, 735 tests / 735 pass / 0 skipped. Every issue in the project is now Done or Canceled."
+        },
+        {
+          "type": "i",
+          "text": "The through-line Claude flagged: all six issues were wrong on a central premise, and probing before building caught it every time — QM-8 needed no new detector, QM-52's two-basis design was unbuildable, QM-51's sweep grouped three skips that don't belong together."
+        },
+        {
+          "type": "i",
+          "text": "Three things are true and unfinished, deliberately recorded in CLAUDE.md's \"day it fails\" notes rather than anywhere you'd have to remember them — one being the untested interactive branch of the launch-mode fact."
         },
         {
           "type": "i",
           "text": "Worth knowing from the QM-53 work: the live instance sits under `~`, which CLAUDE.md already records as breaking things in two layers — so every live observation of that new surface comes from the one project most likely to be unrepresentative."
-        }
-      ]
-    },
-    "c0ae5bbd-3655-4958-b780-11d4f9bcf0b4": {
-      "stamp": "2026-08-24T18:24:46.933Z",
-      "turns": 4,
-      "purpose": "A `/session-fleet refresh` run of this board — rescan plus the model pass that rewrites stale summaries.",
-      "next": [
-        {
-          "type": "i",
-          "text": "Done and nothing pending. It refreshed 20 sessions and rewrote three summaries, then ended by offering `/linear-track` or `/linear-skip` for this project. You answered that in the Session Fleet UI session instead — Linear is tracked and the FLEET team exists — so the question is settled even though this thread still shows it."
-        },
-        {
-          "type": "i",
-          "text": "This is the board flagging its own unattended run as **Your turn**, the exact case the Session Fleet session has an open design call about."
-        }
-      ],
-      "title": "Session fleet refresh run"
-    },
-    "local_84da0d6c-a62f-470d-a51b-16cd357f650e": {
-      "stamp": "2026-08-25T00:54:48.232000Z",
-      "turns": 3,
-      "purpose": "The career-ops cleanup routine — housekeeping over the job-search tracker and Airtable, latterly backfilling the missing Fivetran application.",
-      "next": [
-        {
-          "type": "q",
-          "text": "Which state's req should the row point at? Fivetran posts this role as 20 near-identical per-state listings and Claude picked one to write the link. If it guessed wrong, that's the one field to correct."
-        },
-        {
-          "type": "i",
-          "text": "The backfill landed and both sides reconcile: `Fivetran — Senior Community Manager` as **#633**, Rejected, applied 8/19, rejected 8/21. 574 Airtable ↔ 574 tracker, 574 matched by FK, 0 mismatches."
-        },
-        {
-          "type": "i",
-          "text": "The posting is still live — the Greenhouse board API returns the req as open today, three days after the rejection. So this was a decision about you, not a closed listing."
-        },
-        {
-          "type": "i",
-          "text": "Two deliberate gaps, not bugs: the score is the `N/A` sentinel because there was no evaluation to summarize (the #1799 backfill rule), and Company links to the existing `dbt labs` record, which already documents the Oct 2025 merger. The tracker row stays named `Fivetran` — matching is Tracker #-first, so the two names differing is harmless."
-        },
-        {
-          "type": "i",
-          "text": "Worth knowing for future writes: on the Roles table `fldeapmksGot9WO4k` is the writable Link field and `fldlViSE72u0SURa8` is the computed URL — the reverse of what their dump shapes suggest."
         }
       ]
     },
@@ -262,25 +223,25 @@
       ]
     },
     "local_66995bb1-9a44-4b63-9c19-fb9a957a9743": {
-      "stamp": "2026-08-24T19:29:01.224000Z",
-      "turns": 12,
+      "stamp": "2026-08-25T06:14:54.018000Z",
+      "turns": 13,
       "purpose": "Build out Session Fleet's UI and tooling — hide unattended routine runs, tighten the row layout, turn re-summarize into a skill, and put the project on Linear.",
       "next": [
         {
-          "type": "q",
-          "text": "One design call is open: a machine-started run's closing question keeps it flagged **Your turn** forever, because `watcher.is_waiting` falls back to the detected question and nothing clears it. A `/session-fleet refresh` run is on the board right now for exactly this — you answered its question here instead of in that thread. The fix is to stop counting an unattended run's last question as waiting; it needs your yes."
+          "type": "i",
+          "text": "Nothing is pending here. The one open design call is answered and shipped as `83ec417`: a machine-started run's closing question no longer counts as an obligation, so only an explicit `a` or `q` bullet in its summary marks it as needing you. Verified against HEAD — exactly one session drops off the board, the stuck refresh run, and nothing else moved."
         },
         {
           "type": "i",
-          "text": "Linear is wired up: `session-fleet` label created, and a **FLEET** sub-team of DEA now owns the board, matching your other 18 project teams. Both `session-fleet` and the old `fleetview` key resolve there instead of falling back to DEA. Committed as `2c85cb5`."
+          "text": "The date sweep still shows, which is the case worth preserving: its summary carries a real action, so it survives the new rule. That's the line between a run that left you something and one that just ended on a question."
         },
         {
           "type": "i",
-          "text": "Two things done without asking, flagged for you: the Linear MCP has no `create_team`, so Claude used the workspace GraphQL API with the key in this project's `.env`, and it picked `FLEET` as the team key because that is already this directory's session-name short code."
+          "text": "Claude also merged a split-brain it had created — `watcher.head_check` (menu bar) and `collect.py` (board) held separate ideas of what a machine-started run is. Both now call one `origin_of`, living in `watcher.py` as the lower module. The two surfaces still aren't identical and Claude left it that way on purpose: the menu bar drops machine-started runs outright."
         },
         {
           "type": "i",
-          "text": "All three original asks shipped and are committed: routine runs are filtered out unless you replied in the thread, the row buttons moved to the meta line (cards 267px → 180px), and `/session-fleet refresh` exists as a skill with a headless `resummarize.sh` behind the menu bar button."
+          "text": "Everything earlier in this session is committed: routine runs filtered unless you replied in the thread, row buttons moved to the meta line (cards 267px → 180px), `/session-fleet refresh` as a skill with headless `resummarize.sh` behind the menu bar button, and Linear wired up with a **FLEET** sub-team of DEA owning the board (`2c85cb5`)."
         }
       ]
     },
@@ -350,25 +311,6 @@
         {
           "type": "i",
           "text": "Video models can be expensive — `higgsfield generate cost` prices a job before it spends."
-        }
-      ]
-    },
-    "local_afe5ba70-3715-4be7-a136-f0e6f8dce5ad": {
-      "stamp": "2026-08-22T14:39:09.561000Z",
-      "turns": 5,
-      "purpose": "Squeeze the free-unlimited Manus window for research, media, and long-form autonomous builds before it closes.",
-      "next": [
-        {
-          "type": "a",
-          "text": "Fire the prompts while the window is open — eight are drafted and ready, three aimed at your existing projects and five at long autonomous runs (a full-stack app build deployed to a live URL, design work, productivity)."
-        },
-        {
-          "type": "a",
-          "text": "Anything Manus builds lives in its VM and on its hosting. Pull the source as a zip or push it to your own GitHub before the window closes, or you'll own a demo you can't rebuild."
-        },
-        {
-          "type": "i",
-          "text": "The app-build prompt is written to be reusable — swap the app description and re-fire it for any future build."
         }
       ]
     },

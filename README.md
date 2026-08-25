@@ -94,6 +94,33 @@ what those tokens *would* have cost at API rates, which is not the same thing.
 It is still the only part of Session Fleet that puts a model to work, which is
 why the menu item says how long and asks first.
 
+## Session names
+
+The sweep writes names as `[* ]CODE | DAYS | Name | M.D`. The board strips all
+of that and shows the name alone, because every other field is already a column:
+the code is the subteam chip, the days and the start date are the Last update
+and Started stats. The leading star is the exception — nothing else carries it —
+so it survives as a **✦** before the name, meaning start new work in a fresh
+session rather than resuming this one.
+
+Every field is optional in practice. A directory missing from the shortnames
+file gets no code, and names written before the day counter existed have none,
+so the parser consumes what it recognises off each end and keeps the rest. A
+session called `TODO` keeps its name.
+
+## Hiding sessions
+
+**Hide** on any expanded row drops it from the board; **Hidden** in the toolbar
+brings them back, dimmed, with the button reading Unhide. This lives in the
+browser's own storage, not in `data.json` — it is one person's view, so it does
+not touch the scan, the menu bar, or the published page.
+
+## Theme
+
+**Theme** cycles System → Light → Dark. System follows `prefers-color-scheme`;
+the other two override it in both directions. The choice is applied before the
+page paints, so there is no flash of the wrong theme on load.
+
 ## States
 
 | State | Colour | Meaning |
@@ -223,6 +250,7 @@ them to that. If nothing appears, enable it under System Settings → Notificati
 | `collect.py` | Scans all session stores + git, writes `data.json` |
 | `watcher.py` | Turn-completion detector (`--once` to print current state) |
 | `menubar.py` | rumps menu bar agent; owns the server as a child process |
+| | Open dashboard reuses an existing Chrome tab (focus + reload) instead of stacking new ones |
 | `install-agent.sh` | launchd login agent, install/uninstall |
 | `author_summaries.py` | Hand-authored purpose/next bullets → `summaries.json` |
 | `summaries.json` | Model-written text, keyed by session id, stamped with time + turns |

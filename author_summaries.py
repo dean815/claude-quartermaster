@@ -137,16 +137,22 @@ AUTHORED = {
 
 "local_cf24f1e7-7602-44e0-bdfb-57c680cb4dcd": (
     "Main working chat for Claude Quartermaster — design, build and issue triage.",
-    [("q", "QM-8 / Phase 3 is still blocked on your scoping call: is encoding first-party "
-           "guidance a fact the tool reports, or the judgement it hands back? Claude's "
-           "correction narrowed it — the duplication half is a two-branch fact, not a single "
-           "rule — but the question itself is untouched."),
-     ("a", "Decide QM-54 (Low), filed deliberately to be decided rather than done: reading "
-           "plugin `.mcp.json` upgrades exactly one row from inferred to exact and moves zero "
-           "QM-31 findings, against reversing a documented exclusion."),
-     ("i", "The backlog is down to those two and neither is Claude's to start. Three issues "
-           "landed in the last run — QM-52, QM-53, plus QM-54 filed. Main at `c7aecf4`, branch "
-           "deleted, tree clean, 720 tests / 719 pass / 1 pre-existing skip."),
+    [("a", "The quartermaster backlog is empty, so nothing moves here without you picking the "
+           "next thing. Two Todo issues remain in the team and neither is quartermaster code — "
+           "both are Cyrus/infrastructure you drive: QM-49 (High), prove the Cyrus loop end to "
+           "end on one Agent Ready issue, and QM-50 (Medium), per-sub-team GitHub automation."),
+     ("i", "Seven issues shipped in the last run: QM-52 (un-suppression), QM-53 (the missing "
+           "Local scope), QM-8 (arbitration, with its three-week scoping block finally "
+           "resolved), QM-54 (exact twin matching), QM-51 (the disarmed gate), plus QM-48 "
+           "closed. Main at `f11ca35`, tree clean, 735 tests / 735 pass / 0 skipped. Every "
+           "issue in the project is now Done or Canceled."),
+     ("i", "The through-line Claude flagged: all six issues were wrong on a central premise, "
+           "and probing before building caught it every time — QM-8 needed no new detector, "
+           "QM-52's two-basis design was unbuildable, QM-51's sweep grouped three skips that "
+           "don't belong together."),
+     ("i", "Three things are true and unfinished, deliberately recorded in CLAUDE.md's \"day "
+           "it fails\" notes rather than anywhere you'd have to remember them — one being the "
+           "untested interactive branch of the launch-mode fact."),
      ("i", "Worth knowing from the QM-53 work: the live instance sits under `~`, which "
            "CLAUDE.md already records as breaking things in two layers — so every live "
            "observation of that new surface comes from the one project most likely to be "
@@ -568,24 +574,24 @@ AUTHORED = {
 "local_66995bb1-9a44-4b63-9c19-fb9a957a9743": (
     "Build out Session Fleet's UI and tooling — hide unattended routine runs, tighten the "
     "row layout, turn re-summarize into a skill, and put the project on Linear.",
-    [("q", "One design call is open: a machine-started run's closing question keeps it "
-           "flagged **Your turn** forever, because `watcher.is_waiting` falls back to the "
-           "detected question and nothing clears it. A `/session-fleet refresh` run is on the "
-           "board right now for exactly this — you answered its question here instead of in "
-           "that thread. The fix is to stop counting an unattended run's last question as "
-           "waiting; it needs your yes."),
-     ("i", "Linear is wired up: `session-fleet` label created, and a **FLEET** sub-team of DEA "
-           "now owns the board, matching your other 18 project teams. Both `session-fleet` and "
-           "the old `fleetview` key resolve there instead of falling back to DEA. Committed as "
-           "`2c85cb5`."),
-     ("i", "Two things done without asking, flagged for you: the Linear MCP has no "
-           "`create_team`, so Claude used the workspace GraphQL API with the key in this "
-           "project's `.env`, and it picked `FLEET` as the team key because that is already "
-           "this directory's session-name short code."),
-     ("i", "All three original asks shipped and are committed: routine runs are filtered out "
-           "unless you replied in the thread, the row buttons moved to the meta line (cards "
-           "267px → 180px), and `/session-fleet refresh` exists as a skill with a headless "
-           "`resummarize.sh` behind the menu bar button.")]),
+    [("i", "Nothing is pending here. The one open design call is answered and shipped as "
+           "`83ec417`: a machine-started run's closing question no longer counts as an "
+           "obligation, so only an explicit `a` or `q` bullet in its summary marks it as "
+           "needing you. Verified against HEAD — exactly one session drops off the board, the "
+           "stuck refresh run, and nothing else moved."),
+     ("i", "The date sweep still shows, which is the case worth preserving: its summary "
+           "carries a real action, so it survives the new rule. That's the line between a run "
+           "that left you something and one that just ended on a question."),
+     ("i", "Claude also merged a split-brain it had created — `watcher.head_check` (menu bar) "
+           "and `collect.py` (board) held separate ideas of what a machine-started run is. "
+           "Both now call one `origin_of`, living in `watcher.py` as the lower module. The two "
+           "surfaces still aren't identical and Claude left it that way on purpose: the menu "
+           "bar drops machine-started runs outright."),
+     ("i", "Everything earlier in this session is committed: routine runs filtered unless you "
+           "replied in the thread, row buttons moved to the meta line (cards 267px → 180px), "
+           "`/session-fleet refresh` as a skill with headless `resummarize.sh` behind the menu "
+           "bar button, and Linear wired up with a **FLEET** sub-team of DEA owning the board "
+           "(`2c85cb5`).")]),
 
 "local_9cf8e76f-1964-435c-be35-d3cf6011993c": (
     "Work out why CLI-started sessions rename inconsistently, then rebuild the session-name "

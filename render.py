@@ -11,6 +11,7 @@ so they are omitted from the artifact build rather than shipped dead.
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -92,6 +93,45 @@ def team_ink(hexcolor):
     return walk(GROUND_LIGHT, -0.02), walk(GROUND_DARK, 0.02)
 
 
+CODE_RE = re.compile(r"^[A-Z][A-Z0-9]{1,7}$")
+DAYS_RE = re.compile(r"^\d{1,3}$")
+DATE_RE = re.compile(r"^\d{1,2}\.\d{1,2}(\s*-\s*\d{1,2}\.\d{1,2})?$")
+
+
+def parse_title(raw):
+    """Split a swept session name into its parts.
+
+    The sweep writes `[* ]CODE | DAYS | Name | M.D`, but every field except the
+    name is optional in practice: a directory missing from the shortnames file
+    gets no code, and names written before the day counter existed have none.
+    So this consumes recognisable metadata off each end and keeps the rest,
+    rather than trusting a field count.
+    """
+    out = {"star": False, "code": None, "days": None, "date": None, "title": raw}
+    if not raw:
+        return out
+    parts = [p.strip() for p in raw.split("|")]
+    if parts[0].startswith("*"):
+        out["star"] = True
+        parts[0] = parts[0].lstrip("* ").strip()
+        if not parts[0]:
+            parts.pop(0)
+    if not parts:
+        return out
+    # Never eat the last token: a session really called "TODO" keeps its name.
+    while len(parts) > 1:
+        if out["code"] is None and CODE_RE.match(parts[0]):
+            out["code"] = parts.pop(0)
+        elif out["days"] is None and DAYS_RE.match(parts[0]):
+            out["days"] = int(parts.pop(0))
+        else:
+            break
+    if len(parts) > 1 and DATE_RE.match(parts[-1]):
+        out["date"] = parts.pop()
+    title = " | ".join(p for p in parts if p).strip()
+    out["title"] = title or raw
+    return out
+
 def build(data, summaries):
     entries = summaries.get("entries", {})
     rows = []
@@ -101,9 +141,12 @@ def build(data, summaries):
         g = s.get("git") or {}
         stale = bool(e) and stale_mod.staleness(s, e) is not None
 
+        t = parse_title(e.get("title") or s["title"])
         rows.append({
             "id": s["id"],
-            "title": e.get("title") or s["title"],
+            "title": t["title"],
+            "titleStar": t["star"],
+            "titleCode": t["code"],
             "state": s["state"],
             "stateLabel": STATE_LABEL.get(s["state"], s["state"]),
             "stateTip": STATE_TIP.get(s["state"], ""),
@@ -313,13 +356,25 @@ select{cursor:pointer; max-width:150px}
   display:flex; flex-direction:column; gap:8px}
 
 .head{display:flex; flex-wrap:wrap; align-items:center; gap:6px 9px}
+.head .title{order:0}
+/* The sweep's own fields are stripped from the name — the day counter, start
+   date and project code are all already columns elsewhere. The star is not, so
+   it survives as a mark. */
+.star{color:var(--accent); font-size:12px; line-height:1; cursor:help}
+/* An empty chip is a placeholder holding the compact column open. Expanded
+   rows have no columns to hold, so it would just be a stray 12px box. */
+.row:not(.compact) .subteam:empty{display:none}
 .row.compact .head{flex-wrap:nowrap; min-width:0}
-.row.compact .title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0}
+.row.compact .title{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1}
 .head-right{margin-left:auto; display:flex; align-items:center; gap:10px; flex:none}
 /* The team's own Linear colour. --tmr is it exactly, carrying the fill and the
-   border; --tm is the same hue walked to AA contrast in render.py, for the text
-   only. One property does both themes: the dark blocks repoint --tm at --tmd. */
-.subteam{font-size:10.5px; font-weight:620; letter-spacing:.05em;
+   border; --tml and --tmd are that hue walked to AA contrast in render.py for
+   light and dark ground, and the text uses whichever the theme selects.
+   --tm must NOT be set inline: an inline custom property beats every stylesheet
+   rule, so the dark blocks below could never repoint it and every chip stayed
+   at its light-mode ink on a dark ground. */
+.subteam{--tm:var(--tml);
+  font-size:10.5px; font-weight:620; letter-spacing:.05em;
   color:var(--tm,var(--ink-3)); border-radius:4px; padding:1px 5px;
   background:color-mix(in srgb, var(--tmr,transparent) 13%, transparent);
   border:1px solid color-mix(in srgb, var(--tmr,var(--line)) 42%, transparent);
@@ -346,7 +401,11 @@ select{cursor:pointer; max-width:150px}
    that slot and drags the glyph and timestamp left out of alignment. */
 .ts{font-size:11.5px; color:var(--ink-3); flex:none}
 .row.compact .head-right{gap:12px}
-.row.compact .subteam{width:60px; padding:1px 0}
+/* Fixed widths on everything left of the name, so the names still line up in a
+   list — that alignment is the whole point of the compact view. */
+.row.compact .pill{width:74px; text-align:center; padding:1px 0}
+.row.compact .star{width:9px; text-align:center}
+.row.compact .subteam{width:60px; padding:1px 0; text-align:center}
 .row.compact .gitcol{width:84px; text-align:right; font-size:12px}
 .row.compact .cg{width:18px; justify-content:center}
 .row.compact .ts{width:62px; text-align:right}
@@ -407,6 +466,13 @@ select{cursor:pointer; max-width:150px}
 .stat dd{margin:0; font-size:12.5px; color:var(--ink)}
 .stat dd small{display:block; color:var(--ink-3); font-size:11px}
 
+/* A shown-hidden row stays legible but reads as set aside, so it is never
+   mistaken for something still on the board. */
+.row.is-hidden{opacity:.5}
+.row.is-hidden:hover, .row.is-hidden:focus-within{opacity:1}
+.chip:disabled{opacity:.45; cursor:default}
+.chip:disabled:hover{border-color:var(--line); color:var(--ink-2)}
+
 .empty{padding:44px 16px; text-align:center; color:var(--ink-3); font-size:14px}
 .toast{position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--tip-bg);
   color:var(--tip-ink); padding:9px 16px; border-radius:8px; font-size:13px;
@@ -438,6 +504,8 @@ JS = r"""
 const FLEET = window.__FLEET__;
 const rows = FLEET.rows, LOCAL = FLEET.local;
 const genAt = new Date(FLEET.generated_at);
+// Must match the key in the pre-paint theme script in the page template —
+// that one runs before this file loads and cannot read this constant.
 const LS = "fleetview.v3";
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
@@ -470,17 +538,27 @@ const state = {
   mode: saved.mode === "compact" ? "compact" : "full",
   overrides: saved.overrides || {},
   auto: !!saved.auto,
+  // Hidden lives here, not in data.json: it is one person's view of the board,
+  // and the collector has no business knowing about it. Keyed by session id, so
+  // a hidden session stays hidden across rescans and falls out of the store on
+  // its own once it ages past the window and stops being rendered.
+  hidden: saved.hidden || {},
+  showHidden: !!saved.showHidden,
+  theme: ["light","dark"].includes(saved.theme) ? saved.theme : "system",
 };
 const persist = () => {
   try { localStorage.setItem(LS, JSON.stringify(
-    {mode:state.mode, overrides:state.overrides, auto:state.auto})); } catch(e) {}
+    {mode:state.mode, overrides:state.overrides, auto:state.auto,
+     hidden:state.hidden, showHidden:state.showHidden, theme:state.theme})); } catch(e) {}
 };
+const hiddenCount = () => rows.filter(r => state.hidden[r.id]).length;
 const isCompact = r => r.id in state.overrides
   ? state.overrides[r.id] : state.mode === "compact";
 
 const WINDOWS = {"6":6, "24":24, "48":48, "168":168};
 
 function matches(r){
+  if (state.hidden[r.id] && !state.showHidden) return false;
   if (state.states.size && !state.states.has(r.state)) return false;
   if (state.iface.size && !state.iface.has(r.interface)) return false;
   if (state.folders.size && !state.folders.has(r.folder)) return false;
@@ -507,34 +585,41 @@ function gitCounters(r){
   return `<span class="gitc">${bits.join("")}</span>`;
 }
 
+// Falls back to the code the sweep put in the title. Linear is the better
+// source — it carries the colour — but a repo with no team mapping would
+// otherwise lose the one label it had, now that the title is stripped.
+function subteamLabel(r){ return r.subteam || r.titleCode || ""; }
+
 function subteamChip(r, holdColumn){
   // Compact rows keep an empty chip so the fixed columns to its right hold place.
-  if (!r.subteam) return holdColumn ? `<span class="subteam"></span>` : "";
+  const label = subteamLabel(r);
+  if (!label) return holdColumn ? `<span class="subteam"></span>` : "";
   const ink = r.subteamInk
-    ? ` style="--tm:${esc(r.subteamInk)}; --tmd:${esc(r.subteamInkDark)}; --tmr:${
+    ? ` style="--tml:${esc(r.subteamInk)}; --tmd:${esc(r.subteamInkDark)}; --tmr:${
         esc(r.subteamRaw)}"` : "";
-  return `<span class="subteam" tabindex="0"${ink} data-tip="Linear subteam">${
-    r.subteamIcon ? `<i class="tmi">${esc(r.subteamIcon)}</i>` : ""}${esc(r.subteam)}</span>`;
+  return `<span class="subteam" tabindex="0"${ink} data-tip="${
+    r.subteam ? "Linear subteam" : "Project code from the session name"}">${
+    r.subteamIcon ? `<i class="tmi">${esc(r.subteamIcon)}</i>` : ""}${esc(label)}</span>`;
 }
 
 function card(r){
   const compact = isCompact(r);
   return `
-  <article class="row s-${esc(r.state)}${compact ? " compact" : ""}" data-id="${esc(r.id)}">
+  <article class="row s-${esc(r.state)}${compact ? " compact" : ""}${
+    state.hidden[r.id] ? " is-hidden" : ""}" data-id="${esc(r.id)}">
     <div class="main">
       <div class="head">
         <button class="disclose" type="button" data-toggle aria-expanded="${!compact}"
                 aria-label="${compact ? "Expand" : "Collapse"} this session">▼</button>
-        <h2 class="title" data-toggle>${esc(r.title)}</h2>
         <span class="pill" tabindex="0" data-tip="${esc(r.stateTip)}">${esc(r.stateLabel)}</span>
+        ${subteamChip(r, true)}
+        ${r.titleStar ? `<span class="star" tabindex="0" data-tip="Carrying a large context or already compacted — start new work in a fresh session rather than resuming this one.">✦</span>` : ""}
+        <h2 class="title" data-toggle>${esc(r.title)}</h2>
         ${r.linear ? `<a class="lin" href="${esc(r.linear.url)}" target="_blank"
            data-tip="${esc(r.linear.title)} — ${esc(r.linear.priorityLabel)}, ${esc(r.linear.state)}"
            >${esc(r.linear.identifier)}</a>` : ""}
         <span class="head-right">
-          ${compact
-            ? `${subteamChip(r, true)}
-               <span class="gitcol mono">${gitCounters(r)}</span>`
-            : subteamChip(r, false)}
+          ${compact ? `<span class="gitcol mono">${gitCounters(r)}</span>` : ""}
           <span class="cg c-${esc(r.clientKey)}" tabindex="0" data-tip="${esc(r.interface)}"
             ><i class="g">${r.glyph}</i>${
             compact ? "" : `<span class="lbl">${esc(r.clientShort)}</span>`}</span>
@@ -557,6 +642,11 @@ function card(r){
                  data-tip="No safe deep link: this session was created in the Desktop app, and claude://resume would import a duplicate rather than focus it.">Open — n/a</span>` : ""}
           ${r.resumeCmd ? `<button class="act" type="button" data-copy="${esc(r.resumeCmd)}">Copy resume cmd</button>` : ""}
           ${r.cwd ? `<button class="act" type="button" data-copy="${esc(r.cwd)}">Copy path</button>` : ""}
+          <button class="act" type="button" data-hide="${esc(r.id)}"
+            data-tip="${state.hidden[r.id]
+              ? "Put this session back on the board."
+              : "Drop this session from the board. Kept in this browser only — it does not touch the scan, the menu bar, or anyone else's view."}"
+            >${state.hidden[r.id] ? "Unhide" : "Hide"}</button>
         </div>
       </div>
 
@@ -612,6 +702,15 @@ function render(){
 
   document.querySelectorAll(".tile[data-state]").forEach(t =>
     t.setAttribute("aria-pressed", String(state.states.has(t.dataset.state))));
+
+  const hb = document.getElementById("hiddenBtn"), n = hiddenCount();
+  hb.textContent = n ? `Hidden ${n}` : "Hidden";
+  hb.disabled = !n;
+  hb.setAttribute("aria-pressed", String(state.showHidden && !!n));
+  hb.setAttribute("data-tip", n
+    ? (state.showHidden ? "Showing hidden sessions, dimmed. Click to tuck them away again."
+                        : `${n} session${n===1?"":"s"} hidden. Click to show them.`)
+    : "No sessions hidden. Use Hide on a row to drop it from the board.");
 
   const host = document.getElementById("rows");
   host.innerHTML = list.length
@@ -753,6 +852,38 @@ document.getElementById("sortDir").addEventListener("click", e => {
                          : "Ascending — click for descending");
   render();
 });
+document.getElementById("rows").addEventListener("click", e => {
+  const b = e.target.closest("[data-hide]");
+  if (!b) return;
+  const id = b.dataset.hide;
+  if (state.hidden[id]) delete state.hidden[id]; else state.hidden[id] = true;
+  persist(); render();
+  toast(state.hidden[id] ? "Hidden. Find it under Hidden in the toolbar." : "Back on the board.");
+});
+
+document.getElementById("hiddenBtn").addEventListener("click", () => {
+  state.showHidden = !state.showHidden; persist(); render();
+});
+
+const THEMES = ["system", "light", "dark"];
+const themeBtn = document.getElementById("themeBtn");
+function applyTheme(){
+  // No attribute at all is the third state: the CSS falls through to
+  // prefers-color-scheme, which is what "system" has to mean.
+  if (state.theme === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = state.theme;
+  const label = state.theme[0].toUpperCase() + state.theme.slice(1);
+  themeBtn.textContent = `Theme · ${label}`;
+  themeBtn.setAttribute("data-tip", state.theme === "system"
+    ? "Following the system setting. Click for light."
+    : `Forced ${state.theme}. Click for ${THEMES[(THEMES.indexOf(state.theme)+1) % 3]}.`);
+}
+themeBtn.addEventListener("click", () => {
+  state.theme = THEMES[(THEMES.indexOf(state.theme) + 1) % THEMES.length];
+  persist(); applyTheme();
+});
+applyTheme();
+
 document.getElementById("q").addEventListener("input", e => {
   state.q = e.target.value.trim().toLowerCase(); render();
 });
@@ -870,6 +1001,12 @@ def main():
 
     html = f"""<title>Session Fleet</title>
 <style>{glyph_css}{CSS}</style>
+<script>
+try {{
+  var t = (JSON.parse(localStorage.getItem("fleetview.v3") || "{{}}") || {{}}).theme;
+  if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+}} catch (e) {{}}
+</script>
 <div class="wrap">
   <header class="mast">
     <div>
@@ -908,6 +1045,9 @@ def main():
       data-tip="One line: title, state, Linear subteam, git changes, client and last update.">Collapse all</button>
     <button class="chip" type="button" data-mode="full"
       data-tip="Add folder, branch, purpose, next steps, start time and turns.">Expand all</button>
+    <span class="sep"></span>
+    <button class="chip" type="button" id="hiddenBtn" aria-pressed="false">Hidden</button>
+    <button class="chip" type="button" id="themeBtn">Theme</button>
   </div>
 
   <div class="rows" id="rows"></div>
