@@ -26,6 +26,42 @@ qm undo                                     # put the last apply back
 
 ---
 
+## Install
+
+### As a Claude Code plugin
+
+```
+/plugin marketplace add dean815/claude-quartermaster
+/plugin install quartermaster@claude-quartermaster
+```
+
+Adds two skills: **audit-workspace** (read-only) and **tune-workspace** (the write
+path). Both shell out to the CLI in this repo, so there is no build step and no
+`npm install` — quartermaster has zero runtime dependencies and runs from source
+via `node --experimental-strip-types`.
+
+Deliberately **not** an MCP server. An MCP server publishes its tool names into
+every session's context, which is the cost this tool exists to measure.
+
+### As a CLI
+
+From a clone, with no install:
+
+```bash
+npm run qm -- audit
+```
+
+Or put `qm` on your PATH:
+
+```bash
+npm run build && npm link
+qm audit
+```
+
+Requires Node 22.6+ for `--experimental-strip-types` (on by default from Node 23).
+
+---
+
 ## The problem
 
 A mature Claude Code setup accumulates configuration faster than it accumulates

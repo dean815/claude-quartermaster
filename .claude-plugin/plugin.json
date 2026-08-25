@@ -1,0 +1,17 @@
+{
+  "name": "quartermaster",
+  "version": "0.1.0",
+  "description": "Audits which Claude Code extensions load in which projects and what they cost, across the eight config surfaces that decide it, and changes them behind a reviewed diff.",
+  "author": {
+    "name": "Dean Hicks",
+    "email": "dean.h.hicks@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "audit",
+    "context",
+    "plugins",
+    "mcp",
+    "configuration"
+  ]
+}
