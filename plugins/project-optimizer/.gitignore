@@ -1,0 +1,15 @@
+.DS_Store
+node_modules/
+*.log
+
+# Local-only settings and scratch
+.claude/*.local.md
+.claude/settings.local.json
+/scratch/
+/tmp/
+
+# Other plugins' local state, not part of this plugin
+.remember/
+
+# Test fixtures
+.test-tmp/

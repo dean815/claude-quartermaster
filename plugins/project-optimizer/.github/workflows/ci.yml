@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate JSON
+        run: |
+          for f in .claude-plugin/plugin.json hooks/hooks.json; do
+            jq empty "$f" && echo "ok: $f"
+          done
+
+      - name: Shell syntax
+        run: |
+          for f in scripts/*.sh tests/*.sh; do
+            bash -n "$f" && echo "ok: $f"
+          done
+
+      # Gated at warning: the codebase is clean at this level. Below it,
+      # -S info and -S style add ~6 and ~8 stylistic findings respectively —
+      # worth reviewing, but not worth failing a build over.
+      - name: ShellCheck
+        run: shellcheck -S warning scripts/*.sh tests/*.sh
+
+      - name: Regression tests
+        run: bash tests/run.sh

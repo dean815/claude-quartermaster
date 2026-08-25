@@ -1,0 +1,113 @@
+{
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "project-artifact@claude-plugins-official": true,
+    "andrej-karpathy-skills@karpathy-skills": true,
+    "plugin-dev@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "figma@claude-plugins-official": false,
+    "frontend-design@claude-plugins-official": false,
+    "playwright@claude-plugins-official": false,
+    "airtable@claude-plugins-official": false,
+    "notion@claude-plugins-official": false
+  },
+  "extraKnownMarketplaces": {
+    "karpathy-skills": {
+      "source": {
+        "source": "github",
+        "repo": "forrestchang/andrej-karpathy-skills"
+      }
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash(* --version)",
+      "Bash(* --help)",
+      "Bash(command -v *)",
+      "Bash(which *)",
+      "Bash(awk *)",
+      "Bash(grep *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(wc *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(find *)",
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(git show*)",
+      "Bash(git fetch*)",
+      "Bash(git remote -v*)",
+      "Bash(git remote show*)",
+      "Bash(git rev-parse*)",
+      "Bash(git ls-files*)",
+      "Bash(git stash list*)",
+      "Bash(git config --get*)",
+      "Bash(git config --list*)",
+      "Bash(git describe*)",
+      "Bash(git tag -l*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(git switch *)",
+      "Bash(git pull*)",
+      "Bash(git push*)",
+      "Bash(gh api *)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr list*)",
+      "Bash(gh pr checks*)",
+      "Bash(gh issue view*)",
+      "Bash(gh issue list*)",
+      "Bash(gh run view*)",
+      "Bash(gh run list*)",
+      "Bash(gh repo view*)",
+      "Bash(gh auth status*)",
+      "Bash(gh pr create*)",
+      "Bash(gh pr merge*)",
+      "Bash(npm ls*)",
+      "Bash(npm view*)",
+      "Bash(npm run *)",
+      "Bash(npm test*)",
+      "Bash(npm ci*)",
+      "Bash(node *)",
+      "Bash(pip3 list*)",
+      "Bash(pip3 show*)",
+      "Bash(pip3 freeze*)",
+      "Bash(python3 -m pip list*)",
+      "Bash(python3 -m pip show *)",
+      "Bash(python3 -c *)",
+      "Bash(npx gsd-core *)",
+      "Read(.planning/*)",
+      "Edit(.planning/*)",
+      "Read(STATE.md)",
+      "Edit(STATE.md)",
+      "Bash(uv sync*)",
+      "Bash(uv run*)",
+      "Bash(pytest*)",
+      "Bash(ruff *)"
+    ],
+    "deny": [
+      "Bash(git push -f*)",
+      "Bash(git push --force *)",
+      "Bash(git reset --hard *)",
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(.secrets)"
+    ],
+    "ask": [
+      "Bash(rm -rf *)"
+    ],
+    "defaultMode": "auto"
+  },
+  "env": {
+    "CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX": "CPO"
+  }
+}

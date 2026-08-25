@@ -1,0 +1,17 @@
+{
+  "name": "project-optimizer",
+  "version": "0.2.1",
+  "description": "Onboards new project directories: tunes plugins and MCP servers to the project, writes a well-constructed CLAUDE.md, checks directory organization, and verifies GitHub configuration.",
+  "author": {
+    "name": "Dean Hicks",
+    "email": "dean.h.hicks@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "onboarding",
+    "project-setup",
+    "claude-md",
+    "github",
+    "configuration"
+  ]
+}

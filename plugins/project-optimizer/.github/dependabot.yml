@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # No package ecosystem here — the plugin is bash, jq, git, and gh.
+  # Workflow actions are the only thing with a version to track.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
