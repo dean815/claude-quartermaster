@@ -776,15 +776,130 @@ describe('duplicate-access-paths reports what loaded, and says how it matched', 
     assert.ok(n8n.evidence.some((e) => /launch URLs disagree/.test(e)), n8n.evidence.join(' / '));
   });
 
-  test('the fix borrows the first-party command only where it reaches', () => {
+  /**
+   * Two manually-configured paths at one service is **precedence, not suppression**
+   * (QM-8). The three manual scopes collide by name and the highest wins; neither spec
+   * suppresses the other and neither leaves the file. The fixture is this shape --
+   * `linear-server` at user scope and `linear` in a project `.mcp.json`, same URL.
+   */
+  test('two manual paths are reported as precedence rather than suppression', () => {
     const f = findingsOf(scenario());
     const linear = f.find((x) => x.key === 'duplicate-access-paths linear')!;
-    assert.match(linear.fix!, /^claude mcp remove linear-server/);
+    assert.match(linear.fix!, /are both manually-configured/);
+    assert.match(linear.detail, /collide by name rather than being deduplicated/);
+    assert.doesNotMatch(
+      linear.fix!,
+      /^claude mcp remove/,
+      'neither of two manual specs suppresses the other, so neither is a removal target',
+    );
 
-    // Nothing in the figma group is a user-scope server, so `claude mcp remove` is not
-    // the command to print at it.
+    // Nothing in the figma group is manually-configured, so nothing arbitrates.
     const figma = f.find((x) => x.key === 'duplicate-access-paths figma')!;
     assert.doesNotMatch(figma.fix!, /^claude mcp remove/);
+    assert.match(figma.detail, /nothing arbitrates/);
+  });
+});
+
+/**
+ * The shape that carried the defect, which the big fixture does not have (QM-8).
+ *
+ * One manually-configured path plus copies it suppresses. Measured live: `linear-server`
+ * at user scope against `claude.ai Linear` and `plugin:linear:linear`, and the audit
+ * printed `claude mcp remove linear-server` at it -- the one finding on that machine that
+ * advised a removal, and its target was the path holding the other two down. Removing it
+ * un-suppresses them, so the advice increased what loads while reading as a cleanup.
+ *
+ * `scenario()` gives `linear` **two** manual paths, so it lands on the precedence branch
+ * and never reached this. A fixture had to be added before a wrong recommendation could
+ * fail anything, which is DEA-149's lesson on a new axis.
+ */
+describe('one manual path suppressing the rest (QM-8)', () => {
+  const arbitrated = () =>
+    duplicateAccessPaths(
+      ctx(
+        {
+          claudeJson: claudeJson({
+            mcpServers: { 'linear-server': { type: 'http', url: 'https://mcp.linear.test/mcp' } },
+          }),
+        },
+        {
+          measurements: [
+            measurement([
+              server({ server: 'linear-server', chars: 1200 }),
+              server({ server: 'claude_ai_Linear', kind: 'connector', chars: 1900 }),
+              server({ server: 'plugin_linear_linear', kind: 'plugin', chars: 900 }),
+            ]),
+          ],
+        },
+      ),
+    )[0]!;
+
+  test('names the arbiter and what it is holding down', () => {
+    const f = arbitrated();
+    assert.match(
+      f.detail,
+      /linear-server is manually-configured, so Claude Code suppresses the 2 other paths as duplicates of it\./,
+    );
+    assert.ok(
+      f.evidence.some((e) =>
+        /^linear-server is manually-configured, so it suppresses: .*claude_ai_Linear/.test(e),
+      ),
+      `evidence must name what is suppressed: ${JSON.stringify(f.evidence)}`,
+    );
+  });
+
+  /** The regression itself, asserted verbatim in the direction that was wrong. */
+  test('never advises removing the arbiter, and says what removing it would do', () => {
+    const f = arbitrated();
+    assert.doesNotMatch(
+      f.fix!,
+      /^claude mcp remove/,
+      'the arbiter is what keeps the duplicates suppressed — removing it brings them back',
+    );
+    assert.match(f.fix!, /is what keeps the other 2 paths suppressed/);
+    assert.match(f.fix!, /increases what loads rather than reducing it/);
+    // Three names read with one "and", not two.
+    assert.match(f.fix!, /brings claude_ai_Linear and plugin_linear_linear back/);
+  });
+
+  /**
+   * Both inflections asserted verbatim, at one and at many.
+   *
+   * DEA-148's defect was `plural()` inflecting the noun and leaving the verb fixed, with
+   * the one-item fixture green the whole time because the only assertion that read the
+   * string read a *number* out of it. So neither form is rebuilt with `plural()` here --
+   * an expectation built that way agrees with whatever the helper does.
+   */
+  test('and counts the suppressed paths, at one and at many', () => {
+    assert.match(arbitrated().fix!, /is what keeps the other 2 paths suppressed\./);
+
+    const one = duplicateAccessPaths(
+      ctx(
+        {
+          claudeJson: claudeJson({
+            mcpServers: { 'linear-server': { type: 'http', url: 'https://mcp.linear.test/mcp' } },
+          }),
+        },
+        {
+          measurements: [
+            measurement([
+              server({ server: 'linear-server', chars: 1200 }),
+              server({ server: 'claude_ai_Linear', kind: 'connector', chars: 1900 }),
+            ]),
+          ],
+        },
+      ),
+    )[0]!;
+    assert.match(one.fix!, /is what keeps the other path suppressed\./);
+    assert.match(one.detail, /suppresses the other path as a duplicate of it\./);
+  });
+
+  /**
+   * The two-branch fact is only stated where it applies. With an arbiter present, both
+   * launch paths agree that the manual server wins, so naming a branch would be noise.
+   */
+  test('does not reach for the launch-mode branch when something arbitrates', () => {
+    assert.doesNotMatch(arbitrated().detail, /depends on how Claude Code was started/);
   });
 });
 
