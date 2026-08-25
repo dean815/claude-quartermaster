@@ -823,6 +823,49 @@ contribute nothing, so the source is exercised by a single real row. And precede
 a Local-scope spec and a top-level one of the same name is **unmeasured** — no such pair
 exists on this machine, and establishing it means writing `~/.claude.json`.
 
+**The rubric was refused and the detector that already shipped was giving the opposite
+advice (QM-8).** Phase 3 was blocked from 2026-08-01 on one question: does encoding
+published first-party guidance count as *fact* (in scope) or as the *judgement* this repo
+hands back? Settled **fact-only** — the tool reports the mechanism and never the
+recommendation. No decision table, no `should` column, and *"CLI tools are the most
+context-efficient way"* is not encoded. CLAUDE.md's objectivity rule ships unamended, and
+this is the third case decided that way after DEA-148 and DEA-152.
+**What that left was not a new detector.** Measured before building: a config-side scan
+finds **4** multi-path services against `duplicateAccessPaths`'s **11**, sharing only 3 —
+so a second detector would lose 8 and duplicate 3. The remaining 1 was `robinhood`, and
+the detector's own header already names it as the false positive an earlier pass made,
+because configuration cannot tell a connector removed in March from one live today.
+Verified rather than deferred to: `claude mcp list` from `~` reports `claude.ai Robinhood`
+`✔ Connected` and `robinhood-trading` `⊘ Disabled for this project` — **one live path, not
+two**. Only the *manual set* is taken from config; the paths still come from transcripts,
+and `manualNamespaces` says so in place.
+**The live defect was in the `fix` field, and exactly one finding carried it.** Of 11
+findings, 1 advised a removal — `claude mcp remove linear-server` — and `linear-server` is
+the manually-configured path *suppressing* `claude.ai Linear` and two plugin copies.
+Removing it un-suppresses them, so the audit's only actionable recommendation increased
+what loads while reading as a cleanup. That is QM-52's mechanism arriving as advice a
+detector prints. Now: 11 findings, **0** advising a removal.
+**Where nothing arbitrates, the answer has two branches and the text refuses to pick one.**
+An interactive session keeps the plugin; a non-interactive one (`-p`, piped output, the
+Agent SDK, Claude Code Desktop) keeps the connector. Naming one winner is wrong for
+whichever way the reader launches Claude Code, and `name a single winner` is run as a
+mutation. Stated only where it applies — with an arbiter present both paths agree, so the
+branch would be noise, and a test pins its absence.
+**DEA-148's defect recurred inside the fix for it.** `arbitration()` inflected the noun and
+left the tail fixed, producing `the other path as duplicates of it` — shipped green,
+because `scenario()` gives `linear` **two** manual paths and lands on the precedence
+branch, so no fixture had one suppressed path. The whole clause is inflected now, both
+forms are asserted verbatim at one and at many, and neither expectation is rebuilt with
+`plural()`. The shape that carried the original defect had to be *added* as a fixture
+before a wrong recommendation could fail anything.
+The day it fails: `manualNamespaces` reads the catalog, which only carries plugins enabled
+somewhere, so a manual server whose twin is a plugin disabled everywhere still reads as
+arbitrating over it. The suppression claim is a name comparison and observes no suppression
+happening — it rests on first-party behaviour recorded in one research session. And the
+interactive branch of the two-branch sentence was never watched happening; it is
+source-derived and corroborated by `claude mcp list`, and the text states it as flatly as
+the half that was measured 3/3.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32

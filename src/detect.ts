@@ -109,6 +109,7 @@ export function duplicateAccessPaths(ctx: AuditContext): Finding[] {
   type Ns = { tools: number; chars: number; kind: ServerKind };
   const perService = new Map<string, { sessions: number; namespaces: Map<string, Ns> }>();
   const urls = urlIndex(ctx.ws);
+  const manual = manualNamespaces(ctx);
 
   for (const m of ctx.measurements) {
     const byService = new Map<string, ServerCost[]>();
@@ -159,6 +160,19 @@ export function duplicateAccessPaths(ctx: AuditContext): Finding[] {
     const distinct = new Set(known);
     const basis: MatchBasis = known.length >= 2 && distinct.size === 1 ? 'url' : 'name';
 
+    /**
+     * Which of these paths arbitrates, and what that makes the others (QM-8).
+     *
+     * Claude Code deduplicates by launch signature and a **manually-configured** server
+     * -- user scope, Local scope, or a project's own `.mcp.json` -- is the only thing on
+     * the winning side of that comparison. Everything else here is a plugin or a
+     * connector, which lose to it and cannot arbitrate between themselves.
+     */
+    const arbiters = entries.map(([ns]) => ns).filter((ns) => manual.has(ns));
+    const suppressed = entries
+      .filter(([ns, v]) => !manual.has(ns) && (v.kind === 'plugin' || v.kind === 'connector'))
+      .map(([ns]) => ns);
+
     // `claude mcp remove` reaches user-scope servers and nothing else, so borrow the
     // first-party wording only where the first-party command applies.
     const removable = entries.find(([, v]) => v.kind === 'direct')?.[0];
@@ -178,9 +192,10 @@ export function duplicateAccessPaths(ctx: AuditContext): Finding[] {
             'so the cost is small -- but the duplication is real and will grow if they connect. '
           : 'Each publishes its own tool names into the same context. ') +
         (basis === 'url'
-          ? `Matched on the launch URL these share (${[...distinct][0]}), which is exact.`
+          ? `Matched on the launch URL these share (${[...distinct][0]}), which is exact. `
           : 'Matched on the namespace spelling, which is inferred -- no two of these ' +
-            'carry a launch URL this tool can read, so nothing confirms it.'),
+            'carry a launch URL this tool can read, so nothing confirms it. ') +
+        arbitration(arbiters, suppressed),
       evidence: [
         ...entries.map(
           ([ns, v]) =>
@@ -191,18 +206,105 @@ export function duplicateAccessPaths(ctx: AuditContext): Finding[] {
         ...(distinct.size > 1
           ? [`launch URLs disagree (${[...distinct].join(' vs ')}) — the name match may have merged two services`]
           : []),
+        ...(arbiters.length === 1 && suppressed.length
+          ? [`${arbiters[0]} is manually-configured, so it suppresses: ${suppressed.join(', ')}`]
+          : []),
       ],
-      fix: removable
-        ? `claude mcp remove ${removable} — the command /mcp itself prints when it hides a ` +
-          'duplicate. A claude.ai connector plus a plugin is legitimate when chat needs the ' +
-          'connector, so disable the plugin rather than removing the connector.'
-        : 'Keep one path per surface. None of these is a user-scope server, so ' +
-          '`claude mcp remove` does not reach them -- disable the duplicate plugin in ' +
-          'Claude Code, or the connector in claude.ai.',
+      /**
+       * What each action would do, never which to take (QM-8, fact-only).
+       *
+       * **The arbiter branch used to advise the opposite of what it should.** It printed
+       * `claude mcp remove <the user-scope server>` for the one service here that has a
+       * manually-configured path -- which is the path *suppressing* the other two. Removing
+       * it un-suppresses them, so the advice increased what loads while reading as a
+       * cleanup. Observed live on the neighbouring service: `robinhood-trading` is denied
+       * for this project and `claude.ai Robinhood` is `✔ Connected` at the identical URL.
+       */
+      fix:
+        arbiters.length === 1 && suppressed.length
+          ? `${arbiters[0]} is what keeps the other ${plural(suppressed.length, 'path', `${suppressed.length} paths`)} ` +
+            `suppressed. Removing or denying it (\`claude mcp remove ${arbiters[0]}\`) brings ` +
+            `${andList(suppressed)} back, which increases what loads rather than ` +
+            'reducing it. To drop a path instead, disable the duplicate plugin in Claude ' +
+            'Code, or the connector in claude.ai.'
+          : arbiters.length > 1
+            ? `${arbiters.join(' and ')} are both manually-configured. The three manual ` +
+              'scopes collide by name and the highest wins, so this is precedence rather ' +
+              'than suppression, and both specs stay in the file.'
+            : 'None of these is manually-configured, so nothing arbitrates between them. ' +
+              'Disable the duplicate plugin in Claude Code, or the connector in claude.ai; ' +
+              'a manually-configured server at the same URL would suppress both.',
     } satisfies Finding;
   });
 
   return findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+}
+
+/**
+ * The sentence that says which path decides, appended to every duplicate finding (QM-8).
+ *
+ * **Where nothing arbitrates, the honest answer has two branches and this refuses to pick
+ * one.** The interactive TUI keeps `plugin:*` in the manually-configured map, so the plugin
+ * beats the connector; a non-interactive run strips them and a separate pass leaves the
+ * connector. Both were established in one research session on 2.1.232 -- the headless half
+ * watched happening 3/3, the interactive half source-derived and corroborated by
+ * `claude mcp list`. Naming a single winner would be wrong for whichever way the reader
+ * launches Claude Code, and a reader on the other branch would act on it.
+ */
+function arbitration(arbiters: readonly string[], suppressed: readonly string[]): string {
+  if (arbiters.length === 1 && suppressed.length) {
+    // The whole clause is inflected, not just the noun. Inflecting the noun and leaving
+    // the tail fixed is DEA-148's defect verbatim -- it produced "the other path as
+    // duplicates of it" here before a one-suppressed fixture existed to say so.
+    return (
+      `${arbiters[0]} is manually-configured, so Claude Code suppresses ` +
+      plural(
+        suppressed.length,
+        'the other path as a duplicate of it.',
+        `the ${suppressed.length} other paths as duplicates of it.`,
+      )
+    );
+  }
+  if (arbiters.length > 1) {
+    return (
+      `${arbiters.length} of these are manually-configured, which collide by name rather ` +
+      'than being deduplicated — the highest scope wins.'
+    );
+  }
+  return (
+    'None of these is manually-configured, so nothing arbitrates: which one loads depends ' +
+    'on how Claude Code was started. An interactive session keeps the plugin; a ' +
+    'non-interactive one (-p, piped output, the Agent SDK, Claude Code Desktop) keeps the ' +
+    'connector.'
+  );
+}
+
+/**
+ * Namespaces backed by a **manually-configured** launch spec -- user scope, QM-53's Local
+ * scope, or a project's own `.mcp.json`.
+ *
+ * Read from the catalog rather than from `ServerKind`, which the transcript reader derives
+ * from the namespace *spelling*: `direct` there means "not prefixed `plugin_` or
+ * `claude_ai_`", which a Local-scope server satisfies and so does anything else unprefixed.
+ * This asks the config which specs exist, and the two agree on today's data only because
+ * every manual server here is also user-scope.
+ *
+ * **Only the manual set is taken from config; the *paths* still come from transcripts.**
+ * Folding config-declared paths into the finding was tried and rejected: this detector's
+ * whole premise is same-session co-occurrence, because a connector removed in March and a
+ * plugin added in June look identical to two live duplicates in configuration. Measured
+ * while deciding it -- a config-side count reported `robinhood` as reachable two ways,
+ * and `claude mcp list` shows only one of those two paths is live, the other being denied.
+ * That is the exact false positive this detector's header records having already removed.
+ */
+function manualNamespaces(ctx: AuditContext): Set<string> {
+  const out = new Set<string>();
+  for (const e of buildMcpCatalog(ctx.ws, ctx.inventories).entries) {
+    if (e.userScope || e.localIn.length > 0 || e.declaredIn.length > 0) {
+      out.add(normalizeServerName(e.name));
+    }
+  }
+  return out;
 }
 
 /**
@@ -657,6 +759,12 @@ function decisionsIn(file: SettingsFile): Array<{ key: string; entries: number }
 }
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+
+/** `a`, `a and b`, `a, b and c` -- so a three-item list does not read with two "and"s. */
+function andList(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+}
 
 /**
  * A settings file Claude Code refuses, and everything in it that is consequently dead.
