@@ -330,6 +330,12 @@ footer{position:fixed;left:0;bottom:0;padding:4px 14px;color:var(--dim);font-siz
    * Deliberately shorter than the sentence \`qm set\` prints: the full text, with the paths
    * in it, goes to the terminal running \`qm serve\`. A code missing from these tables
    * renders as the bare code, which is visible and wrong-looking rather than absent.
+   *
+   * Two codes are absent on purpose, on QM-52's reasoning. \`un-suppresses\` is MCP-axis
+   * only and \`promoted-but-ignored\` needs a promoted axis, and the grid writes the plugin
+   * axis unpromoted -- \`AXES\` returns no promoted axis at all, so no request this server
+   * can build reaches either. Glossing a code the wire cannot carry is a claim about
+   * behaviour nobody has exercised; both get one the day the grid grows a path to them.
    */
   var NOTE_GLOSS = {
     'not-validated': 'Nothing validated the target file, so whether Claude Code applies ' +

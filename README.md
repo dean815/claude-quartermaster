@@ -255,9 +255,10 @@ a dead one look identical — so every run leaves a timestamp behind and `qm ora
 
 Everything above is read-only. `qm set` is not, and it is deliberately narrow: **plugin
 toggles, one project, one file** — `<project>/.claude/settings.local.json`. It never
-writes `~/.claude.json`, and it never writes a tracked `settings.json`; both are named in
-the last guard before any byte lands, so breaking that promise fails loudly rather than
-silently.
+writes `~/.claude.json`, and it writes a tracked `settings.json` only under `--promote`
+(QM-55), which is how an onboarding decision reaches the repo rather than one machine.
+Both are named in the last guard before any byte lands, so breaking either promise fails
+loudly rather than silently.
 
 ```
 qm set --project <path> <plugin-id>=on|off [...] [--yes]

@@ -46,11 +46,14 @@ import {
   type UndoResult,
 } from '../src/apply.ts';
 import {
+  AXES,
   MCP_AXIS,
   PLUGIN_AXIS,
+  PROMOTED_TARGET_FILENAME,
   SKILL_AXIS,
   TARGET_FILENAME,
   emptySettings,
+  promote,
   type TogglePlan,
 } from '../src/toggle.ts';
 import { applyEdits, applyStage, stageEdits, type Edit } from '../src/surfaces/write.ts';
@@ -992,5 +995,120 @@ describe('the axis that writes ~/.claude.json', () => {
     assert.equal(result.outcome, 'written');
     if (result.outcome !== 'written') return;
     assert.equal(statSync(result.backup).mode & 0o777, 0o600);
+  });
+});
+
+/**
+ * The promoted settings axis (QM-55).
+ *
+ * `qm set --promote` is the only way this repo writes a project's tracked `settings.json`,
+ * and it exists because `project-optimizer` always did -- team config belongs in the file
+ * the team clones. What has to stay true is that lifting the ban lifts it for exactly one
+ * axis and exactly one path.
+ *
+ * Every test below is written so that the obvious wrong implementation fails it. The
+ * mutation each one answers is named in place, and `promoteGate` is run against a
+ * deliberately-broken applier at the end the way `forbiddenGate` is.
+ */
+describe('promotion', () => {
+  /**
+   * The barrier that must survive, stated as the mutation it catches.
+   *
+   * `promotes` clears the basename ban, so the danger is an axis that sets it and should
+   * not -- `PLUGIN_AXIS.promotes = true` would let every ordinary `qm set` write the
+   * tracked file. `owns` is the second, independent barrier, and it is the one that has to
+   * hold when the first is gone: a promoted plan naming *another* project's tracked file
+   * is still refused, because the path is not the one this axis builds for this project.
+   */
+  function promoteGate(apply: Applier): string[] {
+    const failures: string[] = [];
+    const axis = promote(PLUGIN_AXIS);
+
+    // 1. An unpromoted axis is still refused the tracked file, ban intact.
+    {
+      const s = scratch('promote-unpromoted');
+      const target = join(s.project, '.claude', PROMOTED_TARGET_FILENAME);
+      writeFileSync(target, BEFORE);
+      const plan: TogglePlan = { ...planOver(s.target, s.project), target };
+      const r = apply(plan, opts(s.state));
+      if (r.outcome !== 'refused') failures.push('unpromoted axis wrote settings.json');
+      if (readFileSync(target, 'utf8') !== BEFORE) failures.push('unpromoted axis changed settings.json');
+    }
+
+    // 2. A promoted axis is refused ANOTHER project's tracked file. This is `owns`, and it
+    //    is the only barrier left once `promotes` has cleared the other one.
+    {
+      const mine = scratch('promote-owns-mine');
+      const theirs = scratch('promote-owns-theirs');
+      const target = join(theirs.project, '.claude', PROMOTED_TARGET_FILENAME);
+      writeFileSync(target, BEFORE);
+      const plan: TogglePlan = { ...planOver(mine.target, mine.project), axis, target };
+      const r = apply(plan, opts(mine.state));
+      if (r.outcome !== 'refused') failures.push("promoted axis wrote another project's settings.json");
+      if (readFileSync(target, 'utf8') !== BEFORE) failures.push("promoted axis changed another project's file");
+    }
+
+    // 3. And it DOES write its own, or the feature does not exist.
+    {
+      const s = scratch('promote-own');
+      const target = join(s.project, '.claude', PROMOTED_TARGET_FILENAME);
+      const plan: TogglePlan = { ...planOver(target, s.project), axis, target };
+      const r = apply(plan, opts(s.state));
+      if (r.outcome !== 'written') failures.push(`promoted axis refused its own target: ${r.outcome}`);
+    }
+    return failures;
+  }
+
+  test('lifts the ban for one axis and one path, and `owns` still holds', () => {
+    const failures = promoteGate(applyPlan);
+    assert.deepEqual(failures, [], report(failures));
+  });
+
+  /**
+   * The four fields are one fact, so a promotion that moves three of them is broken in a
+   * way no single-field assertion would catch. `validated` is the one most easily left
+   * behind -- it reads a different member of the same record and still typechecks.
+   */
+  test('target, owns, validated and afterChain all move together', () => {
+    const axis = promote(PLUGIN_AXIS);
+    const project = '/p';
+    const tracked = join(project, '.claude', PROMOTED_TARGET_FILENAME);
+    const local = join(project, '.claude', TARGET_FILENAME);
+
+    assert.equal(axis.target({} as never, project), tracked);
+    assert.equal(axis.owns(tracked, project), true);
+    assert.equal(axis.owns(local, project), false, 'a promoted axis still owns the local file');
+
+    const record = {
+      settings: { path: tracked } as never,
+      localSettings: { path: local } as never,
+    } as never;
+    assert.equal((axis.validated(record) as { path: string }).path, tracked,
+      'validated still reads the local file');
+
+    // `resolve.ts` pushes settings.json at `project` scope. An afterChain saying `local`
+    // would describe a chain the resolver never builds.
+    const now = { value: false, origin: 'inherited', chain: [] } as never;
+    assert.equal(axis.afterChain(now, tracked, true)[0]?.scope, 'project');
+  });
+
+  /** The MCP axis has no tracked sibling, and saying so beats writing somewhere odd. */
+  test('refuses an axis with no tracked file to promote into', () => {
+    assert.throws(() => promote(MCP_AXIS), /no tracked file/);
+    for (const axis of [PLUGIN_AXIS, SKILL_AXIS]) {
+      assert.equal(promote(axis).promotes, true, `${axis.name} did not promote`);
+      assert.equal(axis.promotes, false, `${axis.name} was mutated in place`);
+    }
+  });
+
+  /**
+   * Containment. Every caller that resolves an axis by name -- `--axis`, the grid's POST
+   * routes, `undo` reading a record -- goes through `AXES`, and none of them may get a
+   * promoted axis by accident. Promotion is reachable only by calling `promote`.
+   */
+  test('no axis reachable by name promotes', () => {
+    for (const [name, axis] of AXES) {
+      assert.equal(axis.promotes, false, `AXES holds a promoted axis under ${name}`);
+    }
   });
 });

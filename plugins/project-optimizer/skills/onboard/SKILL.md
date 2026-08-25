@@ -179,6 +179,28 @@ the user-level map for a project that was not configured to use it.
 Report each result as it happens. When a step fails, say so plainly, stop that
 area, and continue with the others rather than aborting everything.
 
+**Plugin and skill entries go through `qm set --promote`, not through an edit here**
+(QM-55). `settings.json` is the tracked file, so an onboarding decision belongs in it —
+that is what `--promote` is for, and it is the only path in this suite allowed to write
+that file:
+
+```bash
+qm set --project <abs-path> --promote --axis plugin <id>=on|off [...]
+qm set --project <abs-path> --promote --axis skill  <id>=on|name-only|user-invocable-only|off
+```
+
+One invocation per axis, each printing the whole file's diff and asking before it writes.
+Pass `--yes` only where the user has already approved that exact change in step 5.
+
+Why not edit the file directly: `qm` resolves the entry against all eight config surfaces
+first, so it refuses a write that would land in a settings file Claude Code discards, one
+whose `enabledPlugins` key is being ignored, or one that changes no resolved value — three
+ways an edit made here would report success and do nothing. It also leaves a backup and an
+undo record, which a hand-edit does not. `qm undo` reverses the last one.
+
+`.mcp.json` is still this skill's own to write; `qm` has no axis for declaring a server,
+only for enabling and disabling one.
+
 After writing `.claude/settings.json` or `.mcp.json`, state that the change takes
 effect on the **next** session — this one keeps the plugin set it started with.
 

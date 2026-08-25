@@ -161,10 +161,13 @@ export type ApplyRefusalCode =
   | 'write-refused';
 
 /**
- * The file no axis may write, named rather than merely not built.
+ * The file only a promoted axis may write, named rather than merely not built.
  *
  * `settings.json` is the repo's own tracked configuration, and promoting a local decision
- * into it is a separate, explicit action nobody has asked for yet.
+ * into it is a separate, explicit action -- which `toggle.ts`'s `promote` now is (QM-55).
+ * The set still names it, and a promoted axis clears **only this** condition and only for
+ * the path it builds itself; `owns` below is unchanged and independent, so `settings.json`
+ * arriving on any axis `AXES` can return is refused exactly as it always was.
  *
  * **`~/.claude.json` left this set in QM-46 and did not become unguarded.** It is now the
  * MCP axis's declared target, and the guard below reads the *registry* -- a plan's target
@@ -205,7 +208,8 @@ export interface ApplyOptions {
  * a write that did not happen.
  */
 export function applyPlan(plan: TogglePlan, opts: ApplyOptions): ApplyResult {
-  if (FORBIDDEN_BASENAMES.has(basename(plan.target)) || !plan.axis.owns(plan.target, plan.project)) {
+  const bannedName = FORBIDDEN_BASENAMES.has(basename(plan.target)) && !plan.axis.promotes;
+  if (bannedName || !plan.axis.owns(plan.target, plan.project)) {
     return {
       outcome: 'refused',
       code: 'forbidden-target',
