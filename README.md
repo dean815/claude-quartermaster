@@ -26,6 +26,42 @@ qm undo                                     # put the last apply back
 
 ---
 
+## Install
+
+### As a Claude Code plugin
+
+```
+/plugin marketplace add dean815/claude-quartermaster
+/plugin install quartermaster@claude-quartermaster
+```
+
+Adds two skills: **audit-workspace** (read-only) and **tune-workspace** (the write
+path). Both shell out to the CLI in this repo, so there is no build step and no
+`npm install` — quartermaster has zero runtime dependencies and runs from source
+via `node --experimental-strip-types`.
+
+Deliberately **not** an MCP server. An MCP server publishes its tool names into
+every session's context, which is the cost this tool exists to measure.
+
+### As a CLI
+
+From a clone, with no install:
+
+```bash
+npm run qm -- audit
+```
+
+Or put `qm` on your PATH:
+
+```bash
+npm run build && npm link
+qm audit
+```
+
+Requires Node 22.6+ for `--experimental-strip-types` (on by default from Node 23).
+
+---
+
 ## The problem
 
 A mature Claude Code setup accumulates configuration faster than it accumulates
@@ -219,9 +255,10 @@ a dead one look identical — so every run leaves a timestamp behind and `qm ora
 
 Everything above is read-only. `qm set` is not, and it is deliberately narrow: **plugin
 toggles, one project, one file** — `<project>/.claude/settings.local.json`. It never
-writes `~/.claude.json`, and it never writes a tracked `settings.json`; both are named in
-the last guard before any byte lands, so breaking that promise fails loudly rather than
-silently.
+writes `~/.claude.json`, and it writes a tracked `settings.json` only under `--promote`
+(QM-55), which is how an onboarding decision reaches the repo rather than one machine.
+Both are named in the last guard before any byte lands, so breaking either promise fails
+loudly rather than silently.
 
 ```
 qm set --project <path> <plugin-id>=on|off [...] [--yes]

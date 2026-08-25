@@ -7,8 +7,14 @@
  * `disclose.ts`). `qm set` is the one command that changes a user's configuration, and it
  * changes exactly one file per axis -- `<project>/.claude/settings.local.json` for plugins
  * and skills, `~/.claude.json` for MCP servers (QM-46) -- after showing the whole diff and
- * asking. `qm undo` puts the last one back. Neither ever writes a tracked `settings.json`;
- * `apply.ts` names it and refuses, and refuses any path the plan's own axis does not own.
+ * asking. `qm undo` puts the last one back.
+ *
+ * **`--promote` is the exception, and it is the only one (QM-55).** It moves the two
+ * settings axes onto `<project>/.claude/settings.json`, the tracked file, which is where an
+ * onboarding decision belongs because the repo ships it. `apply.ts` still names that
+ * basename and still refuses it for every axis `AXES` can return; the promoted axis clears
+ * that one condition for itself and remains held by `owns`, which requires the path to be
+ * the one that axis builds for that project.
  */
 import { homedir } from 'node:os';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -72,6 +78,7 @@ import {
   describePlan,
   planEffect,
   planToggles,
+  promote,
   showValue,
   type Axis,
   type ToggleRequest,
@@ -111,6 +118,15 @@ interface Options {
   yes: boolean;
   /** `qm set --axis <name>`: which settings key the write lands in. */
   axis: Axis;
+  /**
+   * `qm set --promote`: write the project's tracked `settings.json` (QM-55).
+   *
+   * A separate flag and not an `--axis` value, because it is orthogonal to all three:
+   * promotion says which *file* of a project decides, `--axis` says which *key*. Folding
+   * them into one word would need a value per pair and would make `plugin` and
+   * `plugin-promoted` look like two axes when they are one axis at two scopes.
+   */
+  promote: boolean;
   project: string | null;
   port: number;
 }
@@ -174,6 +190,7 @@ function parseArgs(argv: string[]): { command: string; args: string[]; opts: Opt
       status: argv.includes('--status'),
       fileIssue: argv.includes('--file-issue'),
       yes: argv.includes('--yes'),
+      promote: argv.includes('--promote'),
       axis: parseAxis(axisIdx === -1 ? null : (argv[axisIdx] ?? null)),
       project: projectIdx === -1 ? null : (argv[projectIdx] ?? null),
       port: parsePort(portIdx === -1 ? null : (argv[portIdx] ?? null)),
@@ -724,11 +741,23 @@ async function set(args: string[], opts: Options): Promise<void> {
     process.exit(2);
   }
 
-  const requests = parseToggles(opts.axis, args);
+  // `promote` throws for an axis with no tracked file to raise into, which is the MCP
+  // axis. Caught here rather than left to surface as a stack trace: a flag combination the
+  // grammar allows and the model refuses is a usage error, and exit 2 is what the rest of
+  // this function gives one.
+  let axis: Axis;
+  try {
+    axis = opts.promote ? promote(opts.axis) : opts.axis;
+  } catch (err) {
+    console.error(`qm: ${(err as Error).message}`);
+    process.exit(2);
+  }
+
+  const requests = parseToggles(axis, args);
   const target = resolve(opts.project);
   const ctx = buildContext(opts, targetOnlyValidity(target));
 
-  const result = planToggles(ctx, opts.axis, target, requests);
+  const result = planToggles(ctx, axis, target, requests);
   if (result.outcome === 'refused') {
     console.log(`\n${BOLD}qm set${RESET} ${DIM}· nothing was written${RESET}\n`);
     for (const r of result.refusals) {
@@ -956,7 +985,7 @@ ${BOLD}qm${RESET} -- audit which Claude Code extensions load where, and what the
   qm baseline [--full]        record today's findings, so --drift can diff against them
   qm serve    [--port <n>]    serve the grid on 127.0.0.1 until Ctrl-C
   qm oracle   [--status] [--file-issue]
-  qm set      --project <path> [--axis plugin|skill|mcp] <id>=<value> [...] [--yes]
+  qm set      --project <path> [--axis plugin|skill|mcp] [--promote] <id>=<value> [...] [--yes]
   qm undo
 
   --full    also scan git hygiene and project layout via project-optimizer, and ask
@@ -987,6 +1016,13 @@ Skills are four-valued, so \`--axis skill\` takes four spellings and no booleans
 no answer to which of \`on\` and \`name-only\` a \`true\` would mean. The id is the string
 Claude Code publishes: \`<plugin>:<skill>\` for a plugin's skill, the bare directory name
 for a personal one. A key it does not match is accepted, written, and does nothing.
+
+\`--promote\` writes the project's tracked \`settings.json\` instead of \`settings.local.json\`,
+which is the difference between a decision this machine makes and one the repo ships. It is
+the only path here allowed that file, and it applies to the two settings axes — \`--axis mcp\`
+has no tracked sibling to promote into and rejects the flag. The gitignore note inverts with
+it: an ordinary write warns when the target is *not* ignored, a promoted one warns when it
+*is*, because then the decision reaches no other clone.
 
 \`--axis mcp\` is the one that writes ~/.claude.json, under projects[<abspath>], and it is a
 deny-list — \`off\` adds the name, \`on\` removes it. The id is the config key: \`claude.ai

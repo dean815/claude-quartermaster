@@ -72,6 +72,7 @@ import {
   type ViewProject,
 } from './model.ts';
 import { PAGE } from './page.ts';
+import { renderSessions } from './sessions.ts';
 
 // ---------------------------------------------------------------------------
 // The contract
@@ -632,6 +633,19 @@ function route(req: IncomingMessage, res: ServerResponse, state: State): void {
   switch (url.pathname) {
     case '/':
       return send(req, res, 200, state.index);
+
+    // The other half of the control plane (QM-55). A GET behind the same loopback and
+    // origin checks as the grid -- and no weaker than Fleet standalone, whose own server
+    // binds loopback with no token at all. The write routes are what the token guards, and
+    // this route writes nothing.
+    //
+    // Rendered per request rather than cached, because that is what makes the board worth
+    // opening: the scan is Python plus `git`, costs no tokens, and a stale board is the one
+    // failure a session dashboard cannot afford.
+    case '/sessions': {
+      const board = renderSessions();
+      return send(req, res, board.ok ? 200 : 503, payload(HTML_TYPE, board.html));
+    }
 
     case '/api/view':
       return send(req, res, 200, state.structure);

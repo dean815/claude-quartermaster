@@ -27,6 +27,45 @@ import { pluginUsage, isDemonstrablyUnused } from './usage.ts';
 export type Severity = 'high' | 'medium' | 'low' | 'info';
 
 /**
+ * The three words `project-optimizer`'s audit skill reports in (QM-55).
+ *
+ * **This is a rendering of `Severity`, not a second rubric.** Until the two tools shared a
+ * repo they each ranked findings their own way, and the header of
+ * `delegate/projectOptimizer.ts` warned that "two copies of a severity rubric drift the
+ * moment either is edited" while that same file carried the second copy. It had already
+ * drifted: measured on 2026-08-25, the skill's `Gap` bucket names "no CLAUDE.md, no README,
+ * no `.gitignore`" while `definitionalFindings` prices `no-gitignore` at `medium` and
+ * `no-readme` at `low`. One disagreement, on one detector, found only because the merge
+ * put both definitions in one tree.
+ *
+ * `Severity` owns the answer and this maps out of it, rather than the reverse, for a reason
+ * that is about information and not about seniority: `Severity` has four values against
+ * three and is what the JSON, the grid and every detector already carry, so mapping this
+ * way loses nothing, while mapping the other way would have to invent a distinction the
+ * three-word scale does not make. The skill stops ranking and starts rendering.
+ *
+ * `info` maps to `null`. It is deliberately not a fourth word: an `info` finding describes
+ * the run rather than the configuration (DEA-140's rule), so ranking it beside things a
+ * reader is meant to act on is the category error the whole scale exists to avoid.
+ */
+export type Rank = 'Blocking' | 'Gap' | 'Polish';
+
+const RANK_OF: Record<Severity, Rank | null> = {
+  high: 'Blocking',
+  medium: 'Gap',
+  // `no-readme` is the one finding this moves: the skill called it a Gap, `Severity` calls
+  // it `low`, and `low` wins because `Severity` is now the single source. Understating a
+  // missing README is also the safer direction -- it is the only one of the four
+  // definitional findings that breaks nothing, and DEA-123's `unknown`-over-`restart` rule
+  // says an audit that overstates is one the reader learns to skim.
+  low: 'Polish',
+  info: null,
+};
+
+/** The word a finding is reported under, or `null` where it is not ranked at all. */
+export const rankOf = (severity: Severity): Rank | null => RANK_OF[severity];
+
+/**
  * Which signal identified two namespaces as one thing.
  *
  * `url` is exact -- two launch specs naming the same endpoint are the same access path

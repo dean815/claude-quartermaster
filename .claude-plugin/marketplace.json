@@ -1,0 +1,53 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-quartermaster",
+  "owner": {
+    "name": "Dean Hicks",
+    "url": "https://github.com/dean815"
+  },
+  "metadata": {
+    "description": "Know and control your Claude Code workspace: what loads, what it costs, and what needs you.",
+    "version": "0.2.0"
+  },
+  "plugins": [
+    {
+      "name": "quartermaster",
+      "source": "./",
+      "description": "Reports which plugins, MCP servers and skills actually load in each project and what they cost per session, reading all eight config surfaces that decide it. Finds services reachable more than one way, enabled extensions never invoked, and settings files Claude Code silently refuses. Changes config on three axes behind a printed diff and a confirmation.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Dean Hicks",
+        "email": "dean.h.hicks@gmail.com"
+      },
+      "homepage": "https://github.com/dean815/claude-quartermaster",
+      "category": "productivity",
+      "keywords": ["audit", "context", "plugins", "mcp", "configuration"]
+    },
+    {
+      "name": "project-optimizer",
+      "source": "./plugins/project-optimizer",
+      "description": "Offers onboarding the first time Claude Code runs in a directory: scopes plugins and MCP servers to the project, writes or improves CLAUDE.md, checks directory organization, and verifies GitHub configuration. Includes a read-only audit with a batch mode, and an archive workflow that inventories every store holding a project's state before anything is removed.",
+      "version": "0.2.1",
+      "author": {
+        "name": "Dean Hicks",
+        "email": "dean.h.hicks@gmail.com"
+      },
+      "homepage": "https://github.com/dean815/claude-quartermaster",
+      "category": "productivity",
+      "keywords": ["onboarding", "project-setup", "claude-md", "github", "configuration"]
+    },
+    {
+      "name": "session-fleet",
+      "source": "./plugins/session-fleet",
+      "description": "Shows every Claude Code session on this machine — across the CLI, Desktop, Cyrus and the Agent SDK — with repo, git state, timestamps, what each session is for, and what you need to do to keep it moving. Scanning costs no tokens; only the purpose and next-step prose needs a model.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Dean Hicks",
+        "email": "dean.h.hicks@gmail.com"
+      },
+      "homepage": "https://github.com/dean815/claude-quartermaster",
+      "category": "productivity",
+      "keywords": ["sessions", "dashboard", "transcripts", "workspace"]
+    }
+  ]
+}

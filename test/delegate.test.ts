@@ -11,7 +11,7 @@ import {
   type ProjectScan,
 } from '../src/delegate/projectOptimizer.ts';
 import { parseInstallationIssues, doctorAdapter } from '../src/delegate/doctor.ts';
-import type { Finding } from '../src/detect.ts';
+import { rankOf, type Finding, type Rank, type Severity } from '../src/detect.ts';
 
 const scan = (body: Partial<ProjectScan> = {}): ProjectScan => ({
   project: { path: '/p', name: 'p' },
@@ -198,5 +198,71 @@ describe('doctor adapter', () => {
       'Warning: something',
       'Error: other',
     ]);
+  });
+});
+
+/**
+ * The one rubric (QM-55).
+ *
+ * `Severity` owns how bad a finding is; `Rank` is the three words the audit skill reports
+ * it in. These used to be two independent scales in two repos, and the merge found them
+ * already disagreeing -- so the value of these tests is that a future edit to either has
+ * to move the other deliberately.
+ */
+describe('severity renders as one rank', () => {
+  /** Total, so no severity can be added without deciding how it reports. */
+  test('every severity maps, and only info is unranked', () => {
+    const all: Severity[] = ['high', 'medium', 'low', 'info'];
+    const seen = new Map<Severity, Rank | null>(all.map((s) => [s, rankOf(s)]));
+    assert.deepEqual([...seen.values()], ['Blocking', 'Gap', 'Polish', null]);
+    // Stated as a property and not just as the list above: an `info` finding describes the
+    // run rather than the configuration, so it is not something to act on and not ranked.
+    assert.equal(rankOf('info'), null);
+    for (const s of all.filter((x) => x !== 'info')) {
+      assert.notEqual(rankOf(s), null, `${s} must rank`);
+    }
+  });
+
+  /**
+   * The disagreement the merge exposed, pinned so reversing it stays a decision.
+   *
+   * The skill's `Gap` bucket used to name "no README" while `definitionalFindings` priced
+   * it `low`. `low` won. Asserted on the *detector's own severity* rather than on the
+   * mapping alone, because the two together are what a reader sees -- pinning only
+   * `rankOf('low')` would leave someone free to reprice the detector and call it a
+   * rendering change.
+   */
+  test('a missing README is Polish, and a missing .gitignore is a Gap', () => {
+    const noReadme = definitionalFindings(
+      scan({ layout: { ...scan().layout, hasReadme: false } }),
+    ).find((f) => f.detector === 'no-readme');
+    assert.ok(noReadme, 'no-readme did not fire');
+    assert.equal(noReadme.severity, 'low');
+    assert.equal(rankOf(noReadme.severity), 'Polish');
+
+    const noGitignore = definitionalFindings(
+      scan({ git: { ...scan().git, hasGitignore: false } }),
+    ).find((f) => f.detector === 'no-gitignore');
+    assert.ok(noGitignore, 'no-gitignore did not fire');
+    assert.equal(noGitignore.severity, 'medium');
+    assert.equal(rankOf(noGitignore.severity), 'Gap');
+  });
+
+  /** The two that are harmful by definition, and must never render below Blocking. */
+  test('a tracked secret and an unlicensed public repo are both Blocking', () => {
+    const secret = definitionalFindings(
+      scan({ layout: { ...scan().layout, riskyTracked: ['.env'] } }),
+    ).find((f) => f.detector === 'tracked-secret');
+    assert.ok(secret);
+    assert.equal(rankOf(secret.severity), 'Blocking');
+
+    const unlicensed = definitionalFindings(
+      scan({
+        github: { checked: true, exists: true, visibility: 'PUBLIC' } as never,
+        layout: { ...scan().layout, hasLicense: false },
+      }),
+    ).find((f) => f.detector === 'public-without-license');
+    assert.ok(unlicensed);
+    assert.equal(rankOf(unlicensed.severity), 'Blocking');
   });
 });

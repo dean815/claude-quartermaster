@@ -105,6 +105,16 @@ import type { McpServerSpec, ProjectRecord, SettingsFile, Workspace } from './su
 /** The filename the settings axes write. Read by `apply.ts`'s last guard. */
 export const TARGET_FILENAME = 'settings.local.json';
 
+/**
+ * The filename a *promoted* settings write lands in (QM-55).
+ *
+ * The repo's own tracked configuration, and the thing every convention here says not to
+ * write by accident. It is reachable only through `promote`, which no `AXES` lookup
+ * returns -- so a caller that knows an axis by name gets one that cannot name this file,
+ * and `apply.ts`'s guard still refuses it.
+ */
+export const PROMOTED_TARGET_FILENAME = 'settings.json';
+
 /** The filename the MCP axis writes -- the user's, never a project's. */
 export const CLAUDE_JSON_FILENAME = '.claude.json';
 
@@ -147,6 +157,9 @@ export const emptySettings = (settingsKey: string): string => `{\n  "${settingsK
 
 export const targetFor = (projectPath: string): string =>
   join(projectPath, '.claude', TARGET_FILENAME);
+
+export const promotedTargetFor = (projectPath: string): string =>
+  join(projectPath, '.claude', PROMOTED_TARGET_FILENAME);
 
 /**
  * Whether the workspace attests an id's spelling, and what it costs if it does not.
@@ -346,6 +359,22 @@ export interface Axis {
    * booleans that always move together are a fact that has been written down three times.
    */
   stored: 'project-file' | 'user-file';
+  /**
+   * Whether this axis is the promoted variant, and therefore the one file `apply.ts`
+   * otherwise refuses outright (QM-55).
+   *
+   * A field and not an inference from `target`, for `apply.ts`'s reason: the guard holds a
+   * plan and no workspace, so it cannot rebuild the path to compare against -- and a guard
+   * that re-derived it from the same data the plan was built with would agree with whatever
+   * the plan says, which is the `memorySlug` defect the `owns` doc already names.
+   *
+   * **It lifts one of two barriers, never both.** `FORBIDDEN_BASENAMES` stops
+   * `settings.json` arriving on any other axis; `owns` independently requires the path to
+   * be the one *this* axis builds for *this* project. A promoted axis clears the first for
+   * itself alone and is still held by the second, so a plan naming some other project's
+   * tracked file is refused exactly as before.
+   */
+  promotes: boolean;
   /** The settings file whose schema validity gates this write, where one gates it. */
   validated(record: ProjectRecord): SettingsFile | null;
   /** What this workspace can say about the id's spelling, and what that is worth. */
@@ -440,6 +469,7 @@ function settingsAxis(
     seed: emptySettings(key),
     owns: (target, project) => target === targetFor(project),
     stored: 'project-file',
+    promotes: false,
     validated: (record) => record.localSettings,
     contested: () => null,
     suppressing: () => [],
@@ -589,6 +619,10 @@ export const MCP_AXIS: Axis = {
   seed: null,
   owns: (target) => basename(target) === CLAUDE_JSON_FILENAME,
   stored: 'user-file',
+  // Nothing to promote to. `~/.claude.json` is one file outside every project, so there is
+  // no tracked sibling a decision could be raised into -- unlike the settings axes, where
+  // `settings.json` and `settings.local.json` are the same key at two scopes.
+  promotes: false,
   // Nothing validates `~/.claude.json` against a settings schema -- `doctor` reports on
   // settings files -- so there is no verdict to gate on and no file to attach one to. Not
   // `not-checked` by another name: that value says a measurement was attempted.
@@ -702,6 +736,53 @@ export const MCP_AXIS: Axis = {
 };
 
 /** The axes `--axis` names, in the order `--help` lists them. `plugin` is the default. */
+/**
+ * The same axis, writing the project's **tracked** settings file (QM-55).
+ *
+ * `qm set` writes `settings.local.json` because a scoping decision is usually one machine's
+ * business. Onboarding a repo is the case where it is not: `project-optimizer` has always
+ * written `enabledPlugins` into `<proj>/.claude/settings.json` so the whole team inherits
+ * it, and before this repo absorbed that plugin the two tools disagreed about which file a
+ * plugin decision lives in. This is the "explicit promote action" the conventions have
+ * named since the first commit while nothing implemented it.
+ *
+ * **A variant axis and not a flag threaded through `Axis`.** `target`, `owns`, `validated`
+ * and `afterChain` all move together -- they are four statements of one fact, which file
+ * this write decides -- and a `promote` parameter on each would let three of them agree
+ * while the fourth did not. Every existing call site is untouched by construction.
+ *
+ * **Deliberately absent from `AXES`.** A caller that resolves an axis by name -- the grid's
+ * `POST` routes, `undo` reading a record, anything reading `--axis` -- gets the unpromoted
+ * one, whose `owns` refuses `settings.json`. Promotion is reachable only by calling this
+ * function, which one branch of one CLI flag does.
+ *
+ * `undo` stays `'file'`: a tracked settings file is not contended the way `~/.claude.json`
+ * is, so the stronger whole-file restore and its "still hashes to what we left" guard both
+ * still mean something (QM-46).
+ */
+export function promote(axis: Axis): Axis {
+  if (axis.stored !== 'project-file') {
+    throw new Error(`the ${axis.name} axis has no tracked file to promote into`);
+  }
+  return {
+    ...axis,
+    target: (_ws, project) => promotedTargetFor(project),
+    owns: (target, project) => target === promotedTargetFor(project),
+    // The tracked file's own validity, not the local one's. Reading `localSettings` here
+    // would gate a write to one file on whether a *different* file parses -- and would
+    // report `not-checked` for a target `claude doctor` had actually answered about.
+    validated: (record) => record.settings,
+    // `project` and not `local`: `resolve.ts` pushes `settings.json` at `project` scope, so
+    // an `afterChain` saying `local` would describe a chain the resolver never produces and
+    // `qm effect` would classify a link that does not exist.
+    afterChain: (now, target, value) => [
+      ...now.chain.filter((l) => l.source !== target),
+      { scope: 'project', value, source: target },
+    ],
+    promotes: true,
+  };
+}
+
 export const AXES: ReadonlyMap<string, Axis> = new Map(
   [PLUGIN_AXIS, SKILL_AXIS, MCP_AXIS].map((a) => [a.name, a]),
 );
@@ -956,6 +1037,15 @@ export type ToggleNoteCode =
   | 'not-validated'
   /** The target is not ignored by git, so the next `git add -A` commits it. */
   | 'tracked-path'
+  /**
+   * A promoted write landed in a file git ignores, so it reaches no other clone (QM-55).
+   *
+   * `tracked-path`'s mirror image and not its opposite spelling: that one fires when an
+   * unpromoted write would escape the machine it was made on, this one when a promoted
+   * write fails to. Both are the same `gitIgnoreState` answer read against a different
+   * intent, which is why the axis and not the answer decides which is emitted.
+   */
+  | 'promoted-but-ignored'
   /** No `git` on PATH, or the project is not a repository -- so nobody asked. */
   | 'gitignore-unchecked'
   /** The entry this writes is one `restated-entries` will report. */
@@ -1658,7 +1748,21 @@ function notesFor(
     input.axis.stored === 'project-file'
       ? gitIgnoreState(input.project, input.target)
       : 'ignored';
-  if (ignore === 'tracked') {
+  if (input.axis.promotes) {
+    // The note inverts under promotion (QM-55), because the fact has not changed and its
+    // consequence has. `tracked` is the *point* of this write -- the decision is meant to
+    // reach the repo -- so warning about it would train the reader to ignore the warning.
+    // What is worth saying is the opposite case: a promoted write into a file git ignores
+    // reaches nobody else, which is the one outcome that silently fails to do the job.
+    if (ignore === 'ignored') {
+      notes.push({
+        code: 'promoted-but-ignored',
+        message:
+          `git ignores ${input.target}, so promoting this decision into it shares it with ` +
+          'nobody — the entry lands, and no clone of this repo ever sees it.',
+      });
+    }
+  } else if (ignore === 'tracked') {
     notes.push({
       code: 'tracked-path',
       message:

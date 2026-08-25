@@ -4,10 +4,30 @@ CLI that audits which Claude Code extensions (plugins, MCP servers, skills) load
 projects, and what they cost. `qm audit`, `qm cost`, `qm baseline` / `--drift`, and
 `qm serve` for the two-view grid on loopback. Every one of those is read-only.
 
+**`qm serve` is the suite's single port (QM-55).** `/` is the extensions grid, `/sessions`
+is Session Fleet's board -- rendered by spawning Fleet's own `collect.py` and `render.py`
+and serving the bytes they emit, so `render.py` is untouched and the scan still costs zero
+tokens. All six of Fleet's modules import stdlib only, so the view needs a `python3` and no
+virtualenv; `requirements.txt` serves the menu-bar app alone. It degrades to a diagnostic
+page rather than a 500, because the grid is the half people came for. **It does not inherit
+the grid's redaction** -- `view.test.ts`'s absolute-path sweep covers the model projection,
+not this route, and the board exists to show which directory each session is in.
+
+**This repo is also a marketplace of three plugins (QM-55).** `quartermaster` at the root,
+plus `plugins/project-optimizer` and `plugins/session-fleet`, both merged in with
+`git subtree` and their history. One purpose — know and control your Claude Code workspace:
+what loads (config), what needs you (sessions), and what a new directory is missing
+(projects). Three plugins and not one, so a session that wants the audit does not pay for
+the sessions board: measured always-on cost is ~267 tok, ~553, ~80. `"source": "./"` makes
+quartermaster's plugin root the whole repo, so it *copies* the other two plugins' skills
+into its cache; `claude plugin details` reports `Skills (2)`, so they are copied and never
+loaded, which is why quartermaster stays at the root rather than moving under `plugins/`.
+
 **`qm set` and `qm undo` are not** (DEA-112, QM-45, QM-46). They are the whole of Phase 2:
 a plugin, skill *or MCP server* toggle written after a printed diff and a confirmation.
 `--axis plugin|skill|mcp` picks the key and is never inferred. Two files, one per axis:
-`<proj>/.claude/settings.local.json` for the settings keys, and **`~/.claude.json` for the
+`<proj>/.claude/settings.local.json` for the settings keys — or
+`<proj>/.claude/settings.json` under **`--promote`** (QM-55) — and **`~/.claude.json` for the
 MCP deny-list** — the first thing here that writes it, and the reason `applyPlan` re-reads
 on confirmation rather than carrying a stage across it. Nothing else writes any Claude Code
 config. **`qm serve` writes too now, on the plugin axis only (QM-44)**: two `POST` routes
@@ -935,6 +955,75 @@ live test from deriving its guard from its assertion again -- the sweep is a sna
 lint. And `skipped 0` is now the expected state on *this* machine only; a machine with no
 skills installed still skips the input-guarded three, correctly, and someone reading a CI
 log will have to know which kind they are looking at.
+
+**The conventions named a promote action for 24 days before anything implemented it
+(QM-55).** `project-optimizer` wrote `enabledPlugins` into the project's **tracked**
+`settings.json` so a team inherits the decision; this repo's Conventions said nothing writes
+that file "without an explicit promote action". Both were right and they could not both be
+obeyed, which is the sharpest thing the merge forced open. `qm set --promote` is that action,
+and `onboard` is now a caller rather than a second writer — one plan, one printed diff, one
+confirmation, one backup, one undo, for every config write in the suite.
+**A variant axis, not a flag threaded through `Axis`.** `target`, `owns`, `validated` and
+`afterChain` are four statements of one fact — which file this write decides — and a
+parameter on each would let three agree while the fourth did not. `promote(axis)` moves all
+four; every existing call site is untouched by construction. **Deliberately absent from
+`AXES`**, so `--axis`, the grid's `POST` routes and `undo` reading a record all get an
+unpromoted axis whose `owns` refuses the tracked file. Promotion is reachable only by calling
+the function, which one branch of one flag does.
+**One barrier lifts, never two.** `FORBIDDEN_BASENAMES` still names `settings.json` and still
+refuses it for every axis `AXES` can return; `promotes` clears that condition for the promoted
+axis alone and `owns` — unchanged, independent — still requires the path be the one that axis
+builds for that project. This is QM-46's move (`~/.claude.json` left the set and did not
+become unguarded) applied to the other file.
+**The gitignore note inverts rather than being suppressed.** `tracked-path` warns that an
+ordinary write escapes the machine it was made on. Under promotion that is the *point*, so
+warning would train the reader to skim; the mirror case is what is worth saying, and
+`promoted-but-ignored` says it — a promoted write into an ignored file reaches no other clone.
+Same `gitIgnoreState` answer, different intent, which is why the **axis** and not the answer
+picks the note. No gloss in `page.ts`, on QM-52's reasoning: the grid cannot construct a
+request that reaches it.
+The day it fails: seven mutations redden one test each, and `validated` is the one that
+matters — it reads a different member of the same record and still typechecks, so nothing but
+an assertion catches it. The end-to-end path is exercised only against scratch projects, so
+`onboard` actually calling `qm set --promote` is prose in a SKILL.md that no gate checks. And
+`--promote` is orthogonal to `--axis` by design, which means the grammar allows
+`--promote --axis mcp`; it exits 2 with a sentence, but the flag pair is a usage error the
+parser accepts rather than one it cannot express.
+
+**A repo boundary was doing the work of a rule, and merging dissolved half of it
+(QM-55).** `Delegate, don't reimplement — and draw the line at objectivity` is two rules
+under one name, written 24 days apart, and only one survives the suite. The **first commit's**
+reason is stated in its own sentence — *"two copies of a rubric drift the moment either is
+edited"* — which makes objectivity the **test for where to cut between two repos**, not a
+stance on advice: a definitional fact is safe to re-derive because it cannot drift from its
+source, a judgement is not. Absorb the repo and there is no second copy to drift. **QM-8's**
+rule is unrelated and untouched: `claude mcp remove linear-server` was the audit's only
+recommendation and it was *backwards*, because that server suppressed three duplicate paths.
+Never assert a consequence you have not measured. That one ships unamended and governs
+everything below.
+**It had already drifted, and only the merge could show it.** `definitionalFindings` prices
+`no-gitignore` `medium` and `no-readme` `low`; the audit skill's `Gap` bucket named "no
+CLAUDE.md, no README, no `.gitignore`". One disagreement, one detector — found because both
+definitions finally sat in one tree, while `delegate/projectOptimizer.ts`'s own header warned
+about exactly this and carried the second copy. The original claim that the rubric was "not
+duplicated here" was true only of the *labels*: `Severity` has existed since the first commit.
+**`Rank` maps out of `Severity` and not the reverse**, on information rather than seniority:
+four values against three, and it is what the JSON, the grid and every detector already carry,
+so this direction loses nothing while the other would invent a distinction the three-word
+scale does not make. The skill stops ranking and starts rendering. `info` maps to `null`
+rather than to a fourth word — it describes the run and not the configuration (DEA-140), so
+ranking it beside things to act on is the category error the scale exists to prevent.
+README resolves to `Polish`: `Severity` is the single source, and it is the only one of the
+four definitional findings that breaks nothing, so understating it is DEA-123's
+`unknown`-over-`restart` direction.
+**Measured live before and after: 54 findings, 3/6/44/1, every detector-severity pair
+identical.** The reconciliation moves nothing in `qm audit` — what changes is the *skill's*
+output, which is the half that was inventing an answer. Five mutations redden one test each,
+including repricing README to the skill's old value.
+The day it fails: `rankOf` is consumed by a SKILL.md and by no TypeScript, so nothing but a
+reader enforces that the skill obeys the table — the test pins the mapping, not its use. And
+the two scales can still drift in the one direction left: a detector repriced without anyone
+re-reading the bucket list in `skills/audit/SKILL.md`, which is prose and not code.
 
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`

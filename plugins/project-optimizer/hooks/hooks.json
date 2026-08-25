@@ -1,0 +1,16 @@
+{
+  "description": "Offers project onboarding the first time Claude Code runs in a directory. Read-only: never creates or modifies anything.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
