@@ -30,10 +30,29 @@ Report findings grouped by the four areas, each rated:
 
 - **Blocking** — actively harmful right now: a tracked secret, a public repo with
   no license, credentials in a committed file
-- **Gap** — a missing baseline: no CLAUDE.md, no README, no `.gitignore`,
-  unscoped plugin config
-- **Polish** — worth doing but not urgent: missing topics, no PR template, no
-  Dependabot
+- **Gap** — a missing baseline: no CLAUDE.md, no `.gitignore`, unscoped plugin config
+- **Polish** — worth doing but not urgent: no README, missing topics, no PR
+  template, no Dependabot
+
+**These three words are a rendering of `qm`'s `Severity`, not a separate rubric**
+(QM-55). Do not assign them by judgement — read the finding's `severity` and map it:
+
+| `severity` | reported as |
+|---|---|
+| `high` | **Blocking** |
+| `medium` | **Gap** |
+| `low` | **Polish** |
+| `info` | not ranked — it describes the run, not the configuration; report it as a note |
+
+`src/detect.ts`'s `rankOf` is the definition and a test pins it. Before these lived in
+one repo the two scales had already drifted: this bucket used to list "no README" under
+**Gap** while `qm` priced it `low`. `Severity` now owns the answer, which is why README
+moved to Polish above — it is the only one of the definitional findings that breaks
+nothing if absent.
+
+Where a finding carries no `severity` because it came from your own reasoning rather
+than from `qm`, say so and rank it by the table's own definitions. Never re-rank a
+finding `qm` already priced.
 
 Order by severity, not by area. State what was checked and found fine in a single
 closing line rather than enumerating passes — the value is in the gaps.
