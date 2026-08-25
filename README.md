@@ -256,8 +256,15 @@ Also dropped: machine-started runs nobody is expected to answer — a scheduled
 task's own run, and the board's own `/session-fleet refresh` pass. Both post a
 prompt, work, and stop, so listing them is noise on a board about what needs you;
 the refresh runs are noise about themselves. Either reappears the moment you
-reply in the thread or the run ends on a question. `--include-routines` keeps
-them.
+reply in the thread, or its summary carries a real action or question bullet.
+`--include-routines` keeps them.
+
+What does **not** bring one back is the question it happened to end on. That
+question is addressed to whoever triggered the run and reaches them in its
+output, not in the thread — nobody is going back there to answer it. One refresh
+run that signed off with a question sat on the board permanently before this
+rule, because the detected question never goes away no matter what its summary
+later says.
 
 Detected from the opening user message, which is the only one that says who
 started the session: `scheduledTaskId` on the Desktop record or an injected

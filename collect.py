@@ -35,33 +35,6 @@ LIVE = HOME / ".claude/sessions"
 TAIL_BYTES = 400_000
 EXCERPT_CHARS = 700
 
-# Messages the harness writes into the user's slot: a routine's opening prompt, a
-# slash-command invocation, the skill body that follows it, the resumed-session
-# caveat. None of them are Dean typing, and mistaking one for a reply is what
-# would keep an unattended run on the board.
-SYNTHETIC_PREFIXES = ("<scheduled-task", "<command-message>", "<command-name>",
-                      "<local-command-caveat>", "Base directory for this skill:")
-SCHEDULED_RE = re.compile(r'<scheduled-task name="([^"]+)"')
-# The dashboard's own upkeep, run either headless by resummarize.sh or by Dean
-# typing the slash command. Either way the session exists to service the board,
-# so listing it on the board is just noise about itself.
-SELF_CMD_RE = re.compile(r"<command-name>/session-fleet</command-name>")
-
-
-def origin_of(text):
-    """Who started this session, when it was not a person. None if it was."""
-    m = SCHEDULED_RE.match(text)
-    if m:
-        return m.group(1)
-    if SELF_CMD_RE.search(text):
-        return "session-fleet"
-    return None
-
-
-def is_synthetic(text):
-    return text.startswith(SYNTHETIC_PREFIXES)
-
-
 # --------------------------------------------------------------------------- utils
 
 def iso(ms_or_str):
@@ -257,8 +230,8 @@ def read_transcript(path):
                     # /session-fleet run later in one of Dean's own threads is
                     # him working, not the board servicing itself.
                     if head and len(seen_user) == 1:
-                        res["origin"] = origin_of(txt)
-                    if not is_synthetic(txt):
+                        res["origin"] = watcher.origin_of(txt)
+                    if not watcher.is_synthetic(txt):
                         res["human_turns"] += 1
         elif t == "assistant" and not head:
             txt = clean(text_of(d.get("message")), 4000)
@@ -476,14 +449,21 @@ def main():
         else:
             phase, question, subs = "waiting", None, []
 
-        entry = watcher.summary_for(summaries, s.get("cli_session_id") or "", s["id"])
-        waiting = watcher.is_waiting(entry, question)
-        state = watcher.classify_state(phase, len(subs), waiting, age_h,
-                                       live=bool(proc))
-
         origin = s.get("origin") or t.get("origin")
         if (proc or {}).get("kind") == "scheduled":
             origin = origin or "scheduled"
+
+        entry = watcher.summary_for(summaries, s.get("cli_session_id") or "", s["id"])
+        # A machine-started run's closing question is addressed to whoever
+        # triggered it, and reaches them in the output rather than in the
+        # thread. Nobody is going back there to answer it, so only an explicit
+        # bullet in its summary counts as an obligation. Without this, one
+        # refresh run that ended on a question sat on the board forever: the
+        # detected question never goes away, whatever its summary later says.
+        waiting = watcher.is_waiting(entry, None if origin else question)
+        state = watcher.classify_state(phase, len(subs), waiting, age_h,
+                                       live=bool(proc))
+
         if (is_unattended(origin, t.get("human_turns", 0), waiting)
                 and not args.include_routines):
             continue

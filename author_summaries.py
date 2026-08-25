@@ -36,9 +36,19 @@ TITLES = {
    "8a64dbf3-6489-4595-bb71-ece59e77332c": "Google Drive multi-part zip question",
    "local_8fc1d0bd-2486-4acb-b6bd-a94e56668048": "Session sweep that never ran",
    "96679363-ac01-47af-9172-971b67a60893": "Fresh login, no work yet",
+   "c0ae5bbd-3655-4958-b780-11d4f9bcf0b4": "Session fleet refresh run",
 }
 
 AUTHORED = {
+"local_7cb79bd4-7ed1-4c64-8d2d-65c8602e1263": (
+    "Rebuild the Manus-driven Higgsfield generation workflow inside Claude Code, "
+    "so Kling 3.0 and Nano Banana 2 keep producing content while Manus is down.",
+    [("i", "Unlimited access to both models runs out 8/26, and only through the "
+           "Higgsfield web UI — the MCP path is metered, so everything has to be "
+           "driven in the browser."),
+     ("i", "Claude is reading the Manus exports and chat history to reconstruct the "
+           "old workflow, then driving the Higgsfield UI itself. Nothing needs you yet.")]),
+
 "local_3fa6a9e2-ce03-4914-a30f-d89669d44641": (
     "Get GitHub Desktop syncing the local repositories.",
     [("i", "Done — 21 repos synced in Desktop. Nothing pending.")]),
@@ -164,14 +174,37 @@ AUTHORED = {
            "Glean #557 contradicts itself — Greenhouse says remote, the JD says hybrid four "
            "days in SF or Mountain View.")]),
 
+"c0ae5bbd-3655-4958-b780-11d4f9bcf0b4": (
+    "A `/session-fleet refresh` run of this board — rescan plus the model pass that rewrites "
+    "stale summaries.",
+    [("i", "Done and nothing pending. It refreshed 20 sessions and rewrote three summaries, "
+           "then ended by offering `/linear-track` or `/linear-skip` for this project. You "
+           "answered that in the Session Fleet UI session instead — Linear is tracked and the "
+           "FLEET team exists — so the question is settled even though this thread still "
+           "shows it."),
+     ("i", "This is the board flagging its own unattended run as **Your turn**, the exact "
+           "case the Session Fleet session has an open design call about.")]),
+
 "local_84da0d6c-a62f-470d-a51b-16cd357f650e": (
-    "A fresh run of the career-ops cleanup routine — the housekeeping pass over the "
-    "job-search tracker and its working files.",
-    [("a", "It is parked on a multiple-choice prompt from the cleanup skill four turns in "
-           "and cannot move until you pick. Open the session and answer it, or close it if "
-           "you started the cleanup by accident."),
-     ("i", "Nothing has been changed yet — the run stopped at the question before touching "
-           "the tracker.")]),
+    "The career-ops cleanup routine — housekeeping over the job-search tracker and Airtable, "
+    "latterly backfilling the missing Fivetran application.",
+    [("q", "Which state's req should the row point at? Fivetran posts this role as 20 "
+           "near-identical per-state listings and Claude picked one to write the link. If it "
+           "guessed wrong, that's the one field to correct."),
+     ("i", "The backfill landed and both sides reconcile: `Fivetran — Senior Community "
+           "Manager` as **#633**, Rejected, applied 8/19, rejected 8/21. 574 Airtable ↔ 574 "
+           "tracker, 574 matched by FK, 0 mismatches."),
+     ("i", "The posting is still live — the Greenhouse board API returns the req as open "
+           "today, three days after the rejection. So this was a decision about you, not a "
+           "closed listing."),
+     ("i", "Two deliberate gaps, not bugs: the score is the `N/A` sentinel because there was "
+           "no evaluation to summarize (the #1799 backfill rule), and Company links to the "
+           "existing `dbt labs` record, which already documents the Oct 2025 merger. The "
+           "tracker row stays named `Fivetran` — matching is Tracker #-first, so the two "
+           "names differing is harmless."),
+     ("i", "Worth knowing for future writes: on the Roles table `fldeapmksGot9WO4k` is the "
+           "writable Link field and `fldlViSE72u0SURa8` is the computed URL — the reverse of "
+           "what their dump shapes suggest.")]),
 
 "b50d1a54-3cfe-4033-bd63-a06e9ce27c24": (
     "Draft answers to Cursor's application questions, stress-test them with peer agents, "
@@ -485,33 +518,29 @@ AUTHORED = {
 
 "local_ee75a028-de17-4750-bb38-6e797c0e31b6": (
     "Design hooks that surface the right tool at the right moment, plus a weekly routine that "
-    "spends each service's unused allotment — latterly, wiring Cursor in as a code reviewer.",
-    [("a", "Run `cursor-agent login`. The CLI is installed (2026.08.11, the build with the "
-           "wedged-session fix) and the test is staged, but signing you into an account isn't "
-           "something Claude will do for you and no `CURSOR_API_KEY` is set."),
-     ("i", "The other two homes for this are both blocked: GitHub's Bugbot needs Cursor "
-           "Business and you're on Pro, and Linear's @Cursor agent is an implementation agent, "
-           "not a reviewer. The headless CLI is the one that fits."),
-     ("i", "The test is deliberately a calibration, not a smoke test — it points at "
-           "`toolstack-regen.py`, whose bare `IndexError` on a wrong call your CLAUDE.md "
-           "already documents. If Cursor finds that, the tool works; if it returns generic "
-           "advice, that's worth knowing too."),
-     ("q", "The original hooks design still isn't approved, and it now carries the two extra "
-           "workstreams you added — Linear Business with Loops, and Cursor Pro."),
-     ("a", "Open Lovable's billing page and read one line: does it say resets Aug 22 or Sep 1? "
-           "That single data point settles the whole cohort. Your credit pools almost certainly "
-           "reset on the billing anniversary, not the 1st — every renewal date clusters on "
-           "Jul 22 and Jul 26, so the real deadlines are Aug 22 and Aug 26, not month-end."),
-     ("q", "Claude offered to start the Lovable half of the spend-the-credits work now."),
-     ("i", "Airtable claims `calendar-month` for these, but that's an unverified assumption and "
-           "the one service actually checked contradicts it — Cursor resets on the billing "
-           "date, and Cursor is in the Jul 22 cohort."),
-     ("i", "Not on a clock: Google AI Pro has no monthly pool (5-hour refresh), ElevenLabs just "
+    "spends each service's unused allotment — latterly, racing the Aug 26 credit deadlines.",
+    [("a", "Two days left on the 8/26 deadlines. The plan Claude landed on: Higgsfield "
+           "Kling / Nano Banana unlimited for the festival graphics through Wednesday night, "
+           "Runway Pro on Thursday for the video work Higgsfield can't cover. Both feed the "
+           "same deliverable, so neither is wasted."),
+     ("q", "What do Higgsfield's unlimited terms actually convert to on 8/26 — a credit tier, "
+           "a paid plan, or does access end? Airtable still has it as `deferred, $29/mo, "
+           "600-900 credits`, which is clearly stale, and your CLAUDE.md reminder to re-check "
+           "is dated 8/28, two days too late. Claude needs the real terms to fix both."),
+     ("q", "Claude offered to start writing the festival graphics prompts now."),
+     ("i", "The billing-anniversary theory is confirmed with evidence: your Lovable workspace "
+           "was created Jul 22 16:14 and updated Aug 22 16:15, to the minute. So the whole "
+           "Jul 22 cohort — Lovable, Replit, Manus, Gamma, Gumloop, Warp, Cursor — already "
+           "rolled over two days ago and last month's credits are gone. Lovable shows "
+           "`num_projects: 0`, meaning its first 100 credits expired untouched."),
+     ("i", "Upside of that miss: every one of those just started a fresh full month running "
+           "to Sep 22, so nothing there is urgent this week."),
+     ("i", "Not on a clock: Google AI Pro has no monthly pool (5-hour refresh), ElevenLabs "
            "reset with 121k available through Sep 18, and n8n, Notion, Linear, Cyrus and "
            "Supabase have no monthly reset at all."),
-     ("a", "Google AI Pro was downgraded on 2026-05-17: the 1,000 monthly AI credits left the "
-           "base plan. `claimed-unused` also moved the wrong way, 8 → 10, with Supabase "
-           "and ElevenLabs starting fresh clocks at zero extraction.")]),
+     ("i", "The original hooks design still hasn't been approved, and now carries the two "
+           "workstreams you added since — Linear Business with Loops, and Cursor Pro. It has "
+           "sat untouched while credits took over the session.")]),
 
 "local_b69e3945-c4a5-455c-8525-2da6bc6d731c": (
     "Automated session-name-date-sweep run.",
@@ -538,12 +567,25 @@ AUTHORED = {
 
 "local_66995bb1-9a44-4b63-9c19-fb9a957a9743": (
     "Build out Session Fleet's UI and tooling — hide unattended routine runs, tighten the "
-    "row layout, and turn the re-summarize workflow into a skill.",
-    [("i", "All three original asks shipped and are committed: routine runs are filtered out "
-           "unless you actually replied in the thread, the row buttons moved to the meta line "
-           "(cards down 267px → 180px), and `/session-fleet refresh` now exists as a skill."),
-     ("i", "In flight: whether the refresh can run headless from the CLI so the menu bar gets "
-           "a one-click button for it. Claude is working that out — nothing waiting on you.")]),
+    "row layout, turn re-summarize into a skill, and put the project on Linear.",
+    [("q", "One design call is open: a machine-started run's closing question keeps it "
+           "flagged **Your turn** forever, because `watcher.is_waiting` falls back to the "
+           "detected question and nothing clears it. A `/session-fleet refresh` run is on the "
+           "board right now for exactly this — you answered its question here instead of in "
+           "that thread. The fix is to stop counting an unattended run's last question as "
+           "waiting; it needs your yes."),
+     ("i", "Linear is wired up: `session-fleet` label created, and a **FLEET** sub-team of DEA "
+           "now owns the board, matching your other 18 project teams. Both `session-fleet` and "
+           "the old `fleetview` key resolve there instead of falling back to DEA. Committed as "
+           "`2c85cb5`."),
+     ("i", "Two things done without asking, flagged for you: the Linear MCP has no "
+           "`create_team`, so Claude used the workspace GraphQL API with the key in this "
+           "project's `.env`, and it picked `FLEET` as the team key because that is already "
+           "this directory's session-name short code."),
+     ("i", "All three original asks shipped and are committed: routine runs are filtered out "
+           "unless you replied in the thread, the row buttons moved to the meta line (cards "
+           "267px → 180px), and `/session-fleet refresh` exists as a skill with a headless "
+           "`resummarize.sh` behind the menu bar button.")]),
 
 "local_9cf8e76f-1964-435c-be35-d3cf6011993c": (
     "Work out why CLI-started sessions rename inconsistently, then rebuild the session-name "

@@ -96,9 +96,45 @@ def tail_events(path, n=12):
     return out[-n:]
 
 
+# Messages the harness writes into the user's slot: a routine's opening prompt, a
+# slash-command invocation, the skill body that follows it, the resumed-session
+# caveat. None of them are Dean typing, and mistaking one for a reply is what
+# would keep an unattended run on the board.
+SYNTHETIC_PREFIXES = ("<scheduled-task", "<command-message>", "<command-name>",
+                      "<local-command-caveat>", "Base directory for this skill:")
+SCHEDULED_RE = re.compile(r'<scheduled-task name="([^"]+)"')
+# The dashboard's own upkeep, run either headless by resummarize.sh or by Dean
+# typing the slash command. Either way the session exists to service the board,
+# so listing it on the board is just noise about itself.
+SELF_CMD_RE = re.compile(r"<command-name>/session-fleet</command-name>")
+
+
+def origin_of(text):
+    """Who started this session, when it was not a person. None if it was.
+
+    Anchored, not a substring search: a later message quoting one of these
+    markers is Dean discussing the machinery, not the machinery running.
+    """
+    text = text.lstrip()
+    m = SCHEDULED_RE.match(text)
+    if m:
+        return m.group(1)
+    if SELF_CMD_RE.search(text):
+        return "session-fleet"
+    return None
+
+
+def is_synthetic(text):
+    return text.startswith(SYNTHETIC_PREFIXES)
+
 def head_check(path):
-    """(is_sidechain, is_scheduled) from the first few lines of a transcript."""
-    sidechain = scheduled = False
+    """(is_sidechain, is_machine_started) from the first lines of a transcript.
+
+    Machine-started covers a routine's run and the board's own re-summarize
+    pass. Neither is ever waiting on a human: whatever they end up asking is
+    relayed to whoever triggered them, not read in the thread.
+    """
+    sidechain = machine = False
     try:
         with path.open("rb") as fh:
             for i, raw in enumerate(fh):
@@ -114,11 +150,11 @@ def head_check(path):
                 if not blob:
                     txt, _ = _text(d.get("message"))
                     blob = txt or ""
-                if "<scheduled-task" in blob:
-                    scheduled = True
+                if blob and origin_of(blob):
+                    machine = True
     except OSError:
         pass
-    return sidechain, scheduled
+    return sidechain, machine
 
 
 # --------------------------------------------------------------------------- phase
@@ -327,8 +363,8 @@ def scan():
             phase, question, _ = classify(f)
             if phase == "unknown":
                 continue
-            sidechain, scheduled = head_check(f)
-            if sidechain or scheduled:
+            sidechain, machine = head_check(f)
+            if sidechain or machine:
                 continue                       # neither is waiting on a human
 
             cwd = ""

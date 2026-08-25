@@ -100,8 +100,12 @@ no model involved. Ask before going on to step 3, which is not.
 - scratchpad and single-turn probe runs (`--include-noise` keeps them)
 - archived sessions (`--include-archived`)
 - machine-started runs nobody is expected to answer (`--include-routines`) — a
-  scheduled task's own session, and **this skill's own run**, where Dean never
-  replied and it did not end on a question
+  scheduled task's own session, and **this skill's own run**, unless Dean
+  replied in the thread or its summary carries an `a` or `q` bullet
+
+  Signing off with a question does not keep one on the board. Ask for what you
+  need in the output — that is what Dean reads — and do not add an `a` or `q`
+  bullet to a machine-started run's own summary just to be seen.
 
 That last one includes the session you are in right now, so it will not appear
 in the stale list and needs no summary. Never write an entry for it.
