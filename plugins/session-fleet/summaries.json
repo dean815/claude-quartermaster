@@ -1,0 +1,357 @@
+{
+  "_note": "Model-written. 'stamp' and 'turns' are the session's values when this was written; render.py flags the entry stale when either has moved. Bullet types: q = open question awaiting Dean, a = action for Dean, i = informational.",
+  "entries": {
+    "local_7cb79bd4-7ed1-4c64-8d2d-65c8602e1263": {
+      "stamp": "2026-08-25T06:28:16.945000Z",
+      "turns": 2,
+      "purpose": "Rebuild the Manus-driven Higgsfield generation workflow inside Claude Code, so Kling 3.0 and Nano Banana 2 keep producing content while Manus is down.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Unlimited access to both models runs out 8/26, and only through the Higgsfield web UI — the MCP path is metered, so everything has to be driven in the browser."
+        },
+        {
+          "type": "i",
+          "text": "Claude is reading the Manus exports and chat history to reconstruct the old workflow, then driving the Higgsfield UI itself. Nothing needs you yet."
+        }
+      ]
+    },
+    "a2324028-6a0d-4f72-977b-dd5e7fe62891": {
+      "stamp": "2026-08-22T05:27:45.517Z",
+      "turns": 13,
+      "purpose": "Pick chord-chart-maker back up after a context break, which became the M7 Phase A discovery run.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Phase A finished and then the session died on an API error (ENOTFOUND) before Claude could report it, so the findings were never delivered. The raw result is on disk in the session's task output; re-open and ask for the readout rather than re-running the fan-out."
+        },
+        {
+          "type": "q",
+          "text": "Worth checking before you trust it: the workflow returned **130 avenues and 88 corrections but a null document and zero ranked items**, so the discovery half landed and the ranking half did not."
+        },
+        {
+          "type": "i",
+          "text": "Housekeeping is clean: PR #3 (the M7 spec) merged, `main` at edddceb, and the `m3-import-probe` branch deleted local and remote after verifying it held no commits that weren't already merged."
+        },
+        {
+          "type": "i",
+          "text": "`.claude/settings.json` is modified in your working tree and was left alone — it isn't from this session."
+        },
+        {
+          "type": "i",
+          "text": "Next after M7 is M4, auto-fit and print."
+        }
+      ],
+      "title": "chord-chart-maker — M7 Phase A"
+    },
+    "local_cf24f1e7-7602-44e0-bdfb-57c680cb4dcd": {
+      "stamp": "2026-08-25T06:28:11.144000Z",
+      "turns": 219,
+      "purpose": "Main working chat for Claude Quartermaster — design, build and issue triage.",
+      "next": [
+        {
+          "type": "a",
+          "text": "The quartermaster backlog is empty, so nothing moves here without you picking the next thing. Two Todo issues remain in the team and neither is quartermaster code — both are Cyrus/infrastructure you drive: QM-49 (High), prove the Cyrus loop end to end on one Agent Ready issue, and QM-50 (Medium), per-sub-team GitHub automation."
+        },
+        {
+          "type": "i",
+          "text": "Seven issues shipped in the last run: QM-52 (un-suppression), QM-53 (the missing Local scope), QM-8 (arbitration, with its three-week scoping block finally resolved), QM-54 (exact twin matching), QM-51 (the disarmed gate), plus QM-48 closed. Main at `f11ca35`, tree clean, 735 tests / 735 pass / 0 skipped. Every issue in the project is now Done or Canceled."
+        },
+        {
+          "type": "i",
+          "text": "The through-line Claude flagged: all six issues were wrong on a central premise, and probing before building caught it every time — QM-8 needed no new detector, QM-52's two-basis design was unbuildable, QM-51's sweep grouped three skips that don't belong together."
+        },
+        {
+          "type": "i",
+          "text": "Three things are true and unfinished, deliberately recorded in CLAUDE.md's \"day it fails\" notes rather than anywhere you'd have to remember them — one being the untested interactive branch of the launch-mode fact."
+        },
+        {
+          "type": "i",
+          "text": "Worth knowing from the QM-53 work: the live instance sits under `~`, which CLAUDE.md already records as breaking things in two layers — so every live observation of that new surface comes from the one project most likely to be unrepresentative."
+        }
+      ]
+    },
+    "local_7d1383a1-0b56-4def-900e-460da7e7996e": {
+      "stamp": "2026-08-19T03:53:23.544000Z",
+      "turns": 16,
+      "purpose": "Reconfigure Gmail labels and filters around a deny-by-default design, and build the digest pipeline that rides on it.",
+      "next": [
+        {
+          "type": "a",
+          "text": "The verification gate runs itself today at 10:30. Read that report before anything touches the 181k backlog — archiving is explicitly forbidden to the scheduled run, so the call stays yours."
+        },
+        {
+          "type": "i",
+          "text": "Your mislabel is now a working feedback loop: `gmailops corrections` reads the label, proposes carve-out entries, restores the messages and rebuilds. It edits senders.yml by textual insert so the comments survive, and refuses to write if anything but the corrections key changed."
+        },
+        {
+          "type": "i",
+          "text": "Two live changes shipped: the bulk rule now requires the word “unsubscribe” before archiving (about 2 more messages a day stay in your inbox), and lennyrachitsky.com is carved out so Product Pass mail stops being archived."
+        },
+        {
+          "type": "i",
+          "text": "That fix exposed a bug that would have silently undone every future correction — Gmail has no filter-update operation, so changing the carve-out was creating a second bulk filter beside the old one. 122 tests passing."
+        }
+      ]
+    },
+    "5b91eaa3-caa5-4eac-b343-224065a0cb72": {
+      "stamp": "2026-08-22T05:27:46.053Z",
+      "turns": 8,
+      "purpose": "Deep dive on ChordPro as the app's backing format — now a 73-item survey artifact plus feature suggestions and five proposals for reshaping the roadmap.",
+      "next": [
+        {
+          "type": "q",
+          "text": "Five roadmap proposals are on the table and Claude is waiting on which ones you want written into the design doc as a branch. The biggest is turning M6 into a playable stage view — pedals, autoscroll, minimal setlist — which roughly doubles M6 and pushes v1 out."
+        },
+        {
+          "type": "q",
+          "text": "Decide 'personal tool or product' before something forces it: ChordSheetJS is GPL-2.0-only and a shipped PWA bundle counts as distribution."
+        },
+        {
+          "type": "a",
+          "text": "Spend an evening with iReal Pro (~$20) and OnSong's free tier before M4 — they're your two nearest competitors and the feel is the point."
+        },
+        {
+          "type": "i",
+          "text": "The catalogue is done: 105 items trimmed to 73, scored across 10 columns in a sortable artifact. Original numbers kept, so earlier notes still resolve."
+        }
+      ],
+      "title": "ChordPro format deep dive"
+    },
+    "local_90cb9bce-b954-4aac-8ad3-34a8e282904c": {
+      "stamp": "2026-08-18T08:04:13.769000Z",
+      "turns": 18,
+      "purpose": "Design an ADHD-friendly workflow system — now an eight-agent audit of whether the board matches reality.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Carnevil's town-board permit is filed as “2027 town board approval” with no owner and no due date, for an event 37 days out. Three siblings share the bug, including “Set 2027 ticket price”, 18 days overdue — and Price 1-day and Price 2-day are blank on all three festival records."
+        },
+        {
+          "type": "q",
+          "text": "The arithmetic is the real finding and it needs a decision, not a re-rank: 385 hours of work require you present, against 53–106 hours before Sept 26. Only 30 of those hours are Carnevil-critical. Nothing on the board covers rehearsals, load-in, or performing in two bands."
+        },
+        {
+          "type": "i",
+          "text": "The board is wrong in both directions: music-analysis is already public while MUSA-6 sits in Todo, and cashortrade-search is still private while its project reads 100%."
+        }
+      ]
+    },
+    "local_80f5f8b4-33a6-445b-98d3-53b0e8e769e7": {
+      "stamp": "2026-08-19T16:01:30.507000Z",
+      "turns": 10,
+      "purpose": "Keep Session Fleet current — rewrite stale summaries, and work the comment threads left on the published page.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Flip Linear to dark for a moment if you want Magic Blue exact. Its base #191a23 and border #2d2e39 were read from your app; the surfaces and text are derived on the same LCH hue, because reading the real ones meant changing your theme setting."
+        },
+        {
+          "type": "a",
+          "text": "The eight comment threads are all acted on but still show open — resolving them needs a claude.ai session, which this one isn't."
+        },
+        {
+          "type": "i",
+          "text": "Pure Light is verbatim from your app; accent and the six state colours were left alone. Every subteam chip was refit against the new grounds and still clears AA, worst case 4.55:1 light and 4.59:1 dark."
+        },
+        {
+          "type": "i",
+          "text": "`author_summaries.py` had accumulated 3 duplicate entries — the splice matched on blank lines that an earlier splice had collapsed, so it appended instead of replacing. It's parser-based now, 56 unique entries, output verified identical."
+        },
+        {
+          "type": "i",
+          "text": "Dropping the Total tile means `?monitor=1` shows no session count at all, since monitor mode hides the toolbar where the count lives."
+        },
+        {
+          "type": "i",
+          "text": "This routine is now duplicated work — `/session-fleet refresh` does the same rescan-and-rewrite from the project directory. Worth retiring one of them."
+        },
+        {
+          "type": "i",
+          "text": "The artifact's live watch dropped and stopped retrying. Only affects notifications; the published page is unchanged, and a concurrent publish would 409 rather than silently overwrite."
+        }
+      ]
+    },
+    "local_ee75a028-de17-4750-bb38-6e797c0e31b6": {
+      "stamp": "2026-08-24T19:02:53.399000Z",
+      "turns": 14,
+      "purpose": "Design hooks that surface the right tool at the right moment, plus a weekly routine that spends each service's unused allotment — latterly, racing the Aug 26 credit deadlines.",
+      "next": [
+        {
+          "type": "a",
+          "text": "Two days left on the 8/26 deadlines. The plan Claude landed on: Higgsfield Kling / Nano Banana unlimited for the festival graphics through Wednesday night, Runway Pro on Thursday for the video work Higgsfield can't cover. Both feed the same deliverable, so neither is wasted."
+        },
+        {
+          "type": "q",
+          "text": "What do Higgsfield's unlimited terms actually convert to on 8/26 — a credit tier, a paid plan, or does access end? Airtable still has it as `deferred, $29/mo, 600-900 credits`, which is clearly stale, and your CLAUDE.md reminder to re-check is dated 8/28, two days too late. Claude needs the real terms to fix both."
+        },
+        {
+          "type": "q",
+          "text": "Claude offered to start writing the festival graphics prompts now."
+        },
+        {
+          "type": "i",
+          "text": "The billing-anniversary theory is confirmed with evidence: your Lovable workspace was created Jul 22 16:14 and updated Aug 22 16:15, to the minute. So the whole Jul 22 cohort — Lovable, Replit, Manus, Gamma, Gumloop, Warp, Cursor — already rolled over two days ago and last month's credits are gone. Lovable shows `num_projects: 0`, meaning its first 100 credits expired untouched."
+        },
+        {
+          "type": "i",
+          "text": "Upside of that miss: every one of those just started a fresh full month running to Sep 22, so nothing there is urgent this week."
+        },
+        {
+          "type": "i",
+          "text": "Not on a clock: Google AI Pro has no monthly pool (5-hour refresh), ElevenLabs reset with 121k available through Sep 18, and n8n, Notion, Linear, Cyrus and Supabase have no monthly reset at all."
+        },
+        {
+          "type": "i",
+          "text": "The original hooks design still hasn't been approved, and now carries the two workstreams you added since — Linear Business with Loops, and Cursor Pro. It has sat untouched while credits took over the session."
+        }
+      ]
+    },
+    "local_ecfc7982-fae6-468f-b115-b05af4a3ad16": {
+      "stamp": "2026-08-19T13:27:05.583000Z",
+      "turns": 2,
+      "purpose": "Automated session-name-date-sweep run.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Automated — 37 renames, the biggest run yet: 1 Desktop plus a 36-session backfill of this task's own past runs, which had been sitting bare with no code or dates."
+        },
+        {
+          "type": "a",
+          "text": "Those leftovers accumulate at roughly 5–6 a day. They're the ones you archive in bulk, so the pile rebuilds itself between clean-ups."
+        }
+      ]
+    },
+    "local_66995bb1-9a44-4b63-9c19-fb9a957a9743": {
+      "stamp": "2026-08-25T06:14:54.018000Z",
+      "turns": 13,
+      "purpose": "Build out Session Fleet's UI and tooling — hide unattended routine runs, tighten the row layout, turn re-summarize into a skill, and put the project on Linear.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Nothing is pending here. The one open design call is answered and shipped as `83ec417`: a machine-started run's closing question no longer counts as an obligation, so only an explicit `a` or `q` bullet in its summary marks it as needing you. Verified against HEAD — exactly one session drops off the board, the stuck refresh run, and nothing else moved."
+        },
+        {
+          "type": "i",
+          "text": "The date sweep still shows, which is the case worth preserving: its summary carries a real action, so it survives the new rule. That's the line between a run that left you something and one that just ended on a question."
+        },
+        {
+          "type": "i",
+          "text": "Claude also merged a split-brain it had created — `watcher.head_check` (menu bar) and `collect.py` (board) held separate ideas of what a machine-started run is. Both now call one `origin_of`, living in `watcher.py` as the lower module. The two surfaces still aren't identical and Claude left it that way on purpose: the menu bar drops machine-started runs outright."
+        },
+        {
+          "type": "i",
+          "text": "Everything earlier in this session is committed: routine runs filtered unless you replied in the thread, row buttons moved to the meta line (cards 267px → 180px), `/session-fleet refresh` as a skill with headless `resummarize.sh` behind the menu bar button, and Linear wired up with a **FLEET** sub-team of DEA owning the board (`2c85cb5`)."
+        }
+      ]
+    },
+    "local_9cf8e76f-1964-435c-be35-d3cf6011993c": {
+      "stamp": "2026-08-22T15:23:17.513000Z",
+      "turns": 6,
+      "purpose": "Work out why CLI-started sessions rename inconsistently, then rebuild the session-name format around it.",
+      "next": [
+        {
+          "type": "q",
+          "text": "Fire the sweep once now so you can see the new titles, or let the schedule pick it up on its next run?"
+        },
+        {
+          "type": "i",
+          "text": "New format is live and verified end to end: `GEN | 0 | Session renaming CLI inconsistency | 8.20`. The idle counter reads the last **assistant** timestamp, not `lastActivityAt` — that field moves on any activity including a rename, so it would have reported 0 for every session the sweep touched."
+        },
+        {
+          "type": "i",
+          "text": "The prefix must be stripped exactly once, never in a loop: loop it and a name starting with a number gets eaten (`JOBS | 3 | 500 | error triage | 8.20` loses the `500` on the second pass). Nine cases unit-tested."
+        },
+        {
+          "type": "i",
+          "text": "The leading `*` means start-a-new-session-instead, and fires on compaction or very large context — roughly 15% of sessions, and it lands on exactly the long heavy threads. Note ~100k of any context figure is startup overhead; the thresholds already account for it."
+        },
+        {
+          "type": "i",
+          "text": "Changed: the sweep's SKILL.md and CLAUDE.md §5, which is the standard every other session reads."
+        }
+      ]
+    },
+    "3d4df9c2-1630-4cad-bfd1-158d1e2f8989": {
+      "stamp": "2026-08-20T18:26:05.962Z",
+      "turns": 9,
+      "purpose": "Hunt down whatever is leaking window-server shields and pinning WindowServer at 45% CPU.",
+      "next": [
+        {
+          "type": "a",
+          "text": "After the restart, just use the machine normally for a couple of hours, then check the shield count. That baseline rate is the measurement everything else compares against — testing against the poisoned 641 would tell you nothing."
+        },
+        {
+          "type": "i",
+          "text": "State at the pause: 641 shields, WindowServer 45%, Manus ruled out, Airtable quit but never tested. Remaining suspects are Claude desktop, Granola, 1Password, Brain.fm and replayd."
+        },
+        {
+          "type": "i",
+          "text": "Watch for the count staying near zero with everything running — that would mean the leak needs a specific trigger (a screen share, a recording, a meeting) rather than an app merely being open."
+        }
+      ]
+    },
+    "13c51216-0733-479f-8991-19d40b1c14d4": {
+      "stamp": "2026-08-20T03:45:24.636Z",
+      "turns": 3,
+      "purpose": "Install and authenticate the Higgsfield CLI so image and video generation works from Claude Code.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Done and working — signed in as your account, Pro plan, ~611 credits. Just ask for what you want in plain English; the skills pick the model and params."
+        },
+        {
+          "type": "i",
+          "text": "The skills are project-scoped to `~/claude/general`, so they won't load anywhere else. Say the word and they move to `~/.claude/skills`."
+        },
+        {
+          "type": "i",
+          "text": "Two small things: `account status` needed a workspace, so your only one (Private, pro) was selected; and credits ticked 611.92 → 610.92 between two read-only calls. Nothing run here generates anything, so glance at it if it keeps drifting."
+        },
+        {
+          "type": "i",
+          "text": "Video models can be expensive — `higgsfield generate cost` prices a job before it spends."
+        }
+      ]
+    },
+    "96679363-ac01-47af-9172-971b67a60893": {
+      "stamp": "2026-08-23T19:45:32.162Z",
+      "turns": 6,
+      "purpose": "A fresh terminal in ~/claude/general, opened and logged into — no work in it yet.",
+      "next": [
+        {
+          "type": "i",
+          "text": "Only a /login. Nothing asked, nothing pending; it'll get a real summary once it has a subject."
+        }
+      ],
+      "title": "Fresh login, no work yet"
+    },
+    "cf24f1e7-7602-44e0-bdfb-57c680cb4dcd": {
+      "stamp": "2026-08-23T16:40:12.410Z",
+      "turns": 5,
+      "purpose": "The main chat for claude-quartermaster — the read-only CLI that audits which Claude Code extensions load in which projects and what they cost.",
+      "next": [
+        {
+          "type": "q",
+          "text": "QM-8 is still on your scoping call, and it's the one blocking the backlog: is encoding published first-party guidance a fact this tool reports, or the judgement it hands back? Claude's correction narrowed it but left the question untouched."
+        },
+        {
+          "type": "q",
+          "text": "QM-54 was filed deliberately to be decided, not done. Reading plugin `.mcp.json` would upgrade exactly one row from inferred to exact and move zero QM-31 findings, against reversing a documented exclusion. Claude's lean is no; the issue lists what would change that."
+        },
+        {
+          "type": "i",
+          "text": "Backlog is down to those two and neither is Claude's to start. Latest merge is in — main at c7aecf4, branch deleted, tree clean, 720 tests with one pre-existing skip. QM-53 closed as Done."
+        },
+        {
+          "type": "i",
+          "text": "Three issues landed today off one research transcript: QM-52 (the un-suppression note — `qm set --axis mcp <name>=off` writes `disabledMcpServers`, which can un-suppress the copies it was suppressing), QM-53 (Local scope reader), QM-54."
+        },
+        {
+          "type": "i",
+          "text": "Worth knowing: the live instance sits under `~`, which CLAUDE.md already records as breaking things in two separate layers — so every live observation of the new scope surface came from the one project least likely to be representative."
+        }
+      ]
+    }
+  }
+}
