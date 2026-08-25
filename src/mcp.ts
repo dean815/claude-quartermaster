@@ -69,7 +69,7 @@
 import { normalizeServerName } from './cost/transcript.ts';
 import { pluginNamespace, type PluginInventory, type PluginKeyBasis } from './inventory.ts';
 import { resolvePlugin } from './resolve.ts';
-import type { Workspace } from './surfaces/types.ts';
+import type { McpServerSpec, Workspace } from './surfaces/types.ts';
 
 /**
  * The service two names are both a path to. `claude_ai_Linear`, `linear-server` and
@@ -101,6 +101,24 @@ export function serviceOf(namespace: string): string {
     .replace(/^plugin_[^_]+_/, '')
     .replace(/-(trading|server|mcp)$/, '')
     .toLowerCase();
+}
+
+/**
+ * The string Claude Code deduplicates on: `url:` + the URL byte-for-byte, or `stdio:` +
+ * the JSON-encoded argv (QM-54).
+ *
+ * **No normalization at all**, which is the whole point -- first-party compares these
+ * exactly, so a trailing slash or a changed case is a different server. Normalising here
+ * would claim a suppression that will not happen, and the byte-exactness is what makes a
+ * *mismatch* worth acting on: two specs that differ do not suppress each other.
+ *
+ * `null` where the spec carries neither key. That is "cannot compare", never "does not
+ * match" -- a connector has no readable spec at all and must fall back to the name.
+ */
+export function launchSignature(spec: McpServerSpec): string | null {
+  if (spec.url) return `url:${spec.url}`;
+  if (spec.command) return `stdio:${JSON.stringify([spec.command, ...(spec.args ?? [])])}`;
+  return null;
 }
 
 /** `serviceOf` for a name as a config file spells it, rather than as a transcript does. */

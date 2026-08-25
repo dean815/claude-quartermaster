@@ -11,7 +11,7 @@
  * passing because a fixture gained a `disabledMcpServers` entry has stopped testing the
  * defect.
  */
-import { test, describe } from 'node:test';
+import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -24,8 +24,9 @@ import {
   pluginServerKey,
   type McpCatalog,
   type PluginKeyBasis,
+  launchSignature,
 } from '../src/mcp.ts';
-import { catalogEnumerations, readInventories } from '../src/inventory.ts';
+import { catalogEnumerations, readInventories, readPluginMcpServers } from '../src/inventory.ts';
 import { resolvePlugin } from '../src/resolve.ts';
 import { loadWorkspace, readClaudeJson } from '../src/surfaces/read.ts';
 import type { PluginInventory } from '../src/inventory.ts';
@@ -88,6 +89,7 @@ function inventory(
     sha: null,
     manifestName,
     installed: [],
+    mcpServerSpecs: {},
     enumerated: [
       {
         source: 'plugin-catalog-cache.json',
@@ -937,5 +939,113 @@ describe('the catalog agrees with the live workspace', () => {
       beyondScoping.some((e) => e.scopedIn.length === 0),
       'every row is still one somebody had already scoped -- the defect, exactly',
     );
+  });
+});
+
+/**
+ * A plugin build's own `.mcp.json`, read at last (QM-54).
+ *
+ * `detect.ts` said for two issues that this file is deliberately unread, and the price was
+ * that the plugin half of every access-path comparison carried no launch signature -- so
+ * every match either `duplicateAccessPaths` or `MCP_AXIS.suppressing` could make was
+ * inferred from the namespace spelling. Measured before building and confirmed after:
+ * reading it moves exactly **one** finding on this machine from `name` to `url`, and
+ * **zero** plugin-vs-plugin pairs. That is a thin return and it is recorded rather than
+ * implied.
+ *
+ * **The stale-directory trap is unreachable through this function**, which is why there is
+ * no fixture for it. A glob under `~/.claude/plugins` finds 38 of these files here where
+ * only 9 belong to installed builds, and produces six "duplicate signature" groups that
+ * are all one plugin matching an older copy of itself. `readPluginMcpServers` takes the
+ * path from `installedBuilds`, which resolves one current build per id, so the shape
+ * cannot be constructed. The guard is the argument, not a check.
+ */
+describe('reading a plugin build\'s .mcp.json (QM-54)', () => {
+  let dir = '';
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), 'qm54-'));
+  });
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const build = (name: string, body: unknown): string => {
+    const root = join(dir, name);
+    mkdirSync(root, { recursive: true });
+    writeFileSync(join(root, '.mcp.json'), JSON.stringify(body, null, 2));
+    return root;
+  };
+
+  test('reads the mcpServers container shape', () => {
+    const root = build('wrapped', {
+      mcpServers: { linear: { type: 'http', url: 'https://mcp.linear.app/mcp' } },
+    });
+    assert.deepEqual(readPluginMcpServers(root), {
+      linear: { type: 'http', url: 'https://mcp.linear.app/mcp' },
+    });
+  });
+
+  test('and the bare top-level shape', () => {
+    const root = build('bare', { docs: { type: 'http', url: 'https://d.example/mcp' } });
+    assert.deepEqual(readPluginMcpServers(root), {
+      docs: { type: 'http', url: 'https://d.example/mcp' },
+    });
+  });
+
+  /**
+   * The trap that a signature index turns into false merges. Left unexpanded, the template
+   * is a *shared literal*: under the stale-directory glob the identical string was carried
+   * by four unrelated plugins, which collapse into one group. Expansion is what makes the
+   * byte-exact comparison exact about the right bytes.
+   */
+  test('expands ${CLAUDE_PLUGIN_ROOT} against the build it was read from', () => {
+    const a = build('alpha', {
+      mcpServers: { srv: { command: 'bun', args: ['run', '--cwd', '${CLAUDE_PLUGIN_ROOT}'] } },
+    });
+    const b = build('beta', {
+      mcpServers: { srv: { command: 'bun', args: ['run', '--cwd', '${CLAUDE_PLUGIN_ROOT}'] } },
+    });
+    const sa = launchSignature(readPluginMcpServers(a).srv!)!;
+    const sb = launchSignature(readPluginMcpServers(b).srv!)!;
+
+    assert.ok(sa.includes(a), 'the signature must carry this build\'s own path');
+    assert.notEqual(sa, sb, 'two builds sharing the template are not the same server');
+    // Pinned as a literal rather than rebuilt, so the assertion cannot agree with a
+    // reader that stopped expanding.
+    assert.equal(sa, `stdio:${JSON.stringify(['bun', 'run', '--cwd', a])}`);
+  });
+
+  test('drops a spec carrying neither url nor command', () => {
+    const root = build('empty-spec', { mcpServers: { nothing: { type: 'http' } } });
+    assert.deepEqual(readPluginMcpServers(root), {});
+  });
+
+  test('drops a spec whose args are not all strings', () => {
+    const root = build('bad-args', {
+      mcpServers: { srv: { command: 'bun', args: ['run', 42] } },
+    });
+    assert.deepEqual(readPluginMcpServers(root), {});
+  });
+
+  test('a build with no .mcp.json, and an unreadable one, both declare nothing', () => {
+    const none = join(dir, 'none');
+    mkdirSync(none, { recursive: true });
+    assert.deepEqual(readPluginMcpServers(none), {});
+
+    const bad = join(dir, 'bad');
+    mkdirSync(bad, { recursive: true });
+    writeFileSync(join(bad, '.mcp.json'), '{ not json');
+    assert.deepEqual(readPluginMcpServers(bad), {});
+
+    assert.deepEqual(readPluginMcpServers(null), {});
+  });
+
+  /** No normalization: first-party compares these bytes, so a trailing slash differs. */
+  test('the signature is byte-exact', () => {
+    assert.notEqual(
+      launchSignature({ url: 'https://x.example/mcp' }),
+      launchSignature({ url: 'https://x.example/mcp/' }),
+    );
+    assert.equal(launchSignature({ type: 'http' }), null, 'nothing to compare is not a match');
   });
 });

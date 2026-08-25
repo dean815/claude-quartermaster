@@ -107,6 +107,7 @@ function inventory(
     sha: null,
     manifestName,
     installed: [...skillNames, ...otherNames],
+    mcpServerSpecs: {},
     enumerated: [
       {
         source: 'plugin-catalog-cache.json',

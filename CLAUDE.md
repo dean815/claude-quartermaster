@@ -866,6 +866,41 @@ interactive branch of the two-branch sentence was never watched happening; it is
 source-derived and corroborated by `claude mcp list`, and the text states it as flatly as
 the half that was measured 3/3.
 
+**The exclusion was reversed for one row, and saying so is the point (QM-54).** A plugin
+build's `.mcp.json` sits under its install path, and `detect.ts` said through two issues that
+nothing here read it, deliberately. QM-52 then shipped a twin match that could only ever say
+*inferred*, because `basis: url` was structurally unreachable: no plugin spec, and a
+connector declares its own in claude.ai. This reads the file. **Measured before and after,
+the return is exactly what the issue predicted: 1 finding moves `name` → `url` (`linear`),
+0 plugin-vs-plugin pairs, 11 findings unchanged.** That is a thin return for reversing a
+stated decision and it is recorded in `readPluginMcpServers`'s own doc rather than implied,
+so the next person can weigh removing it.
+**What it buys beyond the one row is a conclusive negative, and that is the asymmetry.**
+`duplicateAccessPaths` must never act on a URL *mismatch* — `amplitude` and `amplitude-eu`
+are one service behind two endpoints — so there a mismatch annotates and stops. `suppressing`
+asks a different question: *will Claude Code suppress this twin*, and it suppresses on
+signature equality, so two specs that differ do **not**. The mismatch removes a false
+positive there rather than hiding a real finding, and `SuppressedTwin.basis` prints which
+comparison was made.
+**Three traps were measured rather than anticipated, and two are unreachable by
+construction.** A glob under `~/.claude/plugins` finds **38** of these files where only **9**
+belong to installed builds; it produces six "duplicate signature" groups and **all six are
+one plugin matching an older copy of itself**. Reading through `installedBuilds`, which
+resolves one current build per id, makes that shape unconstructable — so there is no fixture
+for it and the guard is the argument. `${CLAUDE_PLUGIN_ROOT}` is expanded against the build's
+own path (2 of the 9 live specs carry it): left alone it is a *shared literal*, and under the
+glob the identical string was carried by `imessage`, `discord`, `fakechat` and `telegram`,
+which a signature index merges into one false group. And 6 of 44 manifests are unreadable, so
+DEA-145's fallback is live here, not hypothetical.
+The day it fails: `mcpServerSpecs` is required on `PluginInventory` rather than optional, so
+seven test factories had to say — which is the DEA-145 discipline working, and also the whole
+cost of the change landing in files that assert nothing about it. The signature is byte-exact
+by choice, so a release that starts normalising URLs before comparing would make every match
+here wrong in the safe direction (a suppression we fail to predict) rather than the unsafe
+one. And `signatureIndex` and `urlIndex` are two indexes over one predicate: `launchSignature`
+is shared, the assembly is not, because they drop conflicts for the same reason but answer
+different questions.
+
 **Usage counters mean different things.** `skillUsage.usageCount` is a true invocation
 count (verified: invoked `gsd-help` once, counter went 1 → 2). `pluginUsage.usageCount`
 is dominated by hook firings — 8 of 10 hook-providing plugins are non-zero vs 2 of 32

@@ -19,7 +19,7 @@ import { classifyServer, normalizeServerName } from './cost/transcript.ts';
 import type { PluginCostIndex } from './cost/plugins.ts';
 import type { PluginInventory } from './inventory.ts';
 import type { McpEntry } from './mcp.ts';
-import { buildMcpCatalog, serviceOf } from './mcp.ts';
+import { buildMcpCatalog, pluginServerKey, serviceOf } from './mcp.ts';
 import { resolveMcpServer, resolvePlugin, allPluginIds } from './resolve.ts';
 import { RULE_ARRAYS } from './surfaces/read.ts';
 import { pluginUsage, isDemonstrablyUnused } from './usage.ts';
@@ -108,7 +108,7 @@ export function rank(findings: Finding[]): Finding[] {
 export function duplicateAccessPaths(ctx: AuditContext): Finding[] {
   type Ns = { tools: number; chars: number; kind: ServerKind };
   const perService = new Map<string, { sessions: number; namespaces: Map<string, Ns> }>();
-  const urls = urlIndex(ctx.ws);
+  const urls = urlIndex(ctx);
   const manual = manualNamespaces(ctx);
 
   for (const m of ctx.measurements) {
@@ -322,7 +322,8 @@ function manualNamespaces(ctx: AuditContext): Set<string> {
  * day this degrades, and it degrades to exactly today's behaviour: every finding falls
  * back to the name match, where all eleven of them already are.
  */
-function urlIndex(ws: Workspace): Map<string, string> {
+function urlIndex(ctx: AuditContext): Map<string, string> {
+  const ws = ctx.ws;
   const seen = new Map<string, Set<string>>();
   const add = (key: string, spec: McpServerSpec) => {
     if (!spec.url) return;
@@ -336,6 +337,17 @@ function urlIndex(ws: Workspace): Map<string, string> {
   for (const p of ws.projects) {
     if (!p.mcpJson) continue;
     for (const [key, spec] of Object.entries(p.mcpJson.mcpServers)) add(key, spec);
+  }
+  // QM-53's Local scope, and QM-54's plugin builds. Both were absent when the doc above
+  // was written and both are now read, which is what makes `basis: url` reachable for a
+  // plugin at all -- every finding on this machine rested on the name match before.
+  for (const p of ws.projects) {
+    for (const [key, spec] of Object.entries(p.entry?.mcpServers ?? {})) add(key, spec);
+  }
+  for (const inv of ctx.inventories.values()) {
+    for (const [name, spec] of Object.entries(inv.mcpServerSpecs)) {
+      add(pluginServerKey(inv.id, name, inv.manifestName), spec);
+    }
   }
 
   const out = new Map<string, string>();

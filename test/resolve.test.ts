@@ -25,6 +25,7 @@ const inventory = (id: string): PluginInventory => ({
   manifestName: null,
   installed: [],
   enumerated: [],
+  mcpServerSpecs: {},
 });
 
 /**
